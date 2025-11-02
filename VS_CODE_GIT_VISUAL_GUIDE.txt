@@ -1,0 +1,504 @@
+VS CODE GIT - VISUAL GUIDE & SCREENSHOTS
+========================================
+
+
+═══════════════════════════════════════════════════════════════════════════════
+BEFORE YOU START (What you have):
+═══════════════════════════════════════════════════════════════════════════════
+
+Your VS Code with project open:
+
+┌──────────────────────────────────────────────────────────────────┐
+│ VS CODE                                                          │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  [File] [Edit] [View] [...] [Help]                  Search...   │
+│                                                                  │
+├─────────────────┬──────────────────────────────────────────────┤
+│  EXPLORER       │                                              │
+│  ├─ src/        │  No Git yet!                                 │
+│  ├─ public/     │  Just a normal project                       │
+│  └─ package.json│                                              │
+│                 │  Let's add Git...                            │
+│                 │                                              │
+│ (Other icons)   │                                              │
+│                 │                                              │
+└─────────────────┴──────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: CLICK SOURCE CONTROL ICON
+═══════════════════════════════════════════════════════════════════════════════
+
+Left sidebar icons (from top to bottom):
+
+  📄  Explorer
+  🔍  Search
+  ⎇  SOURCE CONTROL ← Click this!
+  ⚙️  Settings
+  
+(When you click ⎇)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 2: FIRST TIME - INITIALIZE REPOSITORY
+═══════════════════════════════════════════════════════════════════════════════
+
+What you see:
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                                       │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  You have not yet initialized a repository          │
+│                                                      │
+│  [ Initialize Repository ]                          │
+│                                                      │
+│                                                      │
+│  Learn more about Source Control in VS Code         │
+│  (with helpful links)                               │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Click: [ Initialize Repository ]
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 3: AFTER INITIALIZATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Now you see the Git panel:
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Input commit message]     ← Type here!            │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  CHANGES                                             │
+│  ├─ .gitignore                      [+ ] [ ]        │
+│  ├─ package.json                    [+ ] [ ]        │
+│  ├─ tsconfig.json                   [+ ] [ ]        │
+│  ├─ vite.config.ts                  [+ ] [ ]        │
+│  ├─ README.md                       [+ ] [ ]        │
+│  ├─ index.html                      [+ ] [ ]        │
+│  ├─ src/                            [+ ] [ ]        │
+│  │  ├─ main.ts                                      │
+│  │  ├─ IFCViewer.ts                                 │
+│  │  └─ modules/                                     │
+│  │     ├─ FloorPlanModule.ts                        │
+│  │     └─ ...                                       │
+│  └─ public/                         [+ ] [ ]        │
+│     └─ worker.mjs                                   │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]  [↻]  [...]                             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Red dots = Modified files (not staged yet)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 4: AFTER CLICKING + TO STAGE FILES
+═══════════════════════════════════════════════════════════════════════════════
+
+All files moved to "STAGED CHANGES":
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Initial commit: Complete OBC...] ← Message typed! │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  STAGED CHANGES                                      │
+│  ├─ .gitignore                      [ ] [−]        │
+│  ├─ package.json                    [ ] [−]        │
+│  ├─ tsconfig.json                   [ ] [−]        │
+│  ├─ vite.config.ts                  [ ] [−]        │
+│  ├─ README.md                       [ ] [−]        │
+│  ├─ index.html                      [ ] [−]        │
+│  ├─ src/                            [ ] [−]        │
+│  │  ├─ main.ts                                      │
+│  │  ├─ IFCViewer.ts                                 │
+│  │  └─ modules/                                     │
+│  │     ├─ FloorPlanModule.ts                        │
+│  │     └─ ...                                       │
+│  └─ public/                         [ ] [−]        │
+│     └─ worker.mjs                                   │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]  [↻]  [...]                             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Green area = Ready to commit!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 5: AFTER CLICKING COMMIT
+═══════════════════════════════════════════════════════════════════════════════
+
+Success! Back to empty:
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Input commit message]                             │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  (No CHANGES, no STAGED CHANGES)                     │
+│                                                      │
+│  Everything committed! ✅                           │
+│                                                      │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]  [↻]  [...]                             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Notification (bottom right): "1 file changed" ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+AFTER FIRST COMMIT - BOTTOM LEFT CORNER
+═══════════════════════════════════════════════════════════════════════════════
+
+You'll see branch indicator:
+
+┌─────────────────────────┐
+│ ⎇ main                  │  ← Shows current branch
+│                         │     Click to switch branches
+│ ○ Sync Changes       🔄 │  ← Sync with GitHub (after linking)
+│                         │
+│ OBC-IFCViewer (root)    │  ← Your project name
+│                         │
+└─────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+CLICKING A FILE TO SEE CHANGES
+═══════════════════════════════════════════════════════════════════════════════
+
+When you click a file in CHANGES:
+
+Full screen shows DIFF VIEW:
+
+┌────────────────────────────────────────────────────────┐
+│ src/main.ts  ⊙  [< vs >]  [ ]  [...]                  │
+├────────────────┬────────────────────────────────────────┤
+│ ORIGINAL       │ MODIFIED                               │
+│ (OLD CODE)     │ (NEW CODE)                             │
+├────────────────┼────────────────────────────────────────┤
+│                │                                        │
+│ 1  import {    │ 1  import {                            │
+│ 2    IfcLoader │ 2    IfcLoader                         │
+│ 3  } from ...  │ 3  } from '@open-bim-components/web' │
+│ 4              │ 4                                      │
+│ 5  const model │ 5  const model = null;    ← NEW LINE  │
+│                │ 6                                      │
+│ 6  async ...   │ 7  async function init() {             │
+│ 7    const url │ 8    const url = 'model.ifc'           │
+│                │                                        │
+└────────────────┴────────────────────────────────────────┘
+
+RED = Removed
+GREEN = Added
+GRAY = Unchanged (context)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+CLICKING ... MENU (More Options)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────┐
+│ ☑ Commit                                │
+│ ☑ Sync Changes                          │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Push                                  │
+│ ☑ Pull                                  │
+│ ☑ Sync                                  │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Publish to GitHub  ← FIRST TIME USE  │
+│ ☑ Clone Repository                      │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Stash                                 │
+│ ☑ Pop Stash                             │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Create Branch                         │
+│ ☑ Delete Branch                         │
+│ ☑ Merge Branch                          │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Show Log                              │
+│ ☑ Search Commits                        │
+│                                         │
+│ ──────────────────────────────────────  │
+│                                         │
+│ ☑ Undo Last Commit                      │
+│ ☑ Revert Commit                         │
+│                                         │
+└─────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PUBLISH TO GITHUB (First time upload)
+═══════════════════════════════════════════════════════════════════════════════
+
+Click [...] → "Publish to GitHub"
+
+Then this dialog appears:
+
+┌──────────────────────────────────────────┐
+│ Publish to GitHub                        │
+│                                          │
+│ ? Private or Public?                     │
+│                                          │
+│ ◉ Public                                 │
+│ ○ Private                                │
+│                                          │
+│ [ Cancel ]  [ OK ]                       │
+│                                          │
+└──────────────────────────────────────────┘
+
+Choose: Public or Private, then click OK
+
+
+═══════════════════════════════════════════════════════════════════════════════
+GITHUB LOGIN POPUP
+═══════════════════════════════════════════════════════════════════════════════
+
+VS Code opens your browser:
+
+https://github.com/login/device
+
+Enter code shown in VS Code, then:
+
+"Authorize GitHub"
+
+Your project uploads automatically! 🚀
+
+
+═══════════════════════════════════════════════════════════════════════════════
+AFTER PUBLISHING TO GITHUB
+═══════════════════════════════════════════════════════════════════════════════
+
+VS Code updates Source Control:
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Input commit message]                             │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  (Empty - all committed)                             │
+│                                                      │
+│  ✅ All files on GitHub!                            │
+│                                                      │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]  [↻]  [...]                             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Bottom shows:
+└─ ⎇ main  O Sync Changes
+
+
+═══════════════════════════════════════════════════════════════════════════════
+DAILY WORKFLOW - AFTER MAKING CHANGES
+═══════════════════════════════════════════════════════════════════════════════
+
+You edited src/modules/FloorPlanModule.ts
+
+Now Source Control shows:
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Input commit message]                             │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  CHANGES                                             │
+│  M  src/modules/FloorPlanModule.ts      [+]         │
+│                                                      │
+│  (M = Modified)                                      │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]  [↻]  [...]                             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+Red indicator in file tree shows file was changed!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+CREATE BRANCH (Advanced)
+═══════════════════════════════════════════════════════════════════════════════
+
+Click branch name at bottom left:
+
+┌────────────────────────────────┐
+│ ⎇ main                   ↑     │
+├────────────────────────────────┤
+│                                │
+│ Create New Branch              │  Click this
+│ Create New Branch from...       │
+│                                │
+│ main                           │
+│ ──────────────────────────────│
+│ (other branches if any)        │
+│                                │
+└────────────────────────────────┘
+
+Then VS Code asks:
+
+"Branch name: "
+[________]
+
+Type: feature/my-new-feature
+
+Then creates it! ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FILE STATUS INDICATORS
+═══════════════════════════════════════════════════════════════════════════════
+
+In Source Control, you see codes:
+
+M  = Modified (changed)
+A  = Added (new file)
+D  = Deleted (removed)
+?  = Untracked (not in git yet)
+U  = Updated
+C  = Conflict
+
+Examples in panel:
+  M  src/main.ts           (modified)
+  A  src/new-file.ts       (added)
+  D  old-file.ts           (deleted)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+PROGRESS INDICATOR WHILE PUSHING
+═══════════════════════════════════════════════════════════════════════════════
+
+When uploading to GitHub:
+
+Bottom right shows spinner:
+  ⟳ Uploading... (with percentage)
+
+When done:
+  ✓ Push successful!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+WHAT EACH PART OF THE PANEL MEANS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────────────┐
+│ SOURCE CONTROL                              [...]    │
+│ ← Shows it's the Source Control panel               │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  [Input commit message]                             │
+│  ← Type your commit message here                    │
+│  ← Like: "Fixed: Camera rotation bug"              │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  CHANGES        ← Files you modified but NOT staged │
+│  M  src/main.ts [+]                                 │
+│     └─ Click [+] to stage this file                │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  STAGED CHANGES ← Files ready to commit             │
+│  M  src/app.ts  [−]                                 │
+│     └─ Click [−] to unstage this file              │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  [✓ Commit]     ← Save all staged changes locally   │
+│  [↻ Discard]    ← Delete changes (be careful!)      │
+│  [...]          ← More options menu                 │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+COLORS MEAN DIFFERENT THINGS
+═══════════════════════════════════════════════════════════════════════════════
+
+RED DOT (●) next to file = Currently being modified/edited
+           = Not staged yet
+
+GREEN "✓" = File is staged, ready to commit
+
+M, A, D, U = Type of change (Modified, Added, Deleted, Updated)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TYPICAL DAY PROGRESSION
+═══════════════════════════════════════════════════════════════════════════════
+
+MORNING:
+  Open VS Code
+  │
+  └─ Source Control shows nothing (all committed)
+     └─ Click [...] → Pull (get latest from team)
+
+
+MID-DAY:
+  Work on features...
+  │
+  └─ Source Control shows red files
+     └─ Click [+] to stage
+     └─ Type message
+     └─ Click Commit ✓
+
+
+AFTERNOON:
+  More work...
+  │
+  └─ Source Control shows more red files again
+     └─ Repeat: Stage → Message → Commit
+
+
+END OF DAY:
+  Commit last changes
+  │
+  └─ Click [...] → Push
+     └─ All your work goes to GitHub backup ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+THAT'S IT! YOU NOW UNDERSTAND VS CODE GIT VISUALLY
+═══════════════════════════════════════════════════════════════════════════════
+
+Remember:
+✅ Red panel = Not staged
+✅ Green panel = Staged  
+✅ Click [+] = Stage files
+✅ Type message = Describe changes
+✅ Click Commit = Save locally
+✅ Click Push = Upload to GitHub
+
+You're a version control expert! 🚀
+
+═══════════════════════════════════════════════════════════════════════════════
+Last Updated: November 2, 2025
+For OBC-IFCViewer Project
+═══════════════════════════════════════════════════════════════════════════════

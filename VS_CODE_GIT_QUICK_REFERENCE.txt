@@ -1,0 +1,318 @@
+VS CODE GIT - QUICK REFERENCE CARD
+===================================
+
+OPENING SOURCE CONTROL:
+═══════════════════════
+• Mac:    Ctrl + Shift + G  OR  Cmd + Shift + G
+• Windows/Linux: Ctrl + Shift + G
+• Click: Left sidebar → Branch icon (⎇)
+
+
+DAILY WORKFLOW (5 Steps):
+═════════════════════════
+
+STEP 1: Make changes to your code
+        └─ Edit files in VS Code normally
+
+STEP 2: Open Source Control
+        └─ Press Ctrl + Shift + G
+
+STEP 3: Stage files (mark them ready)
+        └─ Click + next to each file
+        └─ Or click + next to "Changes" to stage all
+
+STEP 4: Write commit message
+        └─ Click message input field
+        └─ Type: "Fixed: Feature X" or "Added: Feature Y"
+        └─ Example: "Fixed floor plan camera controls"
+
+STEP 5: Commit + Push
+        └─ Click Commit button (✓)
+        └─ Click ... → Push to upload to GitHub
+
+
+SOURCE CONTROL PANEL LAYOUT:
+════════════════════════════
+
+┌─ SOURCE CONTROL ─────────────┐
+├─ Message input field         ├─ Type commit message here
+├─────────────────────────────┤
+├─ CHANGES (red files)         ├─ Modified files not yet staged
+│  ├─ src/main.ts      [+]     ├─ Click + to stage
+│  └─ package.json     [+]     ├─ Click file to see differences
+├─────────────────────────────┤
+├─ STAGED CHANGES (green)      ├─ Files ready to commit
+│  ├─ src/components/  [−]     ├─ Click − to unstage
+│  └─ README.md        [−]     ├─
+├─────────────────────────────┤
+├─ [✓ Commit]  [↻ Discard]     ├─ Buttons to commit or discard
+├─ [. . . More Options]        ├─ Click for more Git options
+└─────────────────────────────┘
+
+
+BUTTONS & ICONS:
+════════════════
+
+[+]    = STAGE        → Move file to "Staged Changes"
+[−]    = UNSTAGE      → Remove from staging
+[↻]    = DISCARD      → DELETE changes (Can't undo!)
+[✓]    = COMMIT       → Save all staged changes
+[...]  = MORE OPTIONS → Push, Pull, Branch, etc.
+
+
+UNDERSTANDING COLORS:
+═════════════════════
+
+RED FILES (Changes section)
+└─ Modified but NOT staged yet
+└─ Click + to move to staging
+
+GREEN FILES (Staged Changes section)
+└─ Ready to commit
+└─ Click − to unstage if you changed your mind
+
+WHEN YOU CLICK A FILENAME:
+└─ LEFT SIDE (RED) = Old code
+└─ RIGHT SIDE (GREEN) = New code
+
+
+MOST COMMON TASKS:
+══════════════════
+
+TASK: See what changed in a file
+└─ 1. Click the filename in Source Control
+└─ 2. View opens showing differences
+└─ 3. Red = removed, Green = added
+
+TASK: Commit all changes
+└─ 1. Click ... next to "Changes" or click individual [+]
+└─ 2. Type message
+└─ 3. Click Commit
+
+TASK: Upload to GitHub for first time
+└─ 1. Make your first commit (see above)
+└─ 2. Click [...]
+└─ 3. Select "Publish to GitHub"
+└─ 4. GitHub login page opens
+└─ 5. Choose Public/Private
+└─ 6. Done! Files upload automatically
+
+TASK: Upload changes after first time
+└─ 1. Commit your changes
+└─ 2. Click [...]
+└─ 3. Select "Push"
+└─ 4. Wait for upload
+
+TASK: Download latest changes from team
+└─ 1. Click [...]
+└─ 2. Select "Pull"
+└─ 3. Your files update with latest changes
+
+TASK: See all past commits
+└─ 1. Click [...]
+└─ 2. Select "Show Log" or "View History"
+└─ 3. See all changes ever made
+
+TASK: Create a new branch (for experiments)
+└─ 1. Click branch name at BOTTOM LEFT
+└─ 2. Select "Create New Branch"
+└─ 3. Type branch name: feature/my-feature
+└─ 4. Start working!
+
+TASK: Switch back to main branch
+└─ 1. Click branch name at BOTTOM LEFT
+└─ 2. Select "main"
+└─ 3. Done
+
+
+GOOD COMMIT MESSAGES:
+═════════════════════
+
+✅ GOOD EXAMPLES:
+   • "Fixed floor plan camera controls"
+   • "Added dark mode support"
+   • "Updated documentation for API"
+   • "Refactored database queries for performance"
+
+❌ BAD EXAMPLES:
+   • "stuff"
+   • "changes"
+   • "fix"
+   • "asdfgh"
+
+TIPS:
+• Start with action verb: Fixed, Added, Updated, Refactored, Improved
+• Be specific about WHAT you changed
+• Keep under 50 characters if possible
+• No need for period at end
+
+
+THE ... (MORE OPTIONS) MENU:
+═════════════════════════════
+
+Click the three dots for:
+
+[Push]                  → Upload to GitHub
+[Pull]                  → Download latest from GitHub
+[Sync]                  → Push + Pull (both directions)
+[Commit]                → Save changes (same as button)
+[Stash]                 → Save work temporarily
+[Pop Stash]             → Restore temporarily saved work
+[Undo Last Commit]      → Undo if you made mistake
+[Revert Commit]         → Undo an old commit
+[Create Branch]         → New branch for new feature
+[Delete Branch]         → Remove old branch
+[Merge Branch]          → Combine branches
+[Rebase]                → Reorganize commits
+[Publish to GitHub]     → First-time upload
+[Show Log]              → See commit history
+[Search Commits]        → Find specific commit
+
+
+FILE INDICATORS:
+════════════════
+
+M = Modified (changed)
+A = Added (new file)
+D = Deleted (removed)
+? = Untracked (not in Git yet)
+U = Updated
+C = Conflict
+
+
+KEYBOARD SHORTCUTS:
+═══════════════════
+
+Ctrl + Shift + G     = Open Source Control
+Cmd + Shift + P      = Command Palette (search any command)
+Cmd + Enter          = Commit (when in message field)
+Ctrl + Enter         = Commit (when in message field)
+
+
+DIFF VIEW (When you click a filename):
+═══════════════════════════════════════
+
+LEFT SIDE (red):
+└─ Original code before changes
+
+RIGHT SIDE (green):
+└─ New code after changes
+
+HOW TO READ:
+└─ Red line = removed
+└─ Green line = added
+└─ Gray line = unchanged (for context)
+
+HOVER OVER CHANGES:
+└─ See little [+] [-] buttons
+└─ Click to accept/reject individual changes
+
+
+TROUBLESHOOTING:
+════════════════
+
+Q: Source Control is empty
+A: 1. Click "Initialize Repository"
+   2. Or run: git init (in Terminal)
+
+Q: I can't see the Source Control panel
+A: 1. Press Ctrl + Shift + G
+   2. Or click branch icon (⎇) on left sidebar
+
+Q: Files not showing in Changes
+A: 1. Make sure you SAVED the file (Cmd + S)
+   2. Or files might be in .gitignore
+
+Q: Can't push (authentication error)
+A: 1. GitHub Settings → Developer Settings → Personal Access Tokens
+   2. Create token with "repo" permissions
+   3. Copy the token
+   4. When prompted for password: paste token instead
+
+Q: "Merge conflict" message
+A: 1. Click the filename
+   2. You see both versions
+   3. Click which version you want
+   4. Stage and commit the fix
+
+Q: I made a mistake in commit
+A: 1. Click [...]
+   2. Select "Undo Last Commit"
+   3. Your changes go back to Changes section
+   4. You can edit and try again
+
+
+WHAT VS CODE DOES AUTOMATICALLY:
+════════════════════════════════
+
+✅ Detects changed files (shows in Source Control)
+✅ Shows file differences (Diff View)
+✅ Highlights branches at bottom
+✅ Updates count of changes (red circle with number)
+✅ Color codes file status (M, A, D, etc.)
+
+
+AFTER FIRST COMMIT:
+═══════════════════
+
+Your Source Control setup is complete! Now:
+
+DAY 1: Code → Stage → Commit → Push
+DAY 2: Code → Stage → Commit → Push
+DAY 3: Code → Stage → Commit → Push
+
+That's your daily workflow forever!
+
+
+SETTING UP FOR FIRST TIME:
+══════════════════════════
+
+1. Open project in VS Code
+   └─ File → Open Folder
+   └─ Select: /Users/yagmurbesher/Documents/sources/OBC-IFCViewer
+
+2. Open Source Control (Ctrl + Shift + G)
+
+3. Click "Initialize Repository"
+
+4. Create GitHub account at https://github.com
+
+5. Make changes to code
+
+6. Stage + Commit + Push (follow workflow above)
+
+7. When pushed first time, click [...] → "Publish to GitHub"
+
+8. Done! ✅
+
+
+COMPARING WORKFLOWS:
+════════════════════
+
+Terminal (commands):        VS Code (visual buttons):
+─────────────────          ─────────────────────
+git add .                   Click [+] buttons
+git commit -m "msg"         Type message + click Commit
+git push                    Click [...] → Push
+git status                  See colors in panel
+git log                     Click [...] → Show Log
+git branch feature/x        Click branch name → Create
+git checkout main           Click branch name → Select
+
+
+REMEMBER:
+═════════
+
+✅ VS Code is just a visual way to use Git
+✅ Every click corresponds to a git command
+✅ Commit frequently (every 1-2 hours)
+✅ Write clear messages
+✅ Pull before starting work
+✅ Push before ending day
+✅ GitHub is your backup!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+Last Updated: November 2, 2025
+For OBC-IFCViewer Project
+═══════════════════════════════════════════════════════════════════════════════

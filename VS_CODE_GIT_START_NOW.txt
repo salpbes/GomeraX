@@ -1,0 +1,296 @@
+VS CODE GIT - IMMEDIATE START (5 MINUTE SETUP)
+==============================================
+
+This is the FASTEST way to start using Git in VS Code with your project!
+
+
+STEP 1: OPEN YOUR PROJECT (1 minute)
+════════════════════════════════════
+
+1. Open VS Code
+2. Click: File → Open Folder
+3. Navigate to: /Users/yagmurbesher/Documents/sources/OBC-IFCViewer
+4. Click: Open
+5. Wait for project to load
+
+✅ Your project is now open in VS Code
+
+
+STEP 2: INITIALIZE GIT (30 seconds)
+═══════════════════════════════════
+
+1. Press: Ctrl + Shift + G (opens Source Control)
+2. You see a button: "Initialize Repository"
+3. Click it
+
+✅ Git is now tracking your project locally
+
+
+STEP 3: CREATE GITHUB ACCOUNT (2 minutes)
+═════════════════════════════════════════
+
+1. Go to: https://github.com
+2. Click: Sign up
+3. Enter email, password, username
+4. Verify your email (check inbox)
+
+✅ Your GitHub account is ready
+
+
+STEP 4: CREATE GITHUB REPOSITORY (1 minute)
+════════════════════════════════════════════
+
+1. Log in to GitHub
+2. Click: + icon (top right) → New repository
+3. Name it: OBC-IFCViewer
+4. Description: Optional (e.g., "IFC viewer with floor plans")
+5. Choose: Public or Private
+6. Check: ☑️ Add .gitignore → Select "Node"
+7. Check: ☑️ Add LICENSE → Select "MIT License"
+8. Click: Create repository
+
+✅ Your repository is ready on GitHub
+
+
+STEP 5: UPLOAD YOUR PROJECT (30 seconds in VS Code)
+═══════════════════════════════════════════════════
+
+BACK IN VS CODE:
+
+1. You see Source Control panel (Ctrl + Shift + G)
+2. Click [+] next to "Changes" (stages all files)
+3. Type message:
+   Initial commit: Complete OBC IFC Viewer with Floor Plan feature
+
+4. Click: Commit button (✓)
+5. Click: ... (three dots menu)
+6. Select: "Publish to GitHub"
+7. Browser opens → GitHub login
+8. Choose: Public or Private (match your repo settings)
+9. Click: Authorize
+
+✅ Your entire project is now on GitHub! 🚀
+
+
+VERIFY IT WORKED:
+════════════════
+
+1. Go to: https://github.com/YOUR-USERNAME/OBC-IFCViewer
+   (Replace YOUR-USERNAME with your actual GitHub username)
+
+2. You should see:
+   ✅ All your files and folders
+   ✅ Your commit message
+   ✅ Total file count
+
+If you see all this, you're DONE! 🎉
+
+
+NOW THAT IT'S SET UP - DAILY WORKFLOW:
+═════════════════════════════════════
+
+Every day when you code:
+
+1. Make changes to files (as normal)
+2. Open Source Control (Ctrl + Shift + G)
+3. Click [+] to stage files
+4. Type a message (e.g., "Fixed: Floor plan rotation")
+5. Click Commit
+6. Click [...] → Push
+
+That's it! Repeat every time you make changes.
+
+
+IF SOMETHING GOES WRONG - QUICK FIXES:
+══════════════════════════════════════
+
+Problem: "Source Control panel is empty"
+Fix: Ctrl + Shift + G again, or restart VS Code
+
+Problem: Can't see Commit button
+Fix: Make sure you've typed a message in the input field
+
+Problem: Push fails (authentication error)
+Fix: 
+  1. GitHub → Settings → Developer Settings → Personal Access Tokens
+  2. Generate new token (check "repo")
+  3. Copy token
+  4. When asked for password: paste the token
+
+Problem: "Could not find repository"
+Fix: Try: Click [...] → Pull or Push
+     (This should fix automatic detection)
+
+
+KEYBOARD SHORTCUTS YOU'LL USE:
+══════════════════════════════
+
+Ctrl + Shift + G  = Open/Close Source Control
+Cmd + S           = Save file (before staging!)
+Cmd + Enter       = Commit (when in message field)
+Ctrl + Shift + P  = Command Palette (search anything)
+
+
+VISUAL GUIDE - WHAT YOU'LL SEE:
+═══════════════════════════════
+
+┌─────────────────────────────────────┐
+│  SOURCE CONTROL                     │
+├─────────────────────────────────────┤
+│                                     │
+│  [Input message here...]            │  ← Type your commit message
+│                                     │
+├─────────────────────────────────────┤
+│  CHANGES (red files)                │  ← Modified files
+│  ├─ src/main.ts          [+]        │
+│  ├─ package.json         [+]        │  Click + to stage
+│  └─ README.md            [+]        │
+│                                     │
+├─────────────────────────────────────┤
+│  [Commit ✓] [Discard ↻] [... More] │  ← Main buttons
+│                                     │
+└─────────────────────────────────────┘
+
+
+SCREENSHOT WALKTHROUGH:
+═══════════════════════
+
+1. VS Code with Source Control open:
+   └─ Left sidebar shows branch icon with dot
+   └─ Panel shows "Changes" section
+
+2. You click [+] buttons:
+   └─ Red files turn into green (staged)
+   └─ They move to "Staged Changes" section
+
+3. You type message:
+   └─ Input field now contains your message
+   └─ Commit button becomes active (clickable)
+
+4. You click Commit:
+   └─ Green section disappears (committed!)
+   └─ Success! ✅
+
+5. You click [...] → Push:
+   └─ Files upload to GitHub
+   └─ Progress bar shows
+   └─ Done! 🚀
+
+
+BEST PRACTICES TO REMEMBER:
+═══════════════════════════
+
+✅ Save files before staging (Cmd + S)
+✅ Commit frequently (every 1-2 hours)
+✅ Write clear commit messages
+✅ Always push at end of day
+✅ Pull at start of day (if working with team)
+✅ Never commit to main without testing
+✅ Use branches for experiments
+
+
+UNDERSTANDING YOUR FIRST NUMBERS:
+═════════════════════════════════
+
+After your first push, you'll see on GitHub:
+
+"123 commits" 
+└─ Total changes saved
+
+"15 files"
+└─ Total files in repository
+
+"Nov 2, 2025 at 10:30 AM"
+└─ When last pushed
+
+
+WHAT HAPPENS BEHIND THE SCENES:
+═══════════════════════════════
+
+When you click Commit:
+1. VS Code runs: git add (stages files)
+2. VS Code runs: git commit -m "Your message"
+3. Local backup created ✅
+
+When you click Push:
+1. VS Code runs: git push
+2. Files upload to GitHub servers
+3. Cloud backup created ✅
+
+When you click Pull:
+1. VS Code runs: git pull
+2. Latest files downloaded
+3. Your local files update ✅
+
+
+YOU CAN ALSO USE TERMINAL (Optional):
+═════════════════════════════════════
+
+VS Code has a built-in terminal!
+
+Press: Ctrl + ~ (or View → Terminal)
+
+Then type git commands directly:
+$ git status
+$ git log
+$ git branch
+
+
+CONGRATULATIONS! 🎉
+═══════════════════
+
+You now have:
+✅ Local version control (Git)
+✅ Cloud backup (GitHub)
+✅ Visual interface (VS Code)
+✅ Professional workflow setup
+✅ Ready for team collaboration
+
+
+NEXT STEPS:
+═══════════
+
+1. Follow daily workflow above
+2. Commit every 1-2 hours
+3. Push at end of each day
+4. Later: Learn about branches
+5. Later: Collaborate with team
+
+
+NEED MORE DETAILED HELP?
+════════════════════════
+
+See these files in your project folder:
+
+• VS_CODE_GIT_GUIDE.md
+  └─ Complete detailed guide (longer version)
+
+• VS_CODE_GIT_QUICK_REFERENCE.txt
+  └─ Command reference card
+
+• TERMINAL_VS_VSCODE_GIT.txt
+  └─ Comparison: Terminal vs VS Code
+
+• GITHUB_SETUP_GUIDE.md
+  └─ GitHub and Git installation guide
+
+• GITHUB_QUICK_START.txt
+  └─ Terminal workflow guide
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+YOU'RE NOW A VERSION CONTROL USER! 🚀
+
+Your code is:
+✅ Tracked locally (Git)
+✅ Backed up in cloud (GitHub)
+✅ Ready for team collaboration
+✅ Professionally managed
+
+Congratulations on your first commit!
+
+═══════════════════════════════════════════════════════════════════════════════
+Last Updated: November 2, 2025
+For OBC-IFCViewer Project
+═══════════════════════════════════════════════════════════════════════════════

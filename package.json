@@ -1,0 +1,27 @@
+{
+  "name": "gomera-ifc-viewer",
+  "version": "1.0.0",
+  "description": "GOMERA - A professional IFC file viewer built with Open BIM Components",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@thatopen/components": "3.2.0",
+    "@thatopen/components-front": "3.2.0",
+    "@thatopen/fragments": "3.2.0",
+    "@thatopen/ui": "3.2.0",
+    "@thatopen/ui-obc": "3.2.1",
+    "chart.js": "^4.5.1",
+    "stats.js": "^0.17.0",
+    "three": "^0.175.0",
+    "web-ifc": "^0.0.72"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

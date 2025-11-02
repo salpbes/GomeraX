@@ -1,0 +1,412 @@
+VS CODE GIT vs TERMINAL - SIDE BY SIDE COMPARISON
+=================================================
+
+This guide shows you that VS Code Git is just a prettier way to use Terminal commands!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 1: INITIALIZE GIT REPOSITORY
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git init
+
+VS CODE WAY:
+──────────
+1. Open Source Control (Ctrl + Shift + G)
+2. Click "Initialize Repository"
+3. Done!
+
+RESULT: Same thing, just visual! ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 2: SEE WHAT FILES CHANGED
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git status
+
+Output:
+  On branch main
+  Changes not staged for commit:
+    modified:   src/main.ts
+    modified:   package.json
+
+VS CODE WAY:
+──────────
+Open Source Control (Ctrl + Shift + G)
+You see:
+  CHANGES
+  ├─ src/main.ts
+  └─ package.json
+
+RESULT: Same information, just with colors! 🎨
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 3: STAGE FILES (Mark ready to commit)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+Option A - Stage all:
+$ git add .
+
+Option B - Stage specific:
+$ git add src/main.ts
+
+VS CODE WAY:
+──────────
+Option A - Stage all:
+1. Click [+] next to "Changes" header
+
+Option B - Stage specific:
+1. Click [+] next to "src/main.ts"
+
+RESULT: Files move to "STAGED CHANGES" section ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 4: COMMIT (Save your changes)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git commit -m "Fixed floor plan bug"
+
+VS CODE WAY:
+──────────
+1. Type message: "Fixed floor plan bug" in input field
+2. Click Commit button (✓)
+
+OR: Type message + press Cmd/Ctrl + Enter
+
+RESULT: Your changes are saved locally ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 5: PUSH (Upload to GitHub)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git push
+
+VS CODE WAY:
+──────────
+1. Click [...]
+2. Select "Push"
+
+RESULT: Files upload to GitHub 🚀
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 6: PULL (Download latest from GitHub)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git pull
+
+VS CODE WAY:
+──────────
+1. Click [...]
+2. Select "Pull"
+
+RESULT: Your local files update with latest from GitHub ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 7: SEE COMMIT HISTORY
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git log
+
+Output:
+  commit abc123def456...
+  Author: Your Name
+  Date:   Mon Nov 2 10:30:00 2025
+
+      Fixed floor plan bug
+
+VS CODE WAY:
+──────────
+1. Click [...]
+2. Select "Show Log"
+3. Click any commit to see details
+
+RESULT: Visual history with all details ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 8: CREATE NEW BRANCH
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git branch feature/new-ui
+$ git checkout feature/new-ui
+
+OR:
+$ git checkout -b feature/new-ui
+
+VS CODE WAY:
+──────────
+1. Click branch name at BOTTOM LEFT (says "main")
+2. Select "Create New Branch"
+3. Type: "feature/new-ui"
+4. Press Enter
+
+RESULT: You're now on new branch! ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 9: SWITCH BRANCHES
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git checkout main
+
+VS CODE WAY:
+──────────
+1. Click branch name at BOTTOM LEFT
+2. Select "main"
+
+RESULT: Files switch to main branch ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 10: DISCARD CHANGES (Delete edits - be careful!)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git checkout -- src/main.ts
+
+OR (discard all):
+$ git reset --hard HEAD
+
+VS CODE WAY:
+──────────
+1. Click [↻] next to the file
+
+OR (discard all):
+1. Click [...]
+2. Select "Discard All Changes"
+
+RESULT: Changes are deleted (can't undo!) ⚠️
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 11: UNDO LAST COMMIT
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git reset --soft HEAD~1
+
+VS CODE WAY:
+──────────
+1. Click [...]
+2. Select "Undo Last Commit"
+
+RESULT: Changes go back to "Changes" section (safe!) ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 12: VIEW FILE DIFFERENCES
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git diff src/main.ts
+
+Output: Shows differences in Terminal (hard to read!)
+
+VS CODE WAY:
+──────────
+1. Click the filename in Source Control panel
+2. Diff View opens:
+   LEFT (RED) = Old code
+   RIGHT (GREEN) = New code
+
+RESULT: Beautiful visual comparison! 🎨
+
+
+═══════════════════════════════════════════════════════════════════════════════
+TASK 13: STASH (Save work temporarily without committing)
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL WAY:
+─────────────
+$ git stash
+
+(Later to restore:)
+$ git stash pop
+
+VS CODE WAY:
+──────────
+1. Click [...]
+2. Select "Stash"
+
+(Later to restore:)
+1. Click [...]
+2. Select "Pop Stash"
+
+RESULT: Your work is saved temporarily ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+COMPLETE WORKFLOW COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+SCENARIO: You fixed a bug and want to upload it
+
+TERMINAL WAY:
+─────────────
+1. $ cd /Users/yagmurbesher/Documents/sources/OBC-IFCViewer
+2. $ git status
+3. $ git add .
+4. $ git commit -m "Fixed: Floor plan camera controls"
+5. $ git push
+
+VS CODE WAY:
+──────────
+1. Make changes (already in the folder)
+2. Ctrl + Shift + G (open Source Control)
+3. Review changes by clicking filenames
+4. Click [+] to stage all
+5. Type: "Fixed: Floor plan camera controls"
+6. Click Commit button
+7. Click [...] → Push
+
+RESULT: Both achieve same thing! 
+But VS CODE is more visual and easier! ✅
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ADVANTAGES OF EACH METHOD
+═══════════════════════════════════════════════════════════════════════════════
+
+TERMINAL ADVANTAGES:
+✅ Faster for experienced users
+✅ More powerful commands available
+✅ Works everywhere (server, SSH, etc.)
+✅ Scriptable (automation)
+
+TERMINAL DISADVANTAGES:
+❌ Hard to remember commands
+❌ No visual file differences
+❌ Steep learning curve
+❌ Easy to make mistakes
+
+
+VS CODE ADVANTAGES:
+✅ Visual and easy to understand
+✅ See file differences in real-time
+✅ Beginner-friendly
+✅ Integrated with editor
+✅ Less chance of mistakes
+✅ One-click operations
+
+VS CODE DISADVANTAGES:
+❌ Slightly slower
+❌ Some advanced commands not available
+❌ Only works in VS Code
+
+
+BEST PRACTICE: Use VS CODE for daily work! 🎯
+════════════════════════════════════════════
+
+VS Code Git is perfect for:
+• Day-to-day development
+• Visual feedback
+• Learning Git basics
+• Team collaboration
+• Reviewing changes
+
+
+═══════════════════════════════════════════════════════════════════════════════
+WHY VS CODE IS BETTER FOR BEGINNERS
+═══════════════════════════════════════════════════════════════════════════════
+
+CLARITY:
+Terminal: $ git add . (what does this do? not obvious)
+VS Code: Click [+] button (obvious!)
+
+VISIBILITY:
+Terminal: $ git status (text output)
+VS Code: Visual panel with colors and sections
+
+SAFETY:
+Terminal: Easy to type wrong command
+VS Code: Limited to safe operations via buttons
+
+CONFIDENCE:
+Terminal: "Did that work?" (hard to tell)
+VS Code: Immediate visual feedback
+
+
+═══════════════════════════════════════════════════════════════════════════════
+YOUR NEXT STEPS
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Open your project in VS Code
+   File → Open Folder
+   /Users/yagmurbesher/Documents/sources/OBC-IFCViewer
+
+STEP 2: Open Source Control
+   Ctrl + Shift + G
+
+STEP 3: Initialize Repository
+   Click "Initialize Repository"
+
+STEP 4: Make a small change
+   Edit any file slightly
+
+STEP 5: Follow the workflow
+   Stage → Message → Commit → Push
+
+STEP 6: Celebrate! 🎉
+   You're now using professional version control!
+
+
+═══════════════════════════════════════════════════════════════════════════════
+QUICK REFERENCE: Terminal vs VS Code Icons
+═══════════════════════════════════════════════════════════════════════════════
+
+Terminal Input                  VS Code Icon                What it does
+─────────────────────────────────────────────────────────────────────────────
+git add                         [+]                         Stage file
+git reset                       [−]                         Unstage file
+git checkout --                 [↻]                         Discard file
+git commit -m                   [✓]                         Commit all
+git push                        [↑ with icon]               Push to GitHub
+git pull                        [↓ with icon]               Pull from GitHub
+git branch                      [⎇ icon]                    Switch branch
+git log                         [History icon]              Show commits
+
+
+═══════════════════════════════════════════════════════════════════════════════
+FINAL ADVICE
+═══════════════════════════════════════════════════════════════════════════════
+
+💡 Start with VS Code for comfortable learning
+💡 Terminal commands do the SAME thing (just harder to see)
+💡 VS Code removes 90% of Git confusion
+💡 You can always use Terminal later when comfortable
+💡 Commit frequently (every 1-2 hours)
+💡 Write clear messages (not "stuff" or "fix")
+💡 Your code is now professionally managed! 🚀
+
+
+═══════════════════════════════════════════════════════════════════════════════
+Last Updated: November 2, 2025
+For OBC-IFCViewer Project
+═══════════════════════════════════════════════════════════════════════════════

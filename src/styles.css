@@ -1,0 +1,803 @@
+/**
+ * Global Styles for IFC Viewer
+ * 
+ * This stylesheet provides:
+ * - Base layout and container styling
+ * - UI panel positioning and appearance
+ * - Mobile responsiveness
+ * - Custom styling for OBC UI components
+ */
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #1a1a1a;
+}
+
+/* Main container for the 3D scene */
+#container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+}
+
+/* Canvas styling */
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+}
+
+/* UI Panel styling */
+.options-menu {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 320px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease;
+}
+
+/* Panel sections */
+bim-panel-section {
+  padding: 12px;
+}
+
+bim-panel-section + bim-panel-section {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Button styling */
+bim-button {
+  width: 100%;
+  margin: 4px 0;
+}
+
+/* Labels */
+bim-label {
+  display: block;
+  font-size: 14px;
+  color: #4b5563;
+  margin: 4px 0;
+}
+
+/* Loading status label */
+#loading-status {
+  font-weight: 600;
+  min-height: 20px;
+}
+
+/* Model count label */
+#model-count {
+  font-weight: 600;
+  color: #3b82f6;
+  font-size: 15px;
+}
+
+/* Mobile menu toggle button */
+.phone-menu-toggler {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 11;
+  display: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Mobile responsive design */
+@media (max-width: 768px) {
+  .options-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 85%;
+    max-width: 320px;
+    max-height: 100vh;
+    border-radius: 0;
+    transform: translateX(100%);
+  }
+
+  .options-menu-visible {
+    transform: translateX(0) !important;
+  }
+
+  .phone-menu-toggler {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Scrollbar styling */
+.options-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.options-menu::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.options-menu::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.options-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Performance stats positioning */
+#stats {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+/* Input styling */
+bim-number-input,
+bim-color-input {
+  width: 100%;
+  margin: 8px 0;
+}
+
+/* Panel header */
+bim-panel[label] {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.options-menu {
+  animation: fadeIn 0.3s ease;
+}
+
+/* Loading indicator */
+.loading {
+  position: relative;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Info section styling */
+bim-panel-section[label="Info"] bim-label {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+/* Button hover effects */
+bim-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Responsive font sizes */
+@media (max-width: 480px) {
+  bim-panel[label] {
+    font-size: 14px;
+  }
+
+  bim-label {
+    font-size: 13px;
+  }
+}
+
+/* Measurement styling - make anchor points (spheres) bigger */
+/* This targets the THREE.js mesh elements for measurement anchors */
+.measurement-anchor {
+  transform: scale(2.0); /* Make anchor points 2x bigger */
+}
+
+/* Custom styling for measurement lines - these are rendered by Three.js */
+/* The line width is controlled programmatically, but we can add visual enhancements */
+canvas {
+  /* Enable hardware acceleration for smoother rendering */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Coordinate Warning Notification */
+.coordinate-warning {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: #ffffff;
+  padding: 16px 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.4);
+  animation: slideDown 0.3s ease-out;
+  max-width: 90%;
+}
+
+.coordinate-warning-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.coordinate-warning-content {
+  flex: 1;
+}
+
+.coordinate-warning-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.coordinate-warning-message {
+  font-size: 14px;
+  opacity: 0.95;
+}
+
+.coordinate-warning-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.coordinate-warning-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Error Notification */
+.error-notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.4);
+  animation: slideDown 0.3s ease-out;
+  max-width: 600px;
+  min-width: 400px;
+}
+
+.error-notification-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.error-notification-content {
+  flex: 1;
+}
+
+.error-notification-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.error-notification-message {
+  font-size: 14px;
+  line-height: 1.6;
+  opacity: 0.95;
+  white-space: pre-line;
+  margin-bottom: 12px;
+}
+
+.error-notification-action {
+  background: rgba(255, 255, 255, 0.95);
+  color: #dc2626;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.error-notification-action:hover {
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.error-notification-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.error-notification-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .error-notification {
+    min-width: 90%;
+    max-width: 90%;
+  }
+
+  .coordinate-warning {
+    max-width: 90%;
+  }
+}
+
+/* Model Alignment Panel */
+.model-alignment-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 280px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10001;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+}
+
+.model-alignment-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 10px 12px;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  user-select: none;
+}
+
+.model-alignment-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.model-alignment-header-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.model-alignment-minimize,
+.model-alignment-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.model-alignment-minimize:hover,
+.model-alignment-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.model-alignment-content {
+  padding: 12px;
+}
+
+.model-alignment-section {
+  margin-bottom: 12px;
+}
+
+.model-alignment-section label {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.model-alignment-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  background: white;
+  cursor: pointer;
+}
+
+.model-alignment-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.model-alignment-inputs {
+  display: flex;
+  gap: 8px;
+}
+
+.model-alignment-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-alignment-input-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  text-align: center;
+  margin: 0;
+}
+
+.model-alignment-input-group input {
+  width: 100%;
+  padding: 6px 4px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+}
+
+.model-alignment-input-group input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.model-alignment-section input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.model-alignment-section input[type="number"]:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.model-alignment-hint {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+  line-height: 1.4;
+  background: #f5f5f5;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.model-alignment-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.model-alignment-apply,
+.model-alignment-reset {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-alignment-apply {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.model-alignment-apply:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.model-alignment-reset {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.model-alignment-reset:hover {
+  background: #e0e0e0;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .model-alignment-panel {
+    width: 260px;
+    right: 10px;
+    top: 70px;
+  }
+  
+  .model-alignment-inputs {
+    gap: 6px;
+  }
+}
+
+/* Floor Plan Modal */
+.floor-plan-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.floor-plan-modal-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 500px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+}
+
+.floor-plan-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.floor-plan-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.floor-plan-modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #666;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.floor-plan-modal-close:hover {
+  background: #f0f0f0;
+}
+
+.floor-plan-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.floor-plan-info {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.floor-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.floor-plan-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.floor-plan-item:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateX(4px);
+}
+
+.floor-plan-item-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 6px;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.floor-plan-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.floor-plan-item-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floor-plan-item-info {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floor-plan-item-create {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.floor-plan-item-create:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .floor-plan-modal-content {
+    width: 95vw;
+    max-height: 85vh;
+  }
+  
+  .floor-plan-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .floor-plan-item-create {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
