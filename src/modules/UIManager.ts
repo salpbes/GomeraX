@@ -286,6 +286,32 @@ export class UIManager {
       this.worldManager.setAmbientOcclusion(enabled);
     });
 
+    // Double-Sided Rendering toggle listener
+    document.getElementById('doubleSidedRenderingToggle')?.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      this.ifcLoader.setDoubleSidedRendering(enabled);
+    });
+
+    // Section Hatches toggle listener
+    document.getElementById('sectionHatchesToggle')?.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      const clipStyler = this.viewer?.getClipStyler();
+      if (clipStyler) {
+        clipStyler.setHatchesVisibility(enabled);
+        console.log(`🎨 Section hatches ${enabled ? 'enabled' : 'disabled'}`);
+      }
+    });
+
+    // Section Fills toggle listener
+    document.getElementById('sectionFillsToggle')?.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      const clipStyler = this.viewer?.getClipStyler();
+      if (clipStyler) {
+        clipStyler.setFillsVisibility(enabled);
+        console.log(`🎨 Hatch fills ${enabled ? 'enabled' : 'disabled'}`);
+      }
+    });
+
     // Walk speed slider listener
     document.getElementById('walkSpeedSlider')?.addEventListener('input', (e) => {
       const speed = parseFloat((e.target as HTMLInputElement).value);

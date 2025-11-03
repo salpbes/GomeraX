@@ -55,6 +55,9 @@ export class IFCLoaderModule {
   // Store coordination matrix from first model
   private coordinationMatrix: THREE.Matrix4 | null = null;
 
+  // Double-sided rendering toggle (enabled by default)
+  private doubleSidedRenderingEnabled: boolean = true;
+
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
     this.components = worldManager.getComponents();
@@ -72,6 +75,30 @@ export class IFCLoaderModule {
    */
   public setOnAlignmentNeeded(callback: (modelId: string) => void): void {
     this.onAlignmentNeeded = callback;
+  }
+
+  /**
+   * Set double-sided rendering state
+   * @param enabled - Whether to enable double-sided rendering
+   */
+  public setDoubleSidedRendering(enabled: boolean): void {
+    this.doubleSidedRenderingEnabled = enabled;
+    
+    // Apply to all existing materials
+    if (this.fragments?.core.models.materials) {
+      for (const [, material] of this.fragments.core.models.materials.list) {
+        material.side = enabled ? THREE.DoubleSide : THREE.FrontSide;
+      }
+    }
+    
+    console.log(`✅ Double-sided rendering ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current double-sided rendering state
+   */
+  public isDoubleSidedRenderingEnabled(): boolean {
+    return this.doubleSidedRenderingEnabled;
   }
 
   /**
@@ -125,6 +152,10 @@ export class IFCLoaderModule {
     // Handle LOD materials for postproduction renderer
     // LOD (Level of Detail) materials need special handling in postproduction
     this.fragments.core.models.materials.list.onItemSet.add(({ value: material }) => {
+      // Apply double-sided rendering setting based on current state
+      // IFC geometries often have single-sided faces; this ensures both sides render
+      material.side = this.doubleSidedRenderingEnabled ? THREE.DoubleSide : THREE.FrontSide;
+      
       const isLod = 'isLodMaterial' in material && (material as any).isLodMaterial;
       if (isLod && world.renderer) {
         const renderer = world.renderer as OBF.PostproductionRenderer;

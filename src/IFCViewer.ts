@@ -20,6 +20,7 @@ import { PropertiesPanelModule } from './modules/PropertiesPanelModule';
 import { SpaceVisibilityModule } from './modules/SpaceVisibilityModule';
 import { ViewCubeModule } from './modules/ViewCubeModule';
 import { ClipperModule } from './modules/ClipperModule';
+import { ClipStylerModule } from './modules/ClipStylerModule';
 import { FirstPersonControlsModule } from './modules/FirstPersonControlsModule';
 import { MeasurementModule } from './modules/MeasurementModule';
 import { FloorPlanModule } from './modules/FloorPlanModule';
@@ -35,6 +36,7 @@ export class IFCViewer {
   private spaceVisibility: SpaceVisibilityModule | null = null;
   private viewCube: ViewCubeModule | null = null;
   private clipper: ClipperModule | null = null;
+  private clipStyler: ClipStylerModule | null = null;
   private firstPersonControls: FirstPersonControlsModule | null = null;
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
@@ -113,6 +115,12 @@ export class IFCViewer {
       console.log('✂️ Initializing clipper...');
       this.clipper = new ClipperModule(this.worldManager);
       await this.clipper.initialize(world, container);
+
+      // Step 4.6a: Initialize ClipStyler for section hatches
+      console.log('🎨 Initializing section hatches...');
+      this.clipStyler = new ClipStylerModule(this.worldManager);
+      const clipperComponent = this.worldManager.getComponents().get(OBC.Clipper);
+      await this.clipStyler.initialize(world, clipperComponent);
 
       // Step 4.7: Initialize first person controls
       console.log('🎮 Initializing first person controls...');
@@ -233,6 +241,13 @@ export class IFCViewer {
   }
 
   /**
+   * Gets the clip styler instance (section hatches)
+   */
+  public getClipStyler(): ClipStylerModule | null {
+    return this.clipStyler;
+  }
+
+  /**
    * Gets the first person controls instance
    */
   public getFirstPersonControls(): FirstPersonControlsModule | null {
@@ -258,6 +273,7 @@ export class IFCViewer {
     this.spaceVisibility?.dispose();
     this.viewCube?.dispose();
     this.clipper?.dispose();
+    this.clipStyler?.dispose();
     this.firstPersonControls?.dispose();
     this.measurement?.dispose();
     this.ifcLoader.clearModels();

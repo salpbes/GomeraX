@@ -205,6 +205,18 @@ export function createToolbarHTML(): string {
           <input type="checkbox" id="ambientOcclusionToggle" checked>
           <span>Ambient Occlusion (AO)</span>
         </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="doubleSidedRenderingToggle" checked>
+          <span>Double-Sided Rendering</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="sectionHatchesToggle" checked>
+          <span>Section Hatches</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="sectionFillsToggle" checked>
+          <span>Hatch Fills</span>
+        </label>
       </div>
     </div>
     
