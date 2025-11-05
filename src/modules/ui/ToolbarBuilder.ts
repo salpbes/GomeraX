@@ -206,17 +206,52 @@ export function createToolbarHTML(): string {
           <span>Ambient Occlusion (AO)</span>
         </label>
         <label class="checkbox-label">
+          <input type="checkbox" id="adaptiveQualityToggle" checked>
+          <span>Adaptive Quality (Auto FPS)</span>
+        </label>
+        <label class="checkbox-label">
           <input type="checkbox" id="doubleSidedRenderingToggle" checked>
           <span>Double-Sided Rendering</span>
         </label>
         <label class="checkbox-label">
           <input type="checkbox" id="sectionHatchesToggle" checked>
-          <span>Section Hatches</span>
+          <span>Section Fills (Clean Cut View)</span>
         </label>
-        <label class="checkbox-label">
-          <input type="checkbox" id="sectionFillsToggle" checked>
-          <span>Hatch Fills</span>
-        </label>
+        
+        <!-- Fill Opacity Selector -->
+        <div style="margin-top: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+            Fill Opacity:
+          </label>
+          <select id="hatchPerformanceModeSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+            <option value="high">High (50%)</option>
+            <option value="balanced" selected>Balanced (30%)</option>
+            <option value="performance">Subtle (10%)</option>
+          </select>
+        </div>
+        
+        <!-- Fill Color Selector -->
+        <div style="margin-top: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+            Section Fill Color:
+          </label>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="color" id="sectionFillColorPicker" value="#add8e6" style="width: 50px; height: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); border-radius: 4px; cursor: pointer;">
+            <select id="sectionFillColorPreset" style="flex: 1; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+              <option value="#add8e6" selected>Light Blue</option>
+              <option value="#ffcccb">Light Red</option>
+              <option value="#90ee90">Light Green</option>
+              <option value="#ffffe0">Light Yellow</option>
+              <option value="#dda0dd">Light Purple</option>
+              <option value="#ffa07a">Light Orange</option>
+              <option value="#d3d3d3">Light Gray</option>
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
+          <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">
+            💡 Clean section cuts without hatch lines
+          </div>
+        </div>
       </div>
     </div>
     

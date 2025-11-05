@@ -24,6 +24,7 @@ import { ClipStylerModule } from './modules/ClipStylerModule';
 import { FirstPersonControlsModule } from './modules/FirstPersonControlsModule';
 import { MeasurementModule } from './modules/MeasurementModule';
 import { FloorPlanModule } from './modules/FloorPlanModule';
+import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
 import * as OBC from '@thatopen/components';
 
 export class IFCViewer {
@@ -40,6 +41,7 @@ export class IFCViewer {
   private firstPersonControls: FirstPersonControlsModule | null = null;
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
+  private adaptiveQuality: AdaptiveQualityController | null = null;
 
   constructor() {
     // Initialize the world manager first (foundation of the viewer)
@@ -176,6 +178,19 @@ export class IFCViewer {
         this.performanceMonitor.initialize();
       }
 
+      // Step 5.5: Initialize Adaptive Quality Controller
+      if (this.performanceMonitor) {
+        console.log('🎯 Initializing Adaptive Quality Controller...');
+        this.adaptiveQuality = new AdaptiveQualityController(
+          this.performanceMonitor,
+          this.worldManager,
+          this.clipStyler || undefined
+        );
+        // Enable by default for optimal performance
+        this.adaptiveQuality.enable();
+        console.log('✅ Adaptive Quality enabled (auto-adjusts based on FPS)');
+      }
+
       console.log('✅ IFC Viewer initialized successfully!');
       console.log('📂 Ready to load IFC files');
       
@@ -262,12 +277,20 @@ export class IFCViewer {
   }
 
   /**
+   * Gets the adaptive quality controller instance
+   */
+  public getAdaptiveQuality(): AdaptiveQualityController | null {
+    return this.adaptiveQuality;
+  }
+
+  /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
    */
   public dispose(): void {
     console.log('🧹 Disposing IFC Viewer...');
     
+    this.adaptiveQuality?.dispose();
     this.performanceMonitor?.dispose();
     this.propertiesPanel?.dispose();
     this.spaceVisibility?.dispose();

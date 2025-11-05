@@ -286,29 +286,72 @@ export class UIManager {
       this.worldManager.setAmbientOcclusion(enabled);
     });
 
+    // Adaptive Quality toggle listener
+    document.getElementById('adaptiveQualityToggle')?.addEventListener('change', (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      const adaptiveQuality = this.viewer?.getAdaptiveQuality();
+      if (adaptiveQuality) {
+        if (enabled) {
+          adaptiveQuality.enable();
+          console.log('🎯 Adaptive Quality enabled - auto-adjusts based on FPS');
+        } else {
+          adaptiveQuality.disable();
+          console.log('⏸️ Adaptive Quality disabled - manual quality control');
+        }
+      }
+    });
+
     // Double-Sided Rendering toggle listener
     document.getElementById('doubleSidedRenderingToggle')?.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
       this.ifcLoader.setDoubleSidedRendering(enabled);
     });
 
-    // Section Hatches toggle listener
+    // Section Fills toggle listener (clean cuts without hatch lines)
     document.getElementById('sectionHatchesToggle')?.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
       const clipStyler = this.viewer?.getClipStyler();
       if (clipStyler) {
         clipStyler.setHatchesVisibility(enabled);
-        console.log(`🎨 Section hatches ${enabled ? 'enabled' : 'disabled'}`);
+        console.log(`🎨 Section fills ${enabled ? 'enabled' : 'disabled'}`);
       }
     });
 
-    // Section Fills toggle listener
-    document.getElementById('sectionFillsToggle')?.addEventListener('change', (e) => {
-      const enabled = (e.target as HTMLInputElement).checked;
+    // Fill Opacity selector listener
+    document.getElementById('hatchPerformanceModeSelect')?.addEventListener('change', (e) => {
+      const mode = (e.target as HTMLSelectElement).value as 'high' | 'balanced' | 'performance';
       const clipStyler = this.viewer?.getClipStyler();
       if (clipStyler) {
-        clipStyler.setFillsVisibility(enabled);
-        console.log(`🎨 Hatch fills ${enabled ? 'enabled' : 'disabled'}`);
+        clipStyler.setPerformanceMode(mode);
+        console.log(`🎨 Fill opacity mode: ${mode}`);
+      }
+    });
+
+    // Section Fill Color picker listener
+    document.getElementById('sectionFillColorPicker')?.addEventListener('input', (e) => {
+      const color = (e.target as HTMLInputElement).value;
+      const clipStyler = this.viewer?.getClipStyler();
+      if (clipStyler) {
+        clipStyler.setFillColor(color);
+        // Update preset dropdown to "Custom"
+        const preset = document.getElementById('sectionFillColorPreset') as HTMLSelectElement;
+        if (preset) preset.value = 'custom';
+        console.log(`🎨 Section fill color: ${color}`);
+      }
+    });
+
+    // Section Fill Color preset listener
+    document.getElementById('sectionFillColorPreset')?.addEventListener('change', (e) => {
+      const preset = (e.target as HTMLSelectElement).value;
+      if (preset === 'custom') return; // User selecting custom, let them use color picker
+      
+      const clipStyler = this.viewer?.getClipStyler();
+      if (clipStyler) {
+        clipStyler.setFillColor(preset);
+        // Update color picker to match preset
+        const picker = document.getElementById('sectionFillColorPicker') as HTMLInputElement;
+        if (picker) picker.value = preset;
+        console.log(`🎨 Section fill preset: ${preset}`);
       }
     });
 

@@ -1,14 +1,16 @@
 /**
  * ClipStyler Module
  * 
- * Provides section hatching and styling functionality for clipping planes.
- * Applies fills and outlines to section cuts based on element types.
+ * Provides clean section fills for clipping planes WITHOUT hatch lines.
+ * 
+ * NOTE: LineMaterial hatch lines have a known bug where they appear on both sides
+ * of the clipping plane (black rectangle artifact). This is a THREE.js limitation.
+ * Solution: Use ONLY fill material for clean, professional section cuts.
  */
 
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { WorldManager } from './WorldManager';
 
 export class ClipStylerModule {
@@ -17,8 +19,6 @@ export class ClipStylerModule {
   private worldManager: WorldManager;
   private components: OBC.Components;
   private clipper: OBC.Clipper | null = null;
-  private isEnabled: boolean = false;
-  private fillsEnabled: boolean = true; // Track fill visibility state
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
@@ -26,7 +26,7 @@ export class ClipStylerModule {
   }
 
   /**
-   * Initializes the ClipStyler with predefined styles for architectural elements
+   * Initializes the ClipStyler with clean section fills (NO hatch lines)
    */
   public async initialize(world: OBC.World, clipper: OBC.Clipper): Promise<void> {
     this.world = world;
@@ -36,221 +36,191 @@ export class ClipStylerModule {
     this.clipStyler = this.components.get(OBF.ClipStyler);
     this.clipStyler.world = world;
 
-    // Define architectural element styles
-    this.defineArchitecturalStyles();
-
-    // Create dynamic groupings for element classification
-    this.createElementClassifications();
+    // Define clean section fill style (no lines to avoid artifacts)
+    this.defineStyles();
 
     // Set up automatic styling when clipping planes are created
     this.setupClippingPlaneListeners();
 
-    this.isEnabled = true;
-    console.log('✅ ClipStyler initialized with architectural styles');
+    console.log('✅ ClipStyler initialized (clean section fills, no hatch lines)');
   }
 
   /**
-   * Define a single unified hatching and fill style for all building elements
+   * Define custom section fill style
    */
-  private defineArchitecturalStyles(): void {
+  private defineStyles(): void {
     if (!this.clipStyler) return;
 
-    // Unified style for ALL objects - clean black outline with light blue fill
-    this.clipStyler.styles.set('UnifiedHatch', {
-      linesMaterial: new LineMaterial({ 
-        color: '#000000', 
-        linewidth: 0.3 
-      }),
-      fillsMaterial: new THREE.MeshBasicMaterial({
-        color: '#ADD8E6', // Light blue
-        side: THREE.DoubleSide,
-        transparent: false,
-        opacity: 0.7,
-        fog: false,
-        depthWrite: true,
-      }),
+    // Clean fill ONLY - no LineMaterial to avoid artifacts
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xADD8E6,    // Light blue
+      side: THREE.DoubleSide, // Render both front and back faces
+      transparent: true,
+      opacity: 0.3,       // Subtle fill
+      depthWrite: false,  // Prevent z-fighting
+      depthTest: true,    // Proper depth testing
+      vertexColors: false, // Don't use vertex colors
+      fog: false,         // Not affected by fog
+      toneMapped: false,  // Disable tone mapping to preserve exact color
     });
 
-    console.log('🎨 Unified hatch style defined (optimized for performance)');
-  }
+    material.needsUpdate = true;
 
-  /**
-   * Create classifications for architectural elements (simplified - all use same style)
-   */
-  private createElementClassifications(): void {
-    // With unified style, we don't need complex classifications anymore
-    // All elements will use the 'UnifiedHatch' style regardless of type
-    console.log('📊 Simplified - all elements use unified hatch style');
-  }
+    this.clipStyler.styles.set('SectionFill', {
+      fillsMaterial: material,
+    });
 
-  /**
+    console.log('🎨 Clean section fill style defined');
+  }  /**
    * Set up automatic styling when clipping planes are created
    */
   private setupClippingPlaneListeners(): void {
     if (!this.clipper || !this.clipStyler) return;
 
-    // Listen for new clipping planes and apply unified style to ALL objects
     this.clipper.list.onItemSet.add(({ key }) => {
-      try {
-        // Apply unified hatch style to all objects cut by the clipping plane
-        this.clipStyler?.createFromClipping(key, {
-          items: {
-            All: {
-              style: 'UnifiedHatch',
-            },
-          },
-        });
-
-        console.log('🎨 Unified hatch style applied to all objects in clipping plane');
-      } catch (error) {
-        console.warn('⚠️ Could not apply hatch style:', error);
-      }
+      this.clipStyler?.createFromClipping(key, {
+        items: { All: { style: 'SectionFill' } },
+      });
+      
+      console.log('🎨 Clean section fill applied');
+      
+      // Apply material properties after ClipStyler creates the geometry
+      // Multiple attempts with increasing delays to ensure mesh is ready
+      setTimeout(() => this.ensureMaterialProperties(), 100);
+      setTimeout(() => this.ensureMaterialProperties(), 500);
+      setTimeout(() => this.ensureMaterialProperties(), 1000);
     });
-
-    console.log('✅ Clipping plane listeners configured - unified style applies to ALL objects');
   }
 
   /**
-   * Toggle the visibility of section hatches
+   * Ensure all fill materials have correct DoubleSide rendering and AO exclusion
    */
-  public toggleHatchesVisibility(): void {
+  private ensureMaterialProperties(): void {
     if (!this.clipStyler) return;
 
-    this.clipStyler.visible = !this.clipStyler.visible;
-    console.log(`👁️ Section hatches ${this.clipStyler.visible ? 'shown' : 'hidden'}`);
+    for (const edges of this.clipStyler.list.values()) {
+      const edgesAny = edges as any;
+      
+      // Find all meshes in the THREE.Group hierarchy
+      if (edgesAny.three && edgesAny.three.children) {
+        edgesAny.three.traverse((child: any) => {
+          if (child instanceof THREE.Mesh && child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            
+            materials.forEach(mat => {
+              if (mat instanceof THREE.MeshBasicMaterial) {
+                // Configure material for DoubleSide rendering
+                mat.side = THREE.DoubleSide;
+                mat.vertexColors = false;
+                mat.toneMapped = false;
+                mat.needsUpdate = true;
+                
+                // CRITICAL: Isolate material from AO pass to prevent black backfaces
+                // This uses the same approach as LOD materials in IFCLoaderModule
+                const world = edgesAny.world;
+                if (world && world.renderer) {
+                  const renderer = world.renderer as any;
+                  if (renderer.postproduction && renderer.postproduction.basePass) {
+                    if (!renderer.postproduction.basePass.isolatedMaterials.includes(mat)) {
+                      renderer.postproduction.basePass.isolatedMaterials.push(mat);
+                    }
+                  }
+                }
+              }
+            });
+            
+            // Set custom depth material for better depth rendering
+            child.customDepthMaterial = new THREE.MeshDepthMaterial({
+              depthPacking: THREE.RGBADepthPacking,
+              side: THREE.DoubleSide,
+            });
+            
+            // Render after other geometry
+            child.renderOrder = 999;
+          }
+        });
+      }
+    }
   }
 
   /**
-   * Set visibility of section hatches
+   * Set visibility of section fills
    */
   public setHatchesVisibility(visible: boolean): void {
     if (!this.clipStyler) return;
-
     this.clipStyler.visible = visible;
-    console.log(`🎨 Section hatches ${visible ? 'enabled' : 'disabled'}`);
+    console.log(`🎨 Section fills ${visible ? 'enabled' : 'disabled'}`);
   }
 
   /**
-   * Get current hatch visibility state
+   * Get current fill visibility state
    */
   public getHatchesVisibility(): boolean {
     return this.clipStyler?.visible || false;
   }
 
   /**
-   * Toggle fill visibility for section hatches
+   * Set fill opacity (replaces performance mode)
    */
-  public toggleFillsVisibility(): void {
-    this.fillsEnabled = !this.fillsEnabled;
-    this.applyFillsState();
-    console.log(`🎨 Section hatch fills ${this.fillsEnabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Set fill visibility state for section hatches
-   */
-  public setFillsVisibility(enabled: boolean): void {
-    this.fillsEnabled = enabled;
-    this.applyFillsState();
-    console.log(`🎨 Section hatch fills ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Get current fill visibility state
-   */
-  public getFillsVisibility(): boolean {
-    return this.fillsEnabled;
-  }
-
-  /**
-   * Apply fills state to all styles
-   */
-  private applyFillsState(): void {
+  public setFillOpacity(opacity: number): void {
     if (!this.clipStyler) return;
-
-    // Update opacity for all fill materials based on fillsEnabled state
+    
     for (const style of this.clipStyler.styles.values()) {
       if (style.fillsMaterial) {
-        // Set material transparency - hide if fills are disabled
-        style.fillsMaterial.transparent = true;
-        style.fillsMaterial.opacity = this.fillsEnabled ? 0.7 : 0;
+        style.fillsMaterial.opacity = opacity;
         style.fillsMaterial.needsUpdate = true;
       }
     }
+    
+    console.log(`🎨 Section fill opacity: ${opacity}`);
   }
 
   /**
-   * Enable simplified hatches for better performance (lines only, no fills)
+   * Set section fill color
    */
-  public enableSimplifiedMode(): void {
-    this.fillsEnabled = false;
-    this.applyFillsState();
-    
-    // Reduce line widths for better performance
-    if (this.clipStyler) {
-      for (const style of this.clipStyler.styles.values()) {
-        if (style.linesMaterial) {
-          (style.linesMaterial as any).linewidth = 0.8;
-        }
-      }
-    }
-    
-    console.log('⚡ Simplified mode enabled (outlines only, reduced line width)');
-  }
-
-  /**
-   * Disable simplified hatches (restore full quality)
-   */
-  public disableSimplifiedMode(): void {
-    this.fillsEnabled = true;
-    this.applyFillsState();
-    
-    // Restore original line widths
-    if (this.clipStyler) {
-      for (const style of this.clipStyler.styles.values()) {
-        if (style.linesMaterial) {
-          (style.linesMaterial as any).linewidth = 1.5;
-        }
-      }
-    }
-    
-    console.log('✨ Full quality mode enabled (fills + outlines)');
-  }
-
-  /**
-   * Apply a specific style to a clipping plane by ID
-   */
-  public applyStyleToPlane(planeId: string, styleName: string): void {
+  public setFillColor(color: string | number): void {
     if (!this.clipStyler) return;
-
-    try {
-      this.clipStyler.createFromClipping(planeId, {
-        items: { All: { style: styleName } },
-      });
-
-      console.log(`✅ Applied style "${styleName}" to plane ${planeId}`);
-    } catch (error) {
-      console.error(`❌ Failed to apply style: ${error}`);
+    
+    const threeColor = new THREE.Color(color);
+    
+    for (const style of this.clipStyler.styles.values()) {
+      if (style.fillsMaterial) {
+        const material = style.fillsMaterial as THREE.MeshBasicMaterial;
+        material.color.copy(threeColor);
+        material.side = THREE.DoubleSide; // Ensure DoubleSide
+        material.vertexColors = false; // Ensure we use material color, not vertex colors
+        material.needsUpdate = true;
+      }
     }
+    
+    // Also update any existing mesh materials created by ClipStyler
+    this.ensureMaterialProperties();
+    
+    console.log(`🎨 Section fill color: ${color}`);
   }
 
   /**
-   * Get available hatch styles
+   * Set performance mode (kept for compatibility, now controls opacity)
    */
-  public getAvailableStyles(): string[] {
-    if (!this.clipStyler) return [];
-    return Array.from(this.clipStyler.styles.keys());
+  public setPerformanceMode(mode: 'high' | 'balanced' | 'performance'): void {
+    // Map performance modes to opacity levels
+    const opacityMap = {
+      'high': 0.5,       // More visible
+      'balanced': 0.3,   // Default
+      'performance': 0.1 // Subtle
+    };
+    
+    this.setFillOpacity(opacityMap[mode]);
+    console.log(`🎨 Performance mode: ${mode}`);
   }
 
   /**
-   * Cleanup
+   * Dispose of resources
    */
   public dispose(): void {
-    if (this.clipStyler) {
-      this.clipStyler.dispose();
-    }
-    this.clipper = null;
+    this.clipStyler = null;
     this.world = null;
-    console.log('🧹 ClipStyler disposed');
+    this.clipper = null;
+    console.log('🗑️ ClipStyler disposed');
   }
 }
