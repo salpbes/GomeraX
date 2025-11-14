@@ -24,6 +24,7 @@ import { ClipStylerModule } from './modules/ClipStylerModule';
 import { FirstPersonControlsModule } from './modules/FirstPersonControlsModule';
 import { MeasurementModule } from './modules/MeasurementModule';
 import { FloorPlanModule } from './modules/FloorPlanModule';
+import { MinimapModule } from './modules/MinimapModule';
 import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
 import * as OBC from '@thatopen/components';
 
@@ -41,6 +42,7 @@ export class IFCViewer {
   private firstPersonControls: FirstPersonControlsModule | null = null;
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
+  private minimap: MinimapModule | null = null;
   private adaptiveQuality: AdaptiveQualityController | null = null;
 
   constructor() {
@@ -124,6 +126,9 @@ export class IFCViewer {
       const clipperComponent = this.worldManager.getComponents().get(OBC.Clipper);
       await this.clipStyler.initialize(world, clipperComponent);
 
+      // Connect ClipStyler to Clipper for raycast exclusion
+      this.clipper.setClipStylerModule(this.clipStyler);
+
       // Step 4.7: Initialize first person controls
       console.log('🎮 Initializing first person controls...');
       this.firstPersonControls = new FirstPersonControlsModule();
@@ -151,6 +156,16 @@ export class IFCViewer {
       // Pass floor plan module to UI manager
       if (this.uiManager) {
         this.uiManager.setFloorPlanModule(this.floorPlan);
+      }
+
+      // Step 4.10: Initialize minimap module
+      console.log('🗺️ Initializing minimap module...');
+      this.minimap = new MinimapModule(components, world, this.floorPlan);
+      await this.minimap.initialize();
+
+      // Pass minimap module to UI manager
+      if (this.uiManager) {
+        this.uiManager.setMinimapModule(this.minimap);
       }
 
       // Setup callback to update collision meshes when models are loaded
@@ -277,6 +292,13 @@ export class IFCViewer {
   }
 
   /**
+   * Gets the minimap module instance
+   */
+  public getMinimap(): MinimapModule | null {
+    return this.minimap;
+  }
+
+  /**
    * Gets the adaptive quality controller instance
    */
   public getAdaptiveQuality(): AdaptiveQualityController | null {
@@ -299,6 +321,7 @@ export class IFCViewer {
     this.clipStyler?.dispose();
     this.firstPersonControls?.dispose();
     this.measurement?.dispose();
+    this.minimap?.dispose();
     this.ifcLoader.clearModels();
     this.worldManager.dispose();
     

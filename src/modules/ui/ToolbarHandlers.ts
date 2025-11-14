@@ -7,6 +7,7 @@ import { IFCLoaderModule } from '../IFCLoaderModule';
 import { ModelTransformModule } from '../ModelTransformModule';
 import { MeasurementModule, MeasurementMode } from '../MeasurementModule';
 import { FloorPlanModule } from '../FloorPlanModule';
+import { MinimapModule } from '../MinimapModule';
 import { PropertiesPanelModule } from '../PropertiesPanelModule';
 import { NotificationHelper } from './NotificationHelper';
 import { ModelDashboard } from './ModelDashboard';
@@ -18,6 +19,7 @@ export class ToolbarHandlers {
   private modelTransform: ModelTransformModule;
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
+  private minimap: MinimapModule | null = null;
   private propertiesPanel: PropertiesPanelModule | null = null;
   private showLoadingCallback: () => void;
   private hideLoadingCallback: () => void;
@@ -58,6 +60,13 @@ export class ToolbarHandlers {
    */
   setFloorPlanModule(floorPlan: FloorPlanModule): void {
     this.floorPlan = floorPlan;
+  }
+
+  /**
+   * Sets the minimap module (can be set after construction)
+   */
+  setMinimapModule(minimap: MinimapModule): void {
+    this.minimap = minimap;
   }
 
   /**

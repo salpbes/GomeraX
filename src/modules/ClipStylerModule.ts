@@ -86,9 +86,18 @@ export class ClipStylerModule {
       
       // Apply material properties after ClipStyler creates the geometry
       // Multiple attempts with increasing delays to ensure mesh is ready
-      setTimeout(() => this.ensureMaterialProperties(), 100);
-      setTimeout(() => this.ensureMaterialProperties(), 500);
-      setTimeout(() => this.ensureMaterialProperties(), 1000);
+      setTimeout(() => {
+        this.ensureMaterialProperties();
+        this.disableSectionFillRaycast();
+      }, 100);
+      setTimeout(() => {
+        this.ensureMaterialProperties();
+        this.disableSectionFillRaycast();
+      }, 500);
+      setTimeout(() => {
+        this.ensureMaterialProperties();
+        this.disableSectionFillRaycast();
+      }, 1000);
     });
   }
 
@@ -140,6 +149,34 @@ export class ClipStylerModule {
           }
         });
       }
+    }
+  }
+
+  /**
+   * Disables raycasting on all section fill meshes
+   * This allows users to select building elements through the section fills
+   */
+  public disableSectionFillRaycast(): void {
+    if (!this.clipStyler) return;
+
+    try {
+      for (const edges of this.clipStyler.list.values()) {
+        const edgesAny = edges as any;
+        
+        // Traverse the THREE.Group hierarchy to find all meshes
+        if (edgesAny.three && edgesAny.three.children) {
+          edgesAny.three.traverse((child: any) => {
+            // Disable raycast for section fill meshes and lines
+            if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+              child.raycast = () => {};
+            }
+          });
+        }
+      }
+      
+      console.log('🎯 Section fill raycasting disabled - objects can be selected through fills');
+    } catch (error) {
+      console.warn('⚠️ Could not disable section fill raycast:', error);
     }
   }
 

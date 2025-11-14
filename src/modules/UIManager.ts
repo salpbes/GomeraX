@@ -7,6 +7,7 @@ import { IFCLoaderModule } from "./IFCLoaderModule";
 import { ModelTransformModule } from "./ModelTransformModule";
 import { MeasurementModule } from "./MeasurementModule";
 import { FloorPlanModule } from "./FloorPlanModule";
+import { MinimapModule } from "./MinimapModule";
 import { getToolbarStyles, getLoadingIndicatorStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
 import { createToolbarHTML, createLoadingIndicatorHTML } from "./ui/ToolbarBuilder";
 import { ToolbarHandlers } from "./ui/ToolbarHandlers";
@@ -23,6 +24,7 @@ export class UIManager {
   private isSubmenuOpen: boolean = false;
   private viewer: any; // Reference to IFCViewer for accessing all modules
   private floorPlanModule: FloorPlanModule | null = null;
+  private minimapModule: MinimapModule | null = null;
 
   constructor(
     worldManager: WorldManager,
@@ -98,6 +100,15 @@ export class UIManager {
     this.floorPlanModule = floorPlan;
     this.toolbarHandlers.setFloorPlanModule(floorPlan);
     console.log('✅ Floor plan module set in UI');
+  }
+
+  /**
+   * Sets the minimap module for toolbar handlers
+   */
+  public setMinimapModule(minimap: MinimapModule): void {
+    this.minimapModule = minimap;
+    this.toolbarHandlers.setMinimapModule(minimap);
+    console.log('✅ Minimap module set in UI');
   }
 
   /**
@@ -404,6 +415,9 @@ export class UIManager {
       case 'toggleWalkMode':
         this.handleToggleWalkMode();
         break;
+      case 'toggleMinimap':
+        this.handleToggleMinimap();
+        break;
       case 'cancelWalkMode':
         this.handleCancelWalkMode();
         break;
@@ -588,6 +602,57 @@ export class UIManager {
       console.log(`✅ Walk controls: ${!isActive ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('❌ Error toggling walk controls:', error);
+    }
+  }
+
+  /**
+   * Handles toggling the minimap display
+   */
+  private async handleToggleMinimap(): Promise<void> {
+    if (!this.minimapModule) {
+      console.warn('⚠️ Minimap module not available');
+      this.showErrorNotification('Minimap Not Available', 'Minimap module is not initialized yet.');
+      return;
+    }
+
+    try {
+      const isActive = this.minimapModule.isActive();
+      
+      if (isActive) {
+        this.minimapModule.disable();
+      } else {
+        // Enable minimap (will auto-detect current storey)
+        await this.minimapModule.enable();
+      }
+      
+      // Update button state
+      this.updateMinimapButtonState(!isActive);
+      
+      console.log(`✅ Minimap: ${!isActive ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('❌ Error toggling minimap:', error);
+      this.showErrorNotification('Minimap Error', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Updates the minimap button visual state
+   */
+  private updateMinimapButtonState(isActive: boolean): void {
+    const minimapBtn = document.getElementById('minimapBtn');
+    if (!minimapBtn) return;
+
+    const label = minimapBtn.querySelector('.label');
+    if (label) {
+      label.textContent = isActive ? 'Hide Minimap' : 'Show Minimap';
+    }
+
+    if (isActive) {
+      minimapBtn.style.background = 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)';
+      minimapBtn.style.color = 'white';
+    } else {
+      minimapBtn.style.background = '';
+      minimapBtn.style.color = '';
     }
   }
 

@@ -90,6 +90,10 @@ export function createToolbarHTML(): string {
               <span>Fast</span>
             </div>
           </div>
+          <button class="submenu-btn" data-action="toggleMinimap" title="Toggle Minimap" id="minimapBtn">
+            <span class="icon"><i class="fas fa-map-marked-alt"></i></span>
+            <span class="label">Show Minimap</span>
+          </button>
           <button class="submenu-btn" data-action="cancelWalkMode" title="Exit Walking Mode">
             <span class="icon"><i class="fas fa-times-circle"></i></span>
             <span class="label">Cancel Mode</span>

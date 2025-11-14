@@ -8,12 +8,14 @@
 import * as OBC from '@thatopen/components';
 import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
+import type { ClipStylerModule } from './ClipStylerModule';
 
 export class ClipperModule {
   private clipper: OBC.Clipper | null = null;
   private world: OBC.World | null = null;
   private container: HTMLElement | null = null;
   private isEnabled: boolean = false;
+  private clipStyler: ClipStylerModule | null = null;
 
   constructor(private worldManager: WorldManager) {}
 
@@ -57,6 +59,8 @@ export class ClipperModule {
     this.container.addEventListener('dblclick', () => {
       if (this.clipper?.enabled && this.world) {
         this.createClippingPlane();
+        // Disable raycast on newly created plane helpers
+        this.disableClippingPlaneRaycast();
       }
     });
 
@@ -97,6 +101,55 @@ export class ClipperModule {
     } catch (error) {
       console.error('Failed to delete clipping plane:', error);
     }
+  }
+
+  /**
+   * Disables raycasting on all clipping plane helper meshes
+   * This allows users to select building elements through/behind the clipping planes
+   */
+  private disableClippingPlaneRaycast(): void {
+    if (!this.clipper) return;
+
+    try {
+      // Iterate through all clipping planes
+      for (const [, plane] of this.clipper.list) {
+        // Access the plane's mesh/helper objects
+        // OBC clipping planes typically have a 'planeMesh' or helper geometry
+        if ((plane as any).planeMesh) {
+          const planeMesh = (plane as any).planeMesh as THREE.Mesh;
+          // Disable raycasting by overriding the raycast method
+          planeMesh.raycast = () => {};
+        }
+        
+        // Also check for helper objects in the plane's children
+        if ((plane as any).three && (plane as any).three.parent) {
+          const parent = (plane as any).three.parent as THREE.Object3D;
+          parent.traverse((child: THREE.Object3D) => {
+            // Disable raycast for any mesh children (plane helpers, arrows, etc.)
+            if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+              child.raycast = () => {};
+            }
+          });
+        }
+      }
+      
+      // Also disable raycasting on section fill meshes created by ClipStyler
+      if (this.clipStyler) {
+        this.clipStyler.disableSectionFillRaycast();
+      }
+      
+      console.log('🎯 Clipping plane raycasting disabled - objects can now be selected through planes');
+    } catch (error) {
+      console.warn('⚠️ Could not disable clipping plane raycast:', error);
+    }
+  }
+
+  /**
+   * Sets the ClipStyler module reference
+   * @param clipStyler - The ClipStylerModule instance
+   */
+  public setClipStylerModule(clipStyler: ClipStylerModule): void {
+    this.clipStyler = clipStyler;
   }
 
   /**
@@ -153,6 +206,9 @@ export class ClipperModule {
       const normal = new THREE.Vector3(1, 0, 0);
       this.clipper.createFromNormalAndCoplanarPoint(this.world, normal, center);
       
+      // Disable raycast on plane helpers to allow selecting objects behind them
+      this.disableClippingPlaneRaycast();
+      
       console.log('✂️ X-axis clipping plane created');
     } catch (error) {
       console.error('Failed to create X-axis plane:', error);
@@ -188,6 +244,9 @@ export class ClipperModule {
       const normal = new THREE.Vector3(0, 0, 1);
       this.clipper.createFromNormalAndCoplanarPoint(this.world, normal, center);
       
+      // Disable raycast on plane helpers to allow selecting objects behind them
+      this.disableClippingPlaneRaycast();
+      
       console.log('✂️ Y-axis clipping plane created (horizontal section)');
     } catch (error) {
       console.error('Failed to create Y-axis plane:', error);
@@ -222,6 +281,9 @@ export class ClipperModule {
       // Create plane perpendicular to Y axis (vertical cut - front view section)
       const normal = new THREE.Vector3(0, 1, 0);
       this.clipper.createFromNormalAndCoplanarPoint(this.world, normal, center);
+      
+      // Disable raycast on plane helpers to allow selecting objects behind them
+      this.disableClippingPlaneRaycast();
       
       console.log('✂️ Z-axis clipping plane created (vertical section)');
     } catch (error) {
@@ -284,6 +346,9 @@ export class ClipperModule {
           data.point
         );
       }
+
+      // Disable raycast on recreated plane helpers
+      this.disableClippingPlaneRaycast();
 
       console.log('🔄 Clipping planes flipped');
     } catch (error) {

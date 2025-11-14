@@ -128,6 +128,49 @@ export class PropertiesPanelModule {
 
   /**
    * Casts ray for mouse picking using OBC's model raycast
+   * 
+   * IMPORTANT CONCEPTS:
+   * ===================
+   * 
+   * 1. RAYCASTING: Shoots an invisible ray from camera through mouse position
+   *    - The ray continues until it hits 3D geometry
+   *    - Returns information about what was hit (element ID, distance, point)
+   *    - STOPS at first solid surface (can't pass through walls/roofs)
+   * 
+   * 2. GPU vs CPU CLIPPING:
+   *    - GPU Clipping (WebGLRenderer.clippingPlanes): Affects VISUAL rendering only
+   *      * Makes geometry invisible on screen
+   *      * Geometry still exists in memory
+   *    - CPU Raycasting: Works on FULL geometry in memory
+   *      * Doesn't know about GPU clipping
+   *      * Can hit "hidden" geometry that's visually clipped
+   * 
+   * 3. OBC FRAGMENT RAYCASTING:
+   *    - FragmentsModel.raycast(): Returns FIRST hit (closest intersection)
+   *    - FragmentsModel.raycastAll(): Should return ALL hits, but in practice
+   *      only returns first hit per unique element (not all geometric hits)
+   *    - Works in Web Worker thread for performance
+   *    - Uses optimized Fragment geometry (not raw THREE.js meshes)
+   * 
+   * 4. THE PROBLEM WE'RE SOLVING:
+   *    - User clicks on interior element visible in section view
+   *    - Ray hits CLIPPED geometry first (wall that's visually hidden)
+   *    - OBC raycast returns that clipped element
+   *    - We need to FILTER OUT clipped hits and find first VISIBLE one
+   * 
+   * 5. OUR SOLUTION:
+   *    - Get raycast hit(s) from OBC Fragment raycasting
+   *    - Check if hit point is on VISIBLE side of clipping planes
+   *    - Filter out hits that are behind clipping planes
+   *    - Return closest VISIBLE hit
+   * 
+   * CONNECTIONS TO OTHER CODE:
+   * ==========================
+   * - ClipperModule: Creates clipping planes (affects GPU rendering)
+   * - ClipStylerModule: Creates section fill meshes (visual only)
+   * - isPointVisible(): Our helper that checks if point is clipped (CPU check)
+   * - Highlighter: Highlights selected element
+   * - showIfcProperties(): Displays properties of selected element
    */
   private async castRay(event: MouseEvent): Promise<{ modelId: string; localId: number; object: THREE.Object3D } | null> {
     if (!this.world?.renderer?.three.domElement || !this.world.camera || !this.fragmentsManager) {
@@ -140,42 +183,213 @@ export class PropertiesPanelModule {
     console.log(`🎯 Raycasting with mouse position:`, { x: event.clientX, y: event.clientY });
     console.log(`📦 Available models:`, Array.from(this.fragmentsManager.list.keys()));
 
-    // Collect all intersections from all models
-    const allIntersections: Array<{ modelId: string; localId: number; object: THREE.Object3D; distance: number }> = [];
+    // STEP 1: Get active clipping planes for filtering
+    // These are GPU clipping planes created by ClipperModule
+    // They make geometry invisible but don't affect raycasting
+    const clipper = this.components.get(OBC.Clipper);
+    const hasActiveClipping = clipper && clipper.list.size > 0;
+    
+    if (hasActiveClipping) {
+      console.log(`✂️ Active clipping planes detected: ${clipper.list.size}`);
+      console.log(`   Will filter results to only return visible intersections`);
+    }
 
-    // Try raycasting on each fragment model
+    // STEP 2: Collect all intersections from all models
+    // We'll store: modelId, localId (IFC element ID), object, distance, point
+    const allIntersections: Array<{ modelId: string; localId: number; object: THREE.Object3D; distance: number; point?: THREE.Vector3 }> = [];
+
+    // STEP 3: Try raycasting on each Fragment model
+    // Typically there's one model per loaded IFC file
     for (const [modelId, model] of this.fragmentsManager.list) {
       try {
         console.log(`🔍 Trying raycast on model: ${modelId}`);
         
-        const result = await (model as any).raycast({
-          camera: this.world.camera.three,
-          mouse: mouse,
-          dom: container,
-        });
-
-        if (result && result.localId !== undefined) {
-          console.log(`✅ Hit element in model ${modelId}:`, result);
-          allIntersections.push({
-            modelId,
-            localId: result.localId,
-            object: result.object || result,
-            distance: result.distance || Infinity,
+        // STEP 3a: Try OBC Fragment raycastAll() first (if available)
+        // 
+        // WHY raycastAll() EXISTS:
+        // - Designed to return ALL intersections along the ray path
+        // - Should help find visible geometry behind clipped surfaces
+        // 
+        // WHY raycastAll() FAILS IN OUR VERSION (3.2.2):
+        // 1. INCOMPLETE IMPLEMENTATION: The method exists but the 'returnAll' flag
+        //    wasn't properly implemented in version 3.2.2
+        // 2. RECENT FIX: GitHub commit 7012998 (4 days ago) added proper returnAll
+        //    support, but this isn't in npm release yet
+        // 3. CURRENT BEHAVIOR: raycastAll() in 3.2.2 returns only 1 result,
+        //    same as regular raycast()
+        //
+        // RELEASE STATUS:
+        // - Commit is merged to main branch ✅
+        // - All CI checks passed ✅
+        // - NPM publish is SKIPPED (waiting for release) ⏳
+        // - REVERTED to npm v3.2.2 (GitHub version needs monorepo build)
+        // - Will update when v3.2.3+ is released on npm
+        //
+        // WHAT THE FIX DOES (in latest GitHub main branch):
+        // - Passes 'returnAll: true' flag to worker thread
+        // - Worker iterates through ALL hits and returns array
+        // - Should properly return multiple intersections along ray path
+        //
+        // TESTED SCENARIOS WHERE v3.2.2 FAILS:
+        // ❌ Clicking roof from above → Only returns roof (not floors/walls below)
+        // ❌ Clicking exterior wall → Only returns wall (not interior objects)
+        // ❌ Section mode with clipped wall → Only returns the clipped wall
+        //
+        // IMPORTANT LIMITATION (even with fix):
+        // - Raycasting still can't pass THROUGH solid geometry
+        // - Clicking a roof won't reach objects below the solid roof surface
+        // - raycastAll() returns hits along ray until it hits solid surface
+        // - To select interior objects: use clipping planes to reveal them first
+        //
+        // TODO: Update to newer @thatopen/fragments version when released
+        // to get proper raycastAll() support with returnAll flag
+        //
+        let results = null;
+        if (typeof (model as any).raycastAll === 'function') {
+          console.log('   Using OBC Fragment raycastAll() - checking if returnAll works in this version...');
+          
+          // Call raycastAll with camera, mouse position, and canvas
+          results = await (model as any).raycastAll({
+            camera: this.world.camera.three,   // THREE.js camera
+            mouse: mouse,                       // Mouse position (Vector2)
+            dom: container,                     // Canvas element
           });
+          
+          // Convert to array if single result returned
+          if (results && !Array.isArray(results)) {
+            results = [results];
+          }
+          
+          console.log(`   ℹ️  raycastAll() returned ${results?.length || 0} result(s)`);
+          if (results && results.length === 1) {
+            console.log(`   ⚠️  Only 1 result - returnAll flag not working in v3.2.2`);
+            console.log(`      (Fix committed to GitHub 4 days ago, not in npm release yet)`);
+          } else if (results && results.length > 1) {
+            console.log(`   ✅  Multiple results! returnAll is working in this version`);
+          }
+          if (results && results.length > 0) {
+            results.forEach((r: any, idx: number) => {
+              console.log(`     [${idx}] localId=${r.localId}, itemId=${r.itemId}, distance=${r.distance?.toFixed(2)}`);
+              console.log(`          point: x=${r.point?.x.toFixed(2)}, y=${r.point?.y.toFixed(2)}, z=${r.point?.z.toFixed(2)}`);
+            });
+          }
+        } else if (typeof (model as any).raycast === 'function') {
+          // Fallback to regular raycast() if raycastAll() not available
+          console.log('   Using OBC Fragment raycast() (raycastAll not available)');
+          
+          const result = await (model as any).raycast({
+            camera: this.world.camera.three,
+            mouse: mouse,
+            dom: container,
+          });
+          
+          // Convert single result to array format
+          results = result ? [result] : [];
+          
+          console.log(`   ℹ️  OBC raycast() returned ${results.length} result(s)`);
+          if (results.length > 0) {
+            const r = results[0];
+            console.log(`     localId=${r.localId}, itemId=${r.itemId}, distance=${r.distance?.toFixed(2)}`);
+            console.log(`     point: x=${r.point?.x.toFixed(2)}, y=${r.point?.y.toFixed(2)}, z=${r.point?.z.toFixed(2)}`);
+          }
+        } else {
+          // STEP 3b: Fallback to THREE.js raycaster (for very old OBC versions)
+          // This shouldn't happen with OBC 3.2.2, but kept for safety
+          console.log('   Using THREE.js Raycaster (OBC raycast not available)');
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(mouse, this.world.camera.three);
+          
+          if (!model.object) {
+            console.log(`   No object found in model ${modelId}`);
+            continue;
+          }
+          
+          // Raycast against all THREE.js objects in the model tree
+          const intersects = raycaster.intersectObject(model.object, true);
+          
+          // Convert THREE.js intersections to OBC format
+          results = intersects.map(intersect => ({
+            localId: intersect.object.userData?.localId,
+            object: intersect.object,
+            distance: intersect.distance,
+            point: intersect.point,
+          })).filter(r => r.localId !== undefined);
+        }
+
+        // STEP 3c: Store all hits from this model
+        if (results && Array.isArray(results) && results.length > 0) {
+          console.log(`✅ Found ${results.length} hits in model ${modelId}`);
+          
+          // Add all results to our intersection list
+          for (const result of results) {
+            if (result && result.localId !== undefined) {
+              console.log(`   Hit: localId=${result.localId}, distance=${result.distance?.toFixed(2)}, point=`, result.point);
+              allIntersections.push({
+                modelId,
+                localId: result.localId,
+                object: result.object || result,
+                distance: result.distance || Infinity,
+                point: result.point,
+              });
+            }
+          }
+        } else {
+          console.log(`   No hits found in model ${modelId}`);
         }
       } catch (error) {
         console.warn(`⚠️ Raycast failed for model ${modelId}:`, error);
       }
     }
 
-    // If we have intersections, return the closest one
+    // STEP 4: Display summary of ALL raycast hits
     if (allIntersections.length > 0) {
+      console.log('\n📊 ALL RAYCAST HITS (sorted by distance):');
+      console.table(allIntersections.map((hit, index) => ({
+        '#': index + 1,
+        'localId': hit.localId,
+        'distance': hit.distance.toFixed(2),
+        'point.x': hit.point?.x.toFixed(2),
+        'point.y': hit.point?.y.toFixed(2),
+        'point.z': hit.point?.z.toFixed(2),
+      })));
+    }
+
+    // STEP 5: Filter out intersections on the CLIPPED side of active clipping planes
+    // This is THE KEY STEP that solves the section mode selection problem!
+    // - GPU clipping planes hide geometry visually
+    // - But CPU raycasting still hits that geometry
+    // - We manually check each hit point against clipping planes
+    // - Filter out hits that are on the "hidden" side
+    const visibleIntersections = allIntersections.filter(intersection => {
+      const isVisible = this.isPointVisible(intersection.point);  // Check against clipping planes
+      if (!isVisible && intersection.point) {
+        console.log(`❌ Filtered out: modelId=${intersection.modelId}, localId=${intersection.localId}, distance=${intersection.distance.toFixed(2)}`);
+        console.log(`   Point was behind clipping plane`);
+      }
+      return isVisible;
+    });
+
+    // STEP 6: Display summary of VISIBLE hits after filtering
+    if (visibleIntersections.length > 0 && visibleIntersections.length < allIntersections.length) {
+      console.log('\n✅ VISIBLE HITS (after clipping plane filter):');
+      console.table(visibleIntersections.map((hit, index) => ({
+        '#': index + 1,
+        'localId': hit.localId,
+        'distance': hit.distance.toFixed(2),
+        'point.x': hit.point?.x.toFixed(2),
+        'point.y': hit.point?.y.toFixed(2),
+        'point.z': hit.point?.z.toFixed(2),
+      })));
+    }
+
+    // If we have visible intersections, return the closest one
+    if (visibleIntersections.length > 0) {
       // Sort by distance (closest first)
-      allIntersections.sort((a, b) => a.distance - b.distance);
+      visibleIntersections.sort((a, b) => a.distance - b.distance);
       
-      const closest = allIntersections[0];
-      console.log(`🎯 Selected closest element: model=${closest.modelId}, distance=${closest.distance.toFixed(2)}`);
-      console.log(`   (${allIntersections.length} total hits found)`);
+      const closest = visibleIntersections[0];
+      console.log(`🎯 Selected closest visible element: model=${closest.modelId}, distance=${closest.distance.toFixed(2)}`);
+      console.log(`   (${visibleIntersections.length} visible hits from ${allIntersections.length} total)`);
       
       return {
         modelId: closest.modelId,
@@ -184,8 +398,105 @@ export class PropertiesPanelModule {
       };
     }
 
-    console.log('❌ No intersection found');
+    if (allIntersections.length > 0) {
+      console.log(`❌ Found ${allIntersections.length} intersections but all are on clipped side`);
+      console.log(`ℹ️  NOTE: This happens when the raycast hits clipped geometry first.`);
+      console.log(`   OBC Fragment raycasting returns the FIRST geometric hit,`);
+      console.log(`   which may be behind the clipping plane even though there's`);
+      console.log(`   visible geometry further along the ray.`);
+      console.log(`   This is a known limitation of GPU-based clipping:`);
+      console.log(`   - GPU clipping affects RENDERING only (visual clipping)`);
+      console.log(`   - CPU raycasting still sees the FULL geometry`);
+      console.log(`   - Fragment raycasting is optimized and may not return all hits`);
+    } else {
+      console.log('❌ No intersection found');
+    }
     return null;
+  }
+
+  /**
+   * Checks if a point is on the visible side of all active clipping planes
+   * @param point - The point to check (intersection point from raycast)
+   * @returns true if the point is visible (not clipped), false otherwise
+   */
+  private isPointVisible(point?: THREE.Vector3): boolean {
+    if (!point) {
+      console.log('⚠️ No point data available for visibility check');
+      return true; // If no point data, assume visible
+    }
+    
+    try {
+      // Get the clipper component
+      const clipper = this.components.get(OBC.Clipper);
+      if (!clipper || clipper.list.size === 0) {
+        // No clipping planes active, everything is visible
+        console.log('✅ No clipping planes active, point is visible');
+        return true;
+      }
+
+      console.log(`🔍 Checking point visibility: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)})`);
+      console.log(`   Active clipping planes: ${clipper.list.size}`);
+
+      // Check the point against all active clipping planes
+      let planeIndex = 0;
+      for (const [, clippingPlane] of clipper.list) {
+        planeIndex++;
+        
+        if (!clippingPlane.enabled) {
+          console.log(`   Plane ${planeIndex}: DISABLED, skipping`);
+          continue;
+        }
+        
+        const plane = clippingPlane.three;
+        if (!plane) {
+          console.log(`   Plane ${planeIndex}: No THREE.Plane data, skipping`);
+          continue;
+        }
+
+        // Calculate distance from point to plane
+        // plane.normal is the direction the "visible" side points
+        // plane.constant is the distance from origin along the normal
+        const distance = plane.distanceToPoint(point);
+        
+        // Determine which axis this plane is on
+        const absNormal = new THREE.Vector3(
+          Math.abs(plane.normal.x),
+          Math.abs(plane.normal.y),
+          Math.abs(plane.normal.z)
+        );
+        let axis = 'unknown';
+        if (absNormal.x > 0.9) axis = 'X';
+        else if (absNormal.y > 0.9) axis = 'Y';
+        else if (absNormal.z > 0.9) axis = 'Z';
+        
+        // Calculate plane position (point on the plane)
+        const planePosition = plane.normal.clone().multiplyScalar(-plane.constant);
+        
+        console.log(`   Plane ${planeIndex} (${axis}-axis):`);
+        console.log(`     Normal: (${plane.normal.x.toFixed(2)}, ${plane.normal.y.toFixed(2)}, ${plane.normal.z.toFixed(2)})`);
+        console.log(`     Position: (${planePosition.x.toFixed(2)}, ${planePosition.y.toFixed(2)}, ${planePosition.z.toFixed(2)})`);
+        console.log(`     Point: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)})`);
+        console.log(`     Distance: ${distance.toFixed(2)}`);
+        
+        // Standard THREE.js clipping logic:
+        // - Plane normal points toward the VISIBLE side
+        // - Points with distance < 0 are BEHIND the plane (clipped/removed)
+        // - Points with distance >= 0 are IN FRONT of the plane (visible/kept)
+        // Therefore: distance < 0 = clipped (reject), distance >= 0 = visible (accept)
+        if (distance < 0) {
+          console.log(`   ❌ REJECTED: Point is behind plane (distance < 0 = clipped)`);
+          return false;
+        } else {
+          console.log(`   ✅ ACCEPTED: Point is in front of plane (distance >= 0 = visible)`);
+        }
+      }
+
+      console.log(`✅ Point passed all clipping plane checks - VISIBLE`);
+      return true;
+    } catch (error) {
+      console.warn('⚠️ Error checking clipping planes:', error);
+      return true; // On error, assume visible
+    }
   }
 
   /**
