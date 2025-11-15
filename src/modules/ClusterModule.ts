@@ -269,7 +269,7 @@ class ClusterManager {
 
         // Only cluster geometry categories (skip metadata/property types)
         const geometryCategories = categories.filter((cat: string) => {
-          return cat.match(/^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING)/);
+          return cat.match(/^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|FURNISH|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|JUNCTION|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|AIRTERM|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|CONTROLLER|ACTUATOR|ALARM|LIGHT|FIXTURE|EQUIPMENT|FLOWMETER|ENERGYCONVERSION|DISTRIB|HEATER|CHILLER|BOILER|COIL|HUMIDIFIER|EVAPORATOR|CONDENSER|TANK|FILTER|TRANSFORMER|MOTOR|SWITCH|PROTECTIVEDEVICE|JUNCTION|CABLE|TRAY|RACEWAY)/);
         });
 
         console.log(`  Filtering to ${geometryCategories.length} geometry categories`);
@@ -758,6 +758,7 @@ class ClusterManager {
    */
   private getCategoryColor(category: string): number {
     const colors: { [key: string]: number } = {
+      // Architectural
       'IFCWALL': 0xcccccc,
       'IFCWALLSTANDARDCASE': 0xaaaaaa,
       'IFCSLAB': 0x888888,
@@ -773,6 +774,55 @@ class ClusterManager {
       'IFCFOOTING': 0x654321,
       'IFCRAMP': 0xff9900,
       'IFCRAMPFLIGHT': 0xff7700,
+      // MEP - HVAC (Blue tones)
+      'IFCDUCTFITTING': 0x4169e1,
+      'IFCDUCTSEGMENT': 0x6495ed,
+      'IFCDUCT': 0x4682b4,
+      'IFCAIRTERM': 0x87ceeb,
+      'IFCAIRTERMINAL': 0x87ceeb,
+      'IFCDAMPER': 0x5f9ea0,
+      'IFCFAN': 0x00ced1,
+      'IFCCOIL': 0x4169e1,
+      'IFCCHILLER': 0x1e90ff,
+      'IFCBOILER': 0xff4500,
+      'IFCHEATER': 0xff6347,
+      // MEP - Piping (Green/Cyan tones)
+      'IFCPIPEFITTING': 0x20b2aa,
+      'IFCPIPESEGMENT': 0x3cb371,
+      'IFCPIPE': 0x2e8b57,
+      'IFCVALVE': 0x00fa9a,
+      'IFCPUMP': 0x40e0d0,
+      'IFCFLOWMETER': 0x48d1cc,
+      'IFCFILTER': 0x00ff7f,
+      'IFCTANK': 0x5f9ea0,
+      // MEP - Electrical (Yellow/Orange tones)
+      'IFCCABLEFITTING': 0xffa500,
+      'IFCCABLESEGMENT': 0xff8c00,
+      'IFCCABLE': 0xffd700,
+      'IFCCABLECARRIERFITTING': 0xffb90f,
+      'IFCCABLECARRIERSEGMENT': 0xdaa520,
+      'IFCCABLETRAY': 0xf0e68c,
+      'IFCRACEWAY': 0xeee8aa,
+      'IFCLIGHTFIXTURE': 0xffff00,
+      'IFCLIGHT': 0xffffe0,
+      'IFCOUTLET': 0xffa500,
+      'IFCSWITCH': 0xff8c00,
+      'IFCTRANSFORMER': 0xff4500,
+      'IFCMOTOR': 0xdb7093,
+      'IFCPROTECTIVEDEVICE': 0xff6347,
+      'IFCJUNCTIONBOX': 0xcd853f,
+      // MEP - Controls (Purple/Pink tones)
+      'IFCSENSOR': 0xda70d6,
+      'IFCCONTROLLER': 0xba55d3,
+      'IFCACTUATOR': 0x9370db,
+      'IFCALARM': 0xff1493,
+      // MEP - General Equipment
+      'IFCEQUIPMENT': 0x808080,
+      'IFCFLOWFITTING': 0x696969,
+      'IFCFLOWSEGMENT': 0x778899,
+      'IFCFLOWTERMINAL': 0x708090,
+      'IFCFLOWCONTROLLER': 0x2f4f4f,
+      'IFCDISTRIBUTIONELEMENT': 0x696969,
     };
     return colors[category] || 0x808080;
   }
