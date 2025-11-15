@@ -412,18 +412,27 @@ class ClusterManager {
   private async moveToClusterPositions(): Promise<void> {
     console.log('🚚 Creating clustered views with category filtering...');
     
-    // First pass: Create all cluster geometries and update bounding boxes
+    const totalStartTime = performance.now();
+    
+    // First pass: Create all cluster geometries in parallel and update bounding boxes
+    const geometryPromises: Promise<void>[] = [];
+    
     for (const [modelId, clusters] of this.clusters) {
       const model = this.fragmentsManager.list.get(modelId);
       if (!model || !model.object) continue;
 
-      console.log(`  🎨 Creating ${clusters.length} cluster visualizations for ${modelId}...`);
+      console.log(`  🎨 Processing ${clusters.length} clusters for ${modelId} in parallel...`);
 
-      // Process each cluster to create geometry
+      // Process all clusters for this model in parallel
       for (const cluster of clusters) {
-        await this.createClusterGeometry(model, cluster);
+        geometryPromises.push(this.createClusterGeometry(model, cluster));
       }
     }
+    
+    // Wait for all geometry creation to complete
+    console.log(`  ⏳ Creating geometry for ${geometryPromises.length} clusters in parallel...`);
+    await Promise.all(geometryPromises);
+    console.log(`  ✅ All geometry created in ${(performance.now() - totalStartTime).toFixed(0)}ms`);
     
     // Second pass: Recalculate positions based on updated bounding boxes
     for (const [, clusters] of this.clusters) {
@@ -478,11 +487,30 @@ class ClusterManager {
     // Get the color for this category
     const categoryColor = this.getCategoryColor(cluster.category);
     
+    // OPTIMIZATION: Create shared material for all meshes in this cluster
+    const sharedMaterial = new THREE.MeshStandardMaterial({
+      color: categoryColor,
+      metalness: 0.1,
+      roughness: 0.8,
+      side: THREE.DoubleSide
+    });
+    
     // Determine if this is a horizontal element (slabs, roofs, footings)
     const isHorizontalElement = ['IFCSLAB', 'IFCROOF', 'IFCFOOTING', 'IFCRAMPFLIGHT'].includes(cluster.category);
     
     let totalMeshes = 0;
     let totalVertices = 0;
+      
+      // OPTIMIZATION: Batch fetch all geometries at once
+      console.log(`  📦 Fetching geometry batch for ${cluster.itemIds.length} items...`);
+      const batchStartTime = performance.now();
+      const allGeometriesData = await model.getItemsGeometry(cluster.itemIds);
+      console.log(`  ✅ Batch fetch completed in ${(performance.now() - batchStartTime).toFixed(0)}ms`);
+      
+      if (!allGeometriesData || allGeometriesData.length === 0) {
+        console.warn(`  ⚠️ No geometry data returned for ${cluster.category}`);
+        return;
+      }
       
       // First pass: collect all item geometries with their sizes
       const itemGeometries: Array<{
@@ -494,18 +522,25 @@ class ClusterManager {
       
       for (let idx = 0; idx < cluster.itemIds.length; idx++) {
         const itemId = cluster.itemIds[idx];
+        const geometryDataArray = allGeometriesData[idx];
         
         try {
-          const geometryDataArray = await model.getItemsGeometry([itemId]);
               if (!geometryDataArray || geometryDataArray.length === 0) continue;
               
               // Calculate bounding box for this item to determine its size
               let itemMin = new THREE.Vector3(Infinity, Infinity, Infinity);
               let itemMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
               
-              for (const meshDataGroup of geometryDataArray) {
-                if (!meshDataGroup || meshDataGroup.length === 0) continue;
-                for (const meshData of meshDataGroup) {
+              // Handle both array and non-array responses
+              const dataArrayToProcess = Array.isArray(geometryDataArray) ? geometryDataArray : [geometryDataArray];
+              
+              for (const meshDataGroup of dataArrayToProcess) {
+                if (!meshDataGroup) continue;
+                
+                // meshDataGroup might be an array or a single object
+                const meshDataList = Array.isArray(meshDataGroup) ? meshDataGroup : [meshDataGroup];
+                
+                for (const meshData of meshDataList) {
                   if (!meshData || !meshData.positions) continue;
                   
                   for (let i = 0; i < meshData.positions.length; i += 3) {
@@ -588,10 +623,16 @@ class ClusterManager {
         const offsetZ = rowPositions[row] + rowHeights[row] / 2 - totalDepth / 2;
         
         // Process each mesh data in the array
-        for (const meshDataGroup of itemData.meshDataArray) {
-          if (!meshDataGroup || meshDataGroup.length === 0) continue;
+        // Handle both array and non-array responses
+        const dataArrayToProcess = Array.isArray(itemData.meshDataArray) ? itemData.meshDataArray : [itemData.meshDataArray];
+        
+        for (const meshDataGroup of dataArrayToProcess) {
+          if (!meshDataGroup) continue;
           
-          for (const meshData of meshDataGroup) {
+          // meshDataGroup might be an array or a single object
+          const meshDataList = Array.isArray(meshDataGroup) ? meshDataGroup : [meshDataGroup];
+          
+          for (const meshData of meshDataList) {
             if (!meshData || !meshData.positions || !meshData.indices) continue;
             
             // Create BufferGeometry from the extracted data
@@ -654,17 +695,16 @@ class ClusterManager {
               geometry.computeVertexNormals();
             }
             
-            // Create material with category color
-            const material = new THREE.MeshStandardMaterial({
-              color: categoryColor,
-              metalness: 0.1,
-              roughness: 0.8,
-              side: THREE.DoubleSide
-            });
-            
+            // OPTIMIZATION: Use shared material instead of creating new one per mesh
             // Create mesh at grid position
-            const mesh = new THREE.Mesh(geometry, material);
+            const mesh = new THREE.Mesh(geometry, sharedMaterial);
             mesh.name = `${cluster.category}_Item_${itemData.itemId}_Mesh_${totalMeshes}`;
+            
+            // Store IFC data for selection and properties display
+            mesh.userData.isClusterMesh = true;
+            mesh.userData.modelId = cluster.modelId;
+            mesh.userData.expressID = itemData.itemId;
+            mesh.userData.category = cluster.category;
             
             clusterGroup.add(mesh);
             cluster.clonedMeshes.push(mesh);
@@ -836,6 +876,9 @@ class ClusterManager {
     // Restore original model visibility
     this.visualizer.restoreAllModels();
     
+    // Collect unique materials to dispose (since they're shared per cluster)
+    const materialsToDispose = new Set<THREE.Material>();
+    
     // Remove all cloned meshes and labels
     for (const [, clusters] of this.clusters) {
       for (const cluster of clusters) {
@@ -843,8 +886,9 @@ class ClusterManager {
         for (const mesh of cluster.clonedMeshes) {
           this.visualizer.clusterGroup.remove(mesh);
           mesh.geometry.dispose();
+          // Collect material for later disposal (shared among meshes)
           if (mesh.material instanceof THREE.Material) {
-            mesh.material.dispose();
+            materialsToDispose.add(mesh.material);
           }
         }
         cluster.clonedMeshes = [];
@@ -859,6 +903,11 @@ class ClusterManager {
           cluster.label = null;
         }
       }
+    }
+    
+    // Dispose shared materials once
+    for (const material of materialsToDispose) {
+      material.dispose();
     }
     
     console.log('✅ Original model restored');
@@ -1030,6 +1079,25 @@ export class ClusterModule {
    */
   isClusteringActive(): boolean {
     return this.isActive;
+  }
+
+  /**
+   * Check if a mesh is a cluster mesh
+   */
+  isClusterMesh(mesh: THREE.Object3D): boolean {
+    return mesh.userData?.isClusterMesh === true;
+  }
+
+  /**
+   * Get cluster mesh data (modelId and expressID)
+   */
+  getClusterMeshData(mesh: THREE.Object3D): { modelId: string; expressID: number; category: string } | null {
+    if (!this.isClusterMesh(mesh)) return null;
+    return {
+      modelId: mesh.userData.modelId,
+      expressID: mesh.userData.expressID,
+      category: mesh.userData.category
+    };
   }
 
   /**

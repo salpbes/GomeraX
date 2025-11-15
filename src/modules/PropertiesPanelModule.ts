@@ -16,6 +16,7 @@ import * as OBCF from '@thatopen/components-front';
 import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
 import { IFCLoaderModule } from './IFCLoaderModule';
+import { ClusterModule } from './ClusterModule';
 
 export class PropertiesPanelModule {
   private components: OBC.Components;
@@ -30,6 +31,7 @@ export class PropertiesPanelModule {
   private modelLoadListener: any = null;
   private treeExpandTab: HTMLDivElement | null = null;
   private propsExpandTab: HTMLDivElement | null = null;
+  private clusterModule: ClusterModule | null = null;
   
   // Store storey data for dashboard
   public storeyData: { [storeyName: string]: { [category: string]: number } } = {};
@@ -37,6 +39,13 @@ export class PropertiesPanelModule {
   constructor(worldManager: WorldManager, private ifcLoader: IFCLoaderModule) {
     this.components = worldManager.getComponents();
     this.mouse = new THREE.Vector2();
+  }
+
+  /**
+   * Set the cluster module reference
+   */
+  public setClusterModule(clusterModule: ClusterModule): void {
+    this.clusterModule = clusterModule;
   }
 
   /**
@@ -105,6 +114,34 @@ export class PropertiesPanelModule {
       }
       
       console.log('🖱️ Click detected');
+      
+      // Clear previous selection first
+      if (this.selectedObject && this.selectedObject.userData?.isClusterMesh && this.selectedObject instanceof THREE.Mesh) {
+        if (this.selectedObject.userData.originalMaterial) {
+          this.selectedObject.material = this.selectedObject.userData.originalMaterial;
+        }
+      }
+      
+      // First check if we clicked on a cluster mesh
+      if (this.clusterModule && this.clusterModule.isClusteringActive()) {
+        const clusterMeshHit = await this.checkClusterMeshClick(event);
+        if (clusterMeshHit) {
+          console.log('✅ Cluster mesh hit found:', clusterMeshHit);
+          const { modelId, expressID, mesh, category } = clusterMeshHit;
+          
+          this.selectedObject = mesh;
+          
+          // Get and display IFC properties for the cluster item
+          console.log(`🏗️ Getting IFC data for clustered item: model=${modelId}, expressID=${expressID}, category=${category}`);
+          await this.showIfcProperties(modelId, expressID, mesh);
+          
+          // Highlight the object
+          this.highlightObject(mesh, modelId, expressID);
+          return;
+        }
+      }
+      
+      // Otherwise, use normal IFC raycasting
       const intersection = await this.castRay(event);
       
       if (intersection) {
@@ -124,6 +161,61 @@ export class PropertiesPanelModule {
         this.clearSelection();
       }
     });
+  }
+
+  /**
+   * Check if click intersects with a cluster mesh using THREE.js raycasting
+   */
+  private async checkClusterMeshClick(event: MouseEvent): Promise<{ modelId: string; expressID: number; mesh: THREE.Mesh; category: string } | null> {
+    if (!this.world?.renderer?.three.domElement || !this.world.camera) {
+      return null;
+    }
+
+    const container = this.world.renderer.three.domElement;
+    const rect = container.getBoundingClientRect();
+    
+    // Convert mouse position to normalized device coordinates (-1 to +1)
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // Create raycaster
+    const raycaster = new THREE.Raycaster();
+    const camera = this.world.camera.three;
+    raycaster.setFromCamera(mouse, camera);
+
+    // Get all cluster meshes from the scene
+    const scene = this.world.scene.three;
+    const allMeshes: THREE.Mesh[] = [];
+    
+    scene.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.userData?.isClusterMesh) {
+        allMeshes.push(object);
+      }
+    });
+
+    if (allMeshes.length === 0) {
+      return null;
+    }
+
+    // Raycast against cluster meshes
+    const intersects = raycaster.intersectObjects(allMeshes, false);
+    
+    if (intersects.length > 0) {
+      const mesh = intersects[0].object as THREE.Mesh;
+      const meshData = this.clusterModule?.getClusterMeshData(mesh);
+      
+      if (meshData) {
+        return {
+          modelId: meshData.modelId,
+          expressID: meshData.expressID,
+          mesh: mesh,
+          category: meshData.category
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -508,6 +600,13 @@ export class PropertiesPanelModule {
     try {
       this.highlighter.clear('select');
       
+      // Check if this is a cluster mesh - highlight it directly
+      if (object.userData?.isClusterMesh && object instanceof THREE.Mesh) {
+        console.log(`🎨 Highlighting cluster mesh directly`);
+        this.highlightClusterMesh(object);
+        return;
+      }
+      
       // If modelId and localId are provided directly, use them
       if (modelId && localId !== undefined) {
         console.log(`🎨 Highlighting: modelId=${modelId}, localId=${localId}`);
@@ -526,6 +625,28 @@ export class PropertiesPanelModule {
     } catch (error) {
       console.warn('Could not highlight:', error);
     }
+  }
+
+  /**
+   * Highlight a cluster mesh by changing its material
+   */
+  private highlightClusterMesh(mesh: THREE.Mesh): void {
+    // Store original material if not already stored
+    if (!mesh.userData.originalMaterial) {
+      mesh.userData.originalMaterial = mesh.material;
+    }
+    
+    // Create highlighted material
+    const highlightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb0e322, // Green highlight color
+      metalness: 0.1,
+      roughness: 0.6,
+      side: THREE.DoubleSide,
+      emissive: 0xb0e322,
+      emissiveIntensity: 0.3
+    });
+    
+    mesh.material = highlightMaterial;
   }
 
   /**
@@ -916,6 +1037,13 @@ export class PropertiesPanelModule {
    * Clears selection
    */
   private clearSelection(): void {
+    // Restore original material for cluster mesh if it was highlighted
+    if (this.selectedObject && this.selectedObject.userData?.isClusterMesh && this.selectedObject instanceof THREE.Mesh) {
+      if (this.selectedObject.userData.originalMaterial) {
+        this.selectedObject.material = this.selectedObject.userData.originalMaterial;
+      }
+    }
+    
     this.selectedObject = null;
     if (this.highlighter) {
       this.highlighter.clear('select');

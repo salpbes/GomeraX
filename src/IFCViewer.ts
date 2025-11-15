@@ -175,9 +175,12 @@ export class IFCViewer {
       this.cluster = new ClusterModule(this.worldManager);
       await this.cluster.initialize();
 
-      // Pass cluster module to UI manager
+      // Pass cluster module to UI manager and properties panel
       if (this.uiManager) {
         this.uiManager.setClusterModule(this.cluster);
+      }
+      if (this.propertiesPanel) {
+        this.propertiesPanel.setClusterModule(this.cluster);
       }
 
       // Setup callback to update collision meshes when models are loaded
