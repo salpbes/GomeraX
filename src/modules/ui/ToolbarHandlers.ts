@@ -8,6 +8,7 @@ import { ModelTransformModule } from '../ModelTransformModule';
 import { MeasurementModule, MeasurementMode } from '../MeasurementModule';
 import { FloorPlanModule } from '../FloorPlanModule';
 import { MinimapModule } from '../MinimapModule';
+import { ClusterModule } from '../ClusterModule';
 import { PropertiesPanelModule } from '../PropertiesPanelModule';
 import { NotificationHelper } from './NotificationHelper';
 import { ModelDashboard } from './ModelDashboard';
@@ -20,6 +21,7 @@ export class ToolbarHandlers {
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
   private minimap: MinimapModule | null = null;
+  private cluster: ClusterModule | null = null;
   private propertiesPanel: PropertiesPanelModule | null = null;
   private showLoadingCallback: () => void;
   private hideLoadingCallback: () => void;
@@ -67,6 +69,13 @@ export class ToolbarHandlers {
    */
   setMinimapModule(minimap: MinimapModule): void {
     this.minimap = minimap;
+  }
+
+  /**
+   * Sets the cluster module (can be set after construction)
+   */
+  setClusterModule(cluster: ClusterModule): void {
+    this.cluster = cluster;
   }
 
   /**
@@ -609,5 +618,48 @@ export class ToolbarHandlers {
     this.measurement.setMode(MeasurementMode.DISABLED);
     NotificationHelper.close();
     console.log('✅ Measurement mode canceled');
+  }
+
+  /**
+   * Toggles IFC element clustering view
+   */
+  async handleToggleCluster(): Promise<void> {
+    if (!this.cluster) {
+      console.warn('⚠️ Cluster module not initialized');
+      alert('Cluster module is not available');
+      return;
+    }
+
+    try {
+      this.showLoadingCallback();
+      
+      await this.cluster.toggleClusters();
+      
+      const isActive = this.cluster.isClusteringActive();
+      
+      // Update button appearance
+      const btn = document.getElementById('toggleClusterBtn');
+      if (btn) {
+        const label = btn.querySelector('.label');
+        if (label) {
+          label.textContent = isActive ? 'Exit Cluster' : 'Cluster View';
+        }
+        
+        // Add/remove active class for visual feedback
+        if (isActive) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      }
+
+      console.log(`✅ Cluster view ${isActive ? 'enabled' : 'disabled'}`);
+      
+    } catch (error) {
+      console.error('❌ Error toggling cluster:', error);
+      alert(`Error toggling cluster view: ${error}`);
+    } finally {
+      this.hideLoadingCallback();
+    }
   }
 }

@@ -8,6 +8,7 @@ import { ModelTransformModule } from "./ModelTransformModule";
 import { MeasurementModule } from "./MeasurementModule";
 import { FloorPlanModule } from "./FloorPlanModule";
 import { MinimapModule } from "./MinimapModule";
+import { ClusterModule } from "./ClusterModule";
 import { getToolbarStyles, getLoadingIndicatorStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
 import { createToolbarHTML, createLoadingIndicatorHTML } from "./ui/ToolbarBuilder";
 import { ToolbarHandlers } from "./ui/ToolbarHandlers";
@@ -25,6 +26,7 @@ export class UIManager {
   private viewer: any; // Reference to IFCViewer for accessing all modules
   private floorPlanModule: FloorPlanModule | null = null;
   private minimapModule: MinimapModule | null = null;
+  private clusterModule: ClusterModule | null = null;
 
   constructor(
     worldManager: WorldManager,
@@ -109,6 +111,15 @@ export class UIManager {
     this.minimapModule = minimap;
     this.toolbarHandlers.setMinimapModule(minimap);
     console.log('✅ Minimap module set in UI');
+  }
+
+  /**
+   * Sets the cluster module for toolbar handlers
+   */
+  public setClusterModule(cluster: ClusterModule): void {
+    this.clusterModule = cluster;
+    this.toolbarHandlers.setClusterModule(cluster);
+    console.log('✅ Cluster module set in UI');
   }
 
   /**
@@ -417,6 +428,9 @@ export class UIManager {
         break;
       case 'toggleMinimap':
         this.handleToggleMinimap();
+        break;
+      case 'toggleCluster':
+        this.toolbarHandlers.handleToggleCluster();
         break;
       case 'cancelWalkMode':
         this.handleCancelWalkMode();

@@ -25,6 +25,7 @@ import { FirstPersonControlsModule } from './modules/FirstPersonControlsModule';
 import { MeasurementModule } from './modules/MeasurementModule';
 import { FloorPlanModule } from './modules/FloorPlanModule';
 import { MinimapModule } from './modules/MinimapModule';
+import { ClusterModule } from './modules/ClusterModule';
 import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
 import * as OBC from '@thatopen/components';
 
@@ -43,6 +44,7 @@ export class IFCViewer {
   private measurement: MeasurementModule | null = null;
   private floorPlan: FloorPlanModule | null = null;
   private minimap: MinimapModule | null = null;
+  private cluster: ClusterModule | null = null;
   private adaptiveQuality: AdaptiveQualityController | null = null;
 
   constructor() {
@@ -166,6 +168,16 @@ export class IFCViewer {
       // Pass minimap module to UI manager
       if (this.uiManager) {
         this.uiManager.setMinimapModule(this.minimap);
+      }
+
+      // Step 4.11: Initialize cluster module
+      console.log('🔷 Initializing cluster module...');
+      this.cluster = new ClusterModule(this.worldManager);
+      await this.cluster.initialize();
+
+      // Pass cluster module to UI manager
+      if (this.uiManager) {
+        this.uiManager.setClusterModule(this.cluster);
       }
 
       // Setup callback to update collision meshes when models are loaded

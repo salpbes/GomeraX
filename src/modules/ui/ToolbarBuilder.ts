@@ -69,6 +69,10 @@ export function createToolbarHTML(): string {
             <span class="icon"><i class="fas fa-times-circle"></i></span>
             <span class="label">Close Floor Plan</span>
           </button>
+          <button class="submenu-btn" data-action="toggleCluster" title="IFC Element Clustering" id="toggleClusterBtn">
+            <span class="icon"><i class="fas fa-object-group"></i></span>
+            <span class="label">Cluster View</span>
+          </button>
         </div>
       </div>
       
