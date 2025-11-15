@@ -771,14 +771,123 @@ export function getLoadingIndicatorStyles(): string {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(5px);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
     z-index: 9999;
     justify-content: center;
     align-items: center;
     color: white;
-    font-size: 18px;
-    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  `;
+}
+
+/* Loading screen component styles */
+export function getLoadingScreenStyles(): string {
+  return `
+    .loading-content {
+      text-align: center;
+      width: 500px;
+      max-width: 90vw;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    .loading-spinner-container {
+      margin-bottom: 24px;
+    }
+    
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top: 4px solid #4A90E2;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .loading-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: white;
+    }
+    
+    .loading-subtitle {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 24px;
+    }
+    
+    .loading-progress {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto 24px auto;
+    }
+    
+    .progress-bar {
+      position: relative;
+      width: 420px;
+      max-width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    
+    .progress-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #4A90E2, #63B3ED);
+      border-radius: 4px;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      will-change: transform;
+      width: 100%;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .progress-text {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .loading-tip {
+      font-size: 14px;
+      color: #FFD700;
+      padding: 12px 16px;
+      background: rgba(255, 215, 0, 0.1);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      border-left: 3px solid #FFD700;
+      text-align: left;
+    }
+    
+    .loading-joke {
+      font-size: 13px;
+      color: #63B3ED;
+      padding: 12px 16px;
+      background: rgba(99, 179, 237, 0.1);
+      border-radius: 8px;
+      margin-bottom: 24px;
+      border-left: 3px solid #63B3ED;
+      text-align: left;
+    }
   `;
 }
 

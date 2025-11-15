@@ -9,7 +9,7 @@ import { MeasurementModule } from "./MeasurementModule";
 import { FloorPlanModule } from "./FloorPlanModule";
 import { MinimapModule } from "./MinimapModule";
 import { ClusterModule } from "./ClusterModule";
-import { getToolbarStyles, getLoadingIndicatorStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
+import { getToolbarStyles, getLoadingIndicatorStyles, getLoadingScreenStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
 import { createToolbarHTML, createLoadingIndicatorHTML } from "./ui/ToolbarBuilder";
 import { ToolbarHandlers } from "./ui/ToolbarHandlers";
 
@@ -47,6 +47,7 @@ export class UIManager {
       modelTransform,
       () => this.showLoading(),
       () => this.hideLoading(),
+      (progress, message) => this.updateLoadingProgress(progress, message),
       null,
       components,
       propertiesPanel,
@@ -1063,7 +1064,7 @@ export class UIManager {
    */
   private addToolbarStyles(): void {
     const style = document.createElement('style');
-    style.textContent = getToolbarStyles() + getPropertiesPanelStyles();
+    style.textContent = getToolbarStyles() + getPropertiesPanelStyles() + getLoadingScreenStyles();
     document.head.appendChild(style);
   }
 
@@ -1081,10 +1082,118 @@ export class UIManager {
   /**
    * Shows the loading indicator
    */
-  private showLoading(): void {
-    const indicator = document.getElementById('loadingIndicator');
-    if (indicator) {
-      indicator.style.display = 'flex';
+  private showLoading(): Promise<void> {
+    return new Promise((resolve) => {
+      const indicator = document.getElementById('loadingIndicator');
+      if (indicator) {
+        indicator.style.display = 'flex';
+        
+        // Force browser to complete layout before updating progress
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Reset progress after layout is complete
+            this.updateLoadingProgress(0, 'Initializing...');
+            
+            // Start rotating tips and jokes
+            this.startLoadingRotation();
+            
+            // Resolve promise so file loading can start
+            resolve();
+          });
+        });
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  /**
+   * Starts rotating tips and jokes every 3 seconds
+   */
+  private loadingRotationInterval: any = null;
+  private isAnimating: boolean = false;
+  
+  private startLoadingRotation(): void {
+    // Clear any existing interval
+    if (this.loadingRotationInterval) {
+      clearInterval(this.loadingRotationInterval);
+    }
+    
+    // Wait a bit for DOM to be ready
+    setTimeout(() => {
+      const tipElement = document.getElementById('loadingTip');
+      const jokeElement = document.getElementById('loadingJoke');
+      
+      if (!tipElement || !jokeElement) {
+        return;
+      }
+      
+      // Get tips and jokes from data attributes
+      const tipsData = tipElement.getAttribute('data-tips');
+      const jokesData = jokeElement.getAttribute('data-jokes');
+      
+      const tips = JSON.parse(tipsData || '[]');
+      const jokes = JSON.parse(jokesData || '[]');
+      
+      let tipIndex = Math.floor(Math.random() * tips.length);
+      let jokeIndex = Math.floor(Math.random() * jokes.length);
+      
+      this.loadingRotationInterval = setInterval(() => {
+        const tip = document.getElementById('loadingTip');
+        const joke = document.getElementById('loadingJoke');
+        
+        // Skip if already animating or elements don't exist
+        if (!tip || !joke || this.isAnimating) {
+          return;
+        }
+        
+        this.isAnimating = true;
+        tipIndex = (tipIndex + 1) % tips.length;
+        jokeIndex = (jokeIndex + 1) % jokes.length;
+        
+        // Update content immediately without animation to prevent flickering
+        tip.textContent = tips[tipIndex];
+        joke.textContent = jokes[jokeIndex];
+        
+        // Mark animation complete
+        this.isAnimating = false;
+      }, 5000);
+    }, 100);
+  }
+
+  /**
+   * Updates loading progress with smooth animation
+   */
+  public updateLoadingProgress(progress: number, message: string): void {
+    const progressFill = document.getElementById('loadingProgress');
+    const progressText = document.getElementById('loadingProgressText');
+    
+    if (progressFill) {
+      const targetProgress = Math.min(100, Math.max(0, progress));
+      // Use transform instead of width for better performance and reliability
+      const translateValue = -100 + targetProgress;
+      progressFill.style.transform = `translateX(${translateValue}%)`;
+    }
+    
+    if (progressText) {
+      // Add more detailed progress messages
+      let detailedMessage = message;
+      if (progress < 10) {
+        detailedMessage = 'Reading IFC file...';
+      } else if (progress < 30) {
+        detailedMessage = 'Parsing IFC structure...';
+      } else if (progress < 50) {
+        detailedMessage = 'Processing geometry...';
+      } else if (progress < 70) {
+        detailedMessage = 'Building 3D meshes...';
+      } else if (progress < 90) {
+        detailedMessage = 'Applying materials...';
+      } else if (progress < 100) {
+        detailedMessage = 'Finalizing model...';
+      } else {
+        detailedMessage = 'Complete!';
+      }
+      progressText.textContent = `${detailedMessage} ${Math.round(progress)}%`;
     }
   }
 
@@ -1096,6 +1205,15 @@ export class UIManager {
     if (indicator) {
       indicator.style.display = 'none';
     }
+    
+    // Clear rotation interval
+    if (this.loadingRotationInterval) {
+      clearInterval(this.loadingRotationInterval);
+      this.loadingRotationInterval = null;
+    }
+    
+    // Reset animation flag
+    this.isAnimating = false;
   }
 
   /**

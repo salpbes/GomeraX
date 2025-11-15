@@ -283,10 +283,59 @@ export function createToolbarHTML(): string {
  * Creates the HTML for the loading indicator overlay
  */
 export function createLoadingIndicatorHTML(): string {
+  const tips = [
+    "💡 Tip: Use the View Cube to quickly orient your camera",
+    "💡 Tip: Double-click the Cluster button to toggle cluster view",
+    "💡 Tip: Use Section tool to cut through the model",
+    "💡 Tip: Right-click and drag to pan the camera",
+    "💡 Tip: Press 'W' to enable first-person navigation mode",
+    "💡 Tip: Use the Measure tool to get accurate dimensions",
+    "💡 Tip: Click on elements to view their IFC properties",
+    "💡 Tip: Use Fit View to see all loaded models at once",
+    "💡 Tip: The minimap helps you navigate large floor plans",
+    "💡 Tip: Export models as fragments for faster loading next time",
+    "💡 Tip: Multiple IFC files can be loaded and aligned automatically",
+    "💡 Tip: Use Space Visibility to toggle building spaces on/off",
+    "💡 Tip: Scroll to zoom, drag to rotate the 3D view",
+    "💡 Tip: The properties panel shows detailed IFC element data",
+    "💡 Tip: Section views can show interior details clearly"
+  ];
+  
+  const jokes = [
+    "😄 Why did the IFC file go to therapy? It had too many relationships!",
+    "😄 What's an architect's favorite music? IFC and roll!",
+    "😄 Why don't IFC files ever get lost? They always know their coordinates!",
+    "😄 How do BIM models stay in shape? They do geometric exercises!",
+    "😄 What did the wall say to the slab? 'I've got you covered!'",
+    "😄 Why was the IFC file so confident? It had great properties!",
+    "😄 What's a 3D model's favorite dessert? Layer cake!",
+    "😄 Why did the beam break up with the column? It needed more support!",
+    "😄 How do IFC elements communicate? Through their relationships!",
+    "😄 What's a BIM coordinator's favorite movie? The Matrix... of transformations!",
+    "😄 Why don't doors ever win arguments? They always get framed!",
+    "😄 What did the architect say to the broken IFC? 'Let's rebuild this relationship!'"
+  ];
+  
+  const randomTip = tips[Math.floor(Math.random() * tips.length)];
+  const randomJoke = jokes[Math.floor(Math.random() * jokes.length)];
+  
   return `
-    <div style="text-align: center;">
-      <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-      <div>Loading IFC Model...</div>
+    <div class="loading-content">
+      <div class="loading-spinner-container">
+        <div class="loading-spinner"></div>
+      </div>
+      <div class="loading-title">Loading IFC Model</div>
+      <div class="loading-subtitle">Please wait while we process your file...</div>
+      <div class="loading-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="loadingProgress"></div>
+        </div>
+        <div class="progress-text" id="loadingProgressText">Initializing...</div>
+      </div>
+      <div class="loading-tip" id="loadingTip" 
+           data-tips='${JSON.stringify(tips).replace(/'/g, "&apos;")}'>${randomTip}</div>
+      <div class="loading-joke" id="loadingJoke"
+           data-jokes='${JSON.stringify(jokes).replace(/'/g, "&apos;")}'>${randomJoke}</div>
     </div>
   `;
 }

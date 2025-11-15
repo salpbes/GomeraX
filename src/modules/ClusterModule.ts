@@ -45,6 +45,7 @@
 import * as OBC from '@thatopen/components';
 import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
+import { ModelTransformModule } from './ModelTransformModule';
 
 // ==================================================================================
 // 1. CLUSTER DATA CLASS
@@ -1029,11 +1030,19 @@ export class ClusterModule {
   private world: OBC.World;
   private clusterManager: ClusterManager | null = null;
   private isActive: boolean = false;
+  private modelTransform: ModelTransformModule | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
     this.components = worldManager.getComponents();
     this.world = worldManager.world!;
+  }
+
+  /**
+   * Set the model transform module reference
+   */
+  public setModelTransform(modelTransform: ModelTransformModule): void {
+    this.modelTransform = modelTransform;
   }
 
   /**
@@ -1059,6 +1068,12 @@ export class ClusterModule {
       await this.clusterManager.clearClusters();
       this.isActive = false;
       console.log('✅ Cluster view disabled');
+      
+      // Fit camera to view all models after exiting cluster view
+      if (this.modelTransform) {
+        console.log('📷 Fitting camera to models...');
+        await this.modelTransform.fitCameraToModels();
+      }
     } else {
       // Turn on clustering - generate and visualize
       await this.clusterManager.generateClusters();

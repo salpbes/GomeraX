@@ -182,6 +182,9 @@ export class IFCViewer {
       if (this.propertiesPanel) {
         this.propertiesPanel.setClusterModule(this.cluster);
       }
+      if (this.modelTransform) {
+        this.cluster.setModelTransform(this.modelTransform);
+      }
 
       // Setup callback to update collision meshes when models are loaded
       this.ifcLoader.setModelLoadedCallback(async () => {

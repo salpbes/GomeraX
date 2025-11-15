@@ -23,8 +23,9 @@ export class ToolbarHandlers {
   private minimap: MinimapModule | null = null;
   private cluster: ClusterModule | null = null;
   private propertiesPanel: PropertiesPanelModule | null = null;
-  private showLoadingCallback: () => void;
+  private showLoadingCallback: () => Promise<void>;
   private hideLoadingCallback: () => void;
+  private updateLoadingProgressCallback: (progress: number, message: string) => void;
   private modelDashboard: ModelDashboard;
   private components: OBC.Components;
   private uiManager: UIManager;
@@ -32,8 +33,9 @@ export class ToolbarHandlers {
   constructor(
     ifcLoader: IFCLoaderModule,
     modelTransform: ModelTransformModule,
-    showLoadingCallback: () => void,
+    showLoadingCallback: () => Promise<void>,
     hideLoadingCallback: () => void,
+    updateLoadingProgressCallback: (progress: number, message: string) => void,
     measurement?: MeasurementModule | null,
     components?: OBC.Components,
     propertiesPanel?: PropertiesPanelModule,
@@ -43,6 +45,7 @@ export class ToolbarHandlers {
     this.modelTransform = modelTransform;
     this.showLoadingCallback = showLoadingCallback;
     this.hideLoadingCallback = hideLoadingCallback;
+    this.updateLoadingProgressCallback = updateLoadingProgressCallback;
     this.measurement = measurement || null;
     this.modelDashboard = new ModelDashboard();
     this.components = components!;
@@ -90,13 +93,21 @@ export class ToolbarHandlers {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
-      this.showLoadingCallback();
+      await this.showLoadingCallback();
       
       try {
         const fileExtension = file.name.split('.').pop()?.toLowerCase();
         
         if (fileExtension === 'ifc') {
-          await this.ifcLoader.loadIFC(file);
+          // Show initial loading progress (0-50% is file loading phase with no callback)
+          this.updateLoadingProgressCallback(0, 'Reading IFC file...');
+          
+          await this.ifcLoader.loadIFC(file, (progress) => {
+            // Map processData progress (0→1) to second half (50→100)
+            // The first half (0-50%) is file loading which doesn't report progress
+            const adjustedProgress = 50 + (progress * 50);
+            this.updateLoadingProgressCallback(adjustedProgress, `Processing IFC... ${Math.round(adjustedProgress)}%`);
+          });
           console.log(`✅ Loaded IFC: ${file.name}`);
         } else if (fileExtension === 'frag') {
           await this.ifcLoader.loadFragments(file);
