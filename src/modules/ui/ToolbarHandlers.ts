@@ -9,6 +9,7 @@ import { MeasurementModule, MeasurementMode } from '../MeasurementModule';
 import { FloorPlanModule } from '../FloorPlanModule';
 import { MinimapModule } from '../MinimapModule';
 import { ClusterModule } from '../ClusterModule';
+import { ColorSplashModule } from '../ColorSplashModule';
 import { PropertiesPanelModule } from '../PropertiesPanelModule';
 import { NotificationHelper } from './NotificationHelper';
 import { ModelDashboard } from './ModelDashboard';
@@ -22,6 +23,7 @@ export class ToolbarHandlers {
   private floorPlan: FloorPlanModule | null = null;
   private minimap: MinimapModule | null = null;
   private cluster: ClusterModule | null = null;
+  private colorSplash: ColorSplashModule | null = null;
   private propertiesPanel: PropertiesPanelModule | null = null;
   private showLoadingCallback: () => Promise<void>;
   private hideLoadingCallback: () => void;
@@ -79,6 +81,13 @@ export class ToolbarHandlers {
    */
   setClusterModule(cluster: ClusterModule): void {
     this.cluster = cluster;
+  }
+
+  /**
+   * Sets the color splash module (can be set after construction)
+   */
+  setColorSplashModule(colorSplash: ColorSplashModule): void {
+    this.colorSplash = colorSplash;
   }
 
   /**
@@ -671,6 +680,442 @@ export class ToolbarHandlers {
       alert(`Error toggling cluster view: ${error}`);
     } finally {
       this.hideLoadingCallback();
+    }
+  }
+
+  /**
+   * Handles color splash toggle
+   */
+  async handleToggleColorSplash(): Promise<void> {
+    if (!this.colorSplash) {
+      console.warn('⚠️ Color splash module not initialized');
+      return;
+    }
+
+    try {
+      this.showLoadingCallback();
+      
+      await this.colorSplash.toggleColorSplash();
+      
+      const isActive = this.colorSplash.isColorSplashActive();
+      
+      // Update button appearance
+      const btn = document.getElementById('toggleColorSplashBtn');
+      if (btn) {
+        const label = btn.querySelector('.label');
+        if (label) {
+          label.textContent = isActive ? 'Reset Colors' : 'Color by Type';
+        }
+        
+        // Add/remove active class for visual feedback
+        if (isActive) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+          // Hide color picker panel when disabled
+          this.hideColorPickerPanel();
+        }
+      }
+
+      console.log(`✅ Color splash ${isActive ? 'enabled' : 'disabled'}`);
+      
+    } catch (error) {
+      console.error('❌ Error toggling color splash:', error);
+      alert(`Error toggling color splash: ${error}`);
+    } finally {
+      this.hideLoadingCallback();
+    }
+  }
+
+  /**
+   * Show color picker panel for category colors
+   */
+  public showColorPickerPanel(
+    categories: Array<{ name: string; color: string; selectionName: string; count: number }>,
+    modelGroups: Map<string, Array<{ name: string; color: string; selectionName: string; count: number }>>
+  ): void {
+    // Remove existing panel if any
+    this.hideColorPickerPanel();
+
+    const panel = document.createElement('div');
+    panel.id = 'colorPickerPanel';
+    panel.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: rgba(30, 30, 30, 0.95);
+      border: 1px solid #555;
+      border-radius: 8px;
+      padding: 15px;
+      max-height: 600px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      min-width: 300px;
+      cursor: move;
+      scrollbar-width: thin;
+      scrollbar-color: #555 rgba(0, 0, 0, 0.3);
+    `;
+
+    // Add webkit scrollbar styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #colorPickerPanel::-webkit-scrollbar {
+        width: 8px;
+      }
+      #colorPickerPanel::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 4px;
+      }
+      #colorPickerPanel::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 4px;
+        transition: background 0.2s;
+      }
+      #colorPickerPanel::-webkit-scrollbar-thumb:hover {
+        background: #777;
+      }
+    `;
+    document.head.appendChild(style);
+    (panel as any)._styleElement = style;
+
+    const title = document.createElement('div');
+    title.textContent = 'Category Colors';
+    title.style.cssText = `
+      font-size: 14px;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #555;
+      cursor: move;
+      user-select: none;
+    `;
+    panel.appendChild(title);
+
+    // Add sorting buttons
+    const sortContainer = document.createElement('div');
+    sortContainer.style.cssText = `
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #444;
+    `;
+
+    const createSortButton = (text: string, icon: string) => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        flex: 1;
+        padding: 4px 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid #555;
+        border-radius: 4px;
+        color: #ccc;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      `;
+      btn.innerHTML = `<span style="font-size: 12px;">${icon}</span> ${text}`;
+      btn.addEventListener('mouseenter', () => {
+        btn.style.background = 'rgba(255, 255, 255, 0.15)';
+        btn.style.borderColor = '#777';
+        btn.style.color = '#fff';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.background = 'rgba(255, 255, 255, 0.08)';
+        btn.style.borderColor = '#555';
+        btn.style.color = '#ccc';
+      });
+      return btn;
+    };
+
+    const sortAlphaBtn = createSortButton('A-Z', '🔤');
+    const sortCountBtn = createSortButton('Count', '🔢');
+
+    let currentSort: 'alpha' | 'count' | 'none' = 'none';
+
+    sortAlphaBtn.addEventListener('click', () => {
+      currentSort = 'alpha';
+      rebuildPanel('alpha');
+    });
+
+    sortCountBtn.addEventListener('click', () => {
+      currentSort = 'count';
+      rebuildPanel('count');
+    });
+
+    sortContainer.appendChild(sortAlphaBtn);
+    sortContainer.appendChild(sortCountBtn);
+    panel.appendChild(sortContainer);
+
+    const rebuildPanel = (sortType: 'alpha' | 'count') => {
+      // Remove all existing group containers
+      const existingGroups = panel.querySelectorAll('.model-group-container');
+      existingGroups.forEach(g => g.remove());
+
+      // Rebuild groups with sorted categories
+      buildModelGroups(sortType);
+    };
+
+    const buildModelGroups = (sortType: 'alpha' | 'count' | 'none' = 'none') => {
+      for (const [modelId, modelCategories] of modelGroups) {
+        // Sort categories based on sortType
+        let sortedCategories = [...modelCategories];
+        if (sortType === 'alpha') {
+          sortedCategories.sort((a, b) => a.name.localeCompare(b.name));
+        } else if (sortType === 'count') {
+          sortedCategories.sort((a, b) => b.count - a.count);
+        }
+
+        // Create model group container
+        const groupContainer = document.createElement('div');
+        groupContainer.className = 'model-group-container';
+        groupContainer.style.cssText = `
+          margin-bottom: 8px;
+          border: 1px solid #444;
+          border-radius: 4px;
+          overflow: hidden;
+        `;
+
+        // Create model header (expandable)
+        const modelHeader = document.createElement('div');
+        modelHeader.style.cssText = `
+          padding: 8px 10px;
+          background: rgba(255, 255, 255, 0.08);
+          cursor: pointer;
+          user-select: none;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          transition: background 0.2s;
+        `;
+
+        const modelTitle = document.createElement('div');
+        modelTitle.style.cssText = `
+          font-size: 12px;
+          font-weight: 600;
+          color: #fff;
+        `;
+        modelTitle.textContent = modelId;
+
+        const expandIcon = document.createElement('span');
+        expandIcon.textContent = '▼';
+        expandIcon.style.cssText = `
+          font-size: 10px;
+          color: #999;
+          transition: transform 0.2s;
+        `;
+
+        modelHeader.appendChild(modelTitle);
+        modelHeader.appendChild(expandIcon);
+
+        // Create categories container
+        const categoriesContainer = document.createElement('div');
+        categoriesContainer.style.cssText = `
+          max-height: 500px;
+          overflow: hidden;
+          transition: max-height 0.3s ease;
+          background: rgba(0, 0, 0, 0.2);
+        `;
+
+        // Add color pickers for each category in this model
+        sortedCategories.forEach(cat => {
+          const row = document.createElement('div');
+          row.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: default;
+          `;
+
+          const label = document.createElement('div');
+          label.style.cssText = `
+            font-size: 11px;
+            color: #ccc;
+            flex: 1;
+            margin-right: 10px;
+            user-select: none;
+          `;
+          label.textContent = `${cat.name.replace('IFC', '')} (${cat.count})`;
+
+          // Create a wrapper for the circular color picker
+          const colorWrapper = document.createElement('div');
+          colorWrapper.style.cssText = `
+            position: relative;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 2px solid #666;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.1s;
+            flex-shrink: 0;
+          `;
+
+          const colorInput = document.createElement('input');
+          colorInput.type = 'color';
+          colorInput.value = cat.color;
+          colorInput.style.cssText = `
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            width: 28px;
+            height: 28px;
+            border: none;
+            cursor: pointer;
+            opacity: 1;
+          `;
+
+          colorInput.addEventListener('change', async (e) => {
+            const newColor = (e.target as HTMLInputElement).value;
+            try {
+              if (this.colorSplash) {
+                await this.colorSplash.updateCategoryColor(cat.selectionName, newColor);
+              }
+            } catch (error) {
+              console.error('Error updating color:', error);
+            }
+          });
+
+          // Hover effects
+          colorWrapper.addEventListener('mouseenter', () => {
+            colorWrapper.style.borderColor = '#999';
+            colorWrapper.style.transform = 'scale(1.2)';
+          });
+          colorWrapper.addEventListener('mouseleave', () => {
+            colorWrapper.style.borderColor = '#666';
+            colorWrapper.style.transform = 'scale(1)';
+          });
+
+          colorWrapper.appendChild(colorInput);
+          row.appendChild(label);
+          row.appendChild(colorWrapper);
+          categoriesContainer.appendChild(row);
+        });
+
+        // Toggle expand/collapse
+        let isExpanded = true;
+        modelHeader.addEventListener('click', () => {
+          isExpanded = !isExpanded;
+          if (isExpanded) {
+            categoriesContainer.style.maxHeight = '500px';
+            expandIcon.style.transform = 'rotate(0deg)';
+          } else {
+            categoriesContainer.style.maxHeight = '0';
+            expandIcon.style.transform = 'rotate(-90deg)';
+          }
+        });
+
+        // Hover effect on header
+        modelHeader.addEventListener('mouseenter', () => {
+          modelHeader.style.background = 'rgba(255, 255, 255, 0.12)';
+        });
+        modelHeader.addEventListener('mouseleave', () => {
+          modelHeader.style.background = 'rgba(255, 255, 255, 0.08)';
+        });
+
+        groupContainer.appendChild(modelHeader);
+        groupContainer.appendChild(categoriesContainer);
+        panel.appendChild(groupContainer);
+      }
+    };
+
+    // Initial build with no sorting
+    buildModelGroups('none');
+
+    // Make panel draggable
+    let isDragging = false;
+    let currentX = 0;
+    let currentY = 0;
+    let initialX = 0;
+    let initialY = 0;
+
+    const dragStart = (e: MouseEvent) => {
+      if (e.target === title || e.target === panel) {
+        initialX = e.clientX - currentX;
+        initialY = e.clientY - currentY;
+        isDragging = true;
+        panel.style.cursor = 'grabbing';
+      }
+    };
+
+    const drag = (e: MouseEvent) => {
+      if (isDragging) {
+        e.preventDefault();
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
+        panel.style.left = currentX + 'px';
+        panel.style.top = currentY + 'px';
+        panel.style.right = 'auto';
+      }
+    };
+
+    const dragEnd = () => {
+      isDragging = false;
+      panel.style.cursor = 'move';
+    };
+
+    title.addEventListener('mousedown', dragStart);
+    panel.addEventListener('mousedown', dragStart);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', dragEnd);
+
+    // Store cleanup function
+    (panel as any)._cleanup = () => {
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', dragEnd);
+    };
+
+    // Add close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = `
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: transparent;
+      border: none;
+      color: #999;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+    `;
+    closeBtn.addEventListener('click', () => this.hideColorPickerPanel());
+    closeBtn.addEventListener('mouseenter', () => closeBtn.style.color = '#fff');
+    closeBtn.addEventListener('mouseleave', () => closeBtn.style.color = '#999');
+    panel.appendChild(closeBtn);
+
+    document.body.appendChild(panel);
+  }
+
+  /**
+   * Hide color picker panel
+   */
+  private hideColorPickerPanel(): void {
+    const panel = document.getElementById('colorPickerPanel');
+    if (panel) {
+      // Clean up event listeners
+      if ((panel as any)._cleanup) {
+        (panel as any)._cleanup();
+      }
+      // Remove associated style element
+      const styleElement = (panel as any)._styleElement;
+      if (styleElement && styleElement.parentNode) {
+        styleElement.parentNode.removeChild(styleElement);
+      }
+      panel.remove();
     }
   }
 }

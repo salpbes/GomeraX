@@ -73,6 +73,10 @@ export function createToolbarHTML(): string {
             <span class="icon"><i class="fas fa-object-group"></i></span>
             <span class="label">Cluster View</span>
           </button>
+          <button class="submenu-btn" data-action="toggleColorSplash" title="Color Elements by Type" id="toggleColorSplashBtn">
+            <span class="icon"><i class="fas fa-palette"></i></span>
+            <span class="label">Color by Type</span>
+          </button>
         </div>
       </div>
       

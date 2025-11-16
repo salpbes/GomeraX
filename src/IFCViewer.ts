@@ -26,6 +26,7 @@ import { MeasurementModule } from './modules/MeasurementModule';
 import { FloorPlanModule } from './modules/FloorPlanModule';
 import { MinimapModule } from './modules/MinimapModule';
 import { ClusterModule } from './modules/ClusterModule';
+import { ColorSplashModule } from './modules/ColorSplashModule';
 import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
 import * as OBC from '@thatopen/components';
 
@@ -45,6 +46,7 @@ export class IFCViewer {
   private floorPlan: FloorPlanModule | null = null;
   private minimap: MinimapModule | null = null;
   private cluster: ClusterModule | null = null;
+  private colorSplash: ColorSplashModule | null = null;
   private adaptiveQuality: AdaptiveQualityController | null = null;
 
   constructor() {
@@ -186,6 +188,15 @@ export class IFCViewer {
         this.cluster.setModelTransform(this.modelTransform);
       }
 
+      // Step 4.12: Initialize color splash module
+      console.log('🎨 Initializing color splash module...');
+      this.colorSplash = new ColorSplashModule(this.worldManager);
+
+      // Pass color splash module to UI manager
+      if (this.uiManager) {
+        this.uiManager.setColorSplashModule(this.colorSplash);
+      }
+
       // Setup callback to update collision meshes when models are loaded
       this.ifcLoader.setModelLoadedCallback(async () => {
         console.log('🔄 Updating collision meshes after model load...');
@@ -317,6 +328,13 @@ export class IFCViewer {
   }
 
   /**
+   * Gets the color splash module instance
+   */
+  public getColorSplash(): ColorSplashModule | null {
+    return this.colorSplash;
+  }
+
+  /**
    * Gets the adaptive quality controller instance
    */
   public getAdaptiveQuality(): AdaptiveQualityController | null {
@@ -340,6 +358,8 @@ export class IFCViewer {
     this.firstPersonControls?.dispose();
     this.measurement?.dispose();
     this.minimap?.dispose();
+    this.cluster?.dispose();
+    this.colorSplash?.dispose();
     this.ifcLoader.clearModels();
     this.worldManager.dispose();
     

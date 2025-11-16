@@ -9,6 +9,7 @@ import { MeasurementModule } from "./MeasurementModule";
 import { FloorPlanModule } from "./FloorPlanModule";
 import { MinimapModule } from "./MinimapModule";
 import { ClusterModule } from "./ClusterModule";
+import { ColorSplashModule } from "./ColorSplashModule";
 import { getToolbarStyles, getLoadingIndicatorStyles, getLoadingScreenStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
 import { createToolbarHTML, createLoadingIndicatorHTML } from "./ui/ToolbarBuilder";
 import { ToolbarHandlers } from "./ui/ToolbarHandlers";
@@ -27,6 +28,7 @@ export class UIManager {
   private floorPlanModule: FloorPlanModule | null = null;
   private minimapModule: MinimapModule | null = null;
   private clusterModule: ClusterModule | null = null;
+  private colorSplashModule: ColorSplashModule | null = null;
 
   constructor(
     worldManager: WorldManager,
@@ -121,6 +123,21 @@ export class UIManager {
     this.clusterModule = cluster;
     this.toolbarHandlers.setClusterModule(cluster);
     console.log('✅ Cluster module set in UI');
+  }
+
+  /**
+   * Sets the color splash module for toolbar handlers
+   */
+  public setColorSplashModule(colorSplash: ColorSplashModule): void {
+    this.colorSplashModule = colorSplash;
+    this.toolbarHandlers.setColorSplashModule(colorSplash);
+    
+    // Set up callback to show color picker when colors are applied
+    colorSplash.onColorsApplied = (categories, modelGroups) => {
+      this.toolbarHandlers.showColorPickerPanel(categories, modelGroups);
+    };
+    
+    console.log('✅ Color splash module set in UI');
   }
 
   /**
@@ -489,6 +506,9 @@ export class UIManager {
         break;
       case 'settings':
         this.toggleSettingsPanel();
+        break;
+      case 'toggleColorSplash':
+        this.toolbarHandlers.handleToggleColorSplash();
         break;
     }
   }
