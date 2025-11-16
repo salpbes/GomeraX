@@ -781,6 +781,29 @@ export class PropertiesPanelModule {
           <span class="property-value">${Math.floor(geometry.index.count / 3).toLocaleString()}</span>
         </div>`;
       }
+      
+      // Calculate bounding box
+      if (!geometry.boundingBox) {
+        geometry.computeBoundingBox();
+      }
+      
+      if (geometry.boundingBox) {
+        const bbox = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        
+        html += `<div class="property-row">
+          <span class="property-key">BBox Size:</span>
+          <span class="property-value">${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}</span>
+        </div>`;
+        
+        html += `<div class="property-row">
+          <span class="property-key">BBox Center:</span>
+          <span class="property-value">${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}</span>
+        </div>`;
+      }
 
       html += '</div>';
     }
@@ -792,6 +815,22 @@ export class PropertiesPanelModule {
       <span class="property-key">Position:</span>
       <span class="property-value">${mesh.position.x.toFixed(2)}, ${mesh.position.y.toFixed(2)}, ${mesh.position.z.toFixed(2)}</span>
     </div>`;
+    
+    // Rotation (in degrees)
+    const rotX = THREE.MathUtils.radToDeg(mesh.rotation.x);
+    const rotY = THREE.MathUtils.radToDeg(mesh.rotation.y);
+    const rotZ = THREE.MathUtils.radToDeg(mesh.rotation.z);
+    html += `<div class="property-row">
+      <span class="property-key">Rotation (°):</span>
+      <span class="property-value">${rotX.toFixed(1)}°, ${rotY.toFixed(1)}°, ${rotZ.toFixed(1)}°</span>
+    </div>`;
+    
+    // Scale
+    html += `<div class="property-row">
+      <span class="property-key">Scale:</span>
+      <span class="property-value">${mesh.scale.x.toFixed(2)}, ${mesh.scale.y.toFixed(2)}, ${mesh.scale.z.toFixed(2)}</span>
+    </div>`;
+    
     html += '</div>';
 
     html += '</div>';
@@ -946,17 +985,54 @@ export class PropertiesPanelModule {
             geometry.computeBoundingBox();
           }
           if (geometry.boundingBox) {
+            const bbox = geometry.boundingBox;
             const size = new THREE.Vector3();
-            geometry.boundingBox.getSize(size);
+            bbox.getSize(size);
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            
             html += `<div class="property-row">
-              <span class="property-key">Size:</span>
+              <span class="property-key">BBox Size:</span>
               <span class="property-value">${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}</span>
+            </div>`;
+            
+            html += `<div class="property-row">
+              <span class="property-key">BBox Center:</span>
+              <span class="property-value">${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)}</span>
             </div>`;
           }
         } catch (e) {
           console.warn('Could not compute bounding box:', e);
         }
+        
+        html += '</div>';
       }
+      
+      // Transform info
+      html += '<div class="property-group">';
+      html += '<div class="property-group-header">📍 Transform</div>';
+      
+      html += `<div class="property-row">
+        <span class="property-key">Position:</span>
+        <span class="property-value">${object.position.x.toFixed(2)}, ${object.position.y.toFixed(2)}, ${object.position.z.toFixed(2)}</span>
+      </div>`;
+      
+      // Rotation (in degrees)
+      const rotX = THREE.MathUtils.radToDeg(object.rotation.x);
+      const rotY = THREE.MathUtils.radToDeg(object.rotation.y);
+      const rotZ = THREE.MathUtils.radToDeg(object.rotation.z);
+      html += `<div class="property-row">
+        <span class="property-key">Rotation (°):</span>
+        <span class="property-value">${rotX.toFixed(1)}°, ${rotY.toFixed(1)}°, ${rotZ.toFixed(1)}°</span>
+      </div>`;
+      
+      // Scale
+      html += `<div class="property-row">
+        <span class="property-key">Scale:</span>
+        <span class="property-value">${object.scale.x.toFixed(2)}, ${object.scale.y.toFixed(2)}, ${object.scale.z.toFixed(2)}</span>
+      </div>`;
+      
+      html += '</div>';
       
       // Material info
       if (object instanceof THREE.Mesh && object.material) {

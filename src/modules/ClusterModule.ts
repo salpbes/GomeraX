@@ -471,14 +471,10 @@ class ClusterManager {
   }
 
   /**
-   * Create geometry for a single cluster
+   * Create geometry for a single cluster using OBC Item API
+   * This preserves the IFC grouping structure (e.g., doors with frames, leafs, handles as one object)
    */
   private async createClusterGeometry(model: any, cluster: IFCCluster): Promise<void> {
-    const center = new THREE.Vector3();
-    if (cluster.boundingBox) {
-      cluster.boundingBox.getCenter(center);
-    }
-    
     console.log(`  📦 ${cluster.category}: ${cluster.itemIds.length} items`);
 
     // Create cluster group (initially at origin, will be positioned later)
@@ -499,232 +495,174 @@ class ClusterManager {
     // Determine if this is a horizontal element (slabs, roofs, footings)
     const isHorizontalElement = ['IFCSLAB', 'IFCROOF', 'IFCFOOTING', 'IFCRAMPFLIGHT'].includes(cluster.category);
     
-    let totalMeshes = 0;
-    let totalVertices = 0;
-      
-      // OPTIMIZATION: Batch fetch all geometries at once
-      console.log(`  📦 Fetching geometry batch for ${cluster.itemIds.length} items...`);
-      const batchStartTime = performance.now();
-      const allGeometriesData = await model.getItemsGeometry(cluster.itemIds);
-      console.log(`  ✅ Batch fetch completed in ${(performance.now() - batchStartTime).toFixed(0)}ms`);
-      
-      if (!allGeometriesData || allGeometriesData.length === 0) {
-        console.warn(`  ⚠️ No geometry data returned for ${cluster.category}`);
-        return;
-      }
-      
-      // First pass: collect all item geometries with their sizes
-      const itemGeometries: Array<{
-        itemId: number;
-        meshDataArray: any;
-        size: THREE.Vector3;
-        center: THREE.Vector3;
-      }> = [];
-      
-      for (let idx = 0; idx < cluster.itemIds.length; idx++) {
-        const itemId = cluster.itemIds[idx];
-        const geometryDataArray = allGeometriesData[idx];
+    let totalItems = 0;
+    
+    // Use OBC's Item API to preserve IFC structure
+    // Each Item represents a complete IFC object (door with all its parts, etc.)
+    const itemObjects: Array<{
+      itemId: number;
+      group: THREE.Group;
+      box: THREE.Box3;
+    }> = [];
+    
+    for (const itemId of cluster.itemIds) {
+      try {
+        // Get the Item object using OBC API - this preserves IFC grouping
+        const item = model.getItem(itemId);
+        const itemGeometry = await item.getGeometry();
         
-        try {
-              if (!geometryDataArray || geometryDataArray.length === 0) continue;
-              
-              // Calculate bounding box for this item to determine its size
-              let itemMin = new THREE.Vector3(Infinity, Infinity, Infinity);
-              let itemMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-              
-              // Handle both array and non-array responses
-              const dataArrayToProcess = Array.isArray(geometryDataArray) ? geometryDataArray : [geometryDataArray];
-              
-              for (const meshDataGroup of dataArrayToProcess) {
-                if (!meshDataGroup) continue;
-                
-                // meshDataGroup might be an array or a single object
-                const meshDataList = Array.isArray(meshDataGroup) ? meshDataGroup : [meshDataGroup];
-                
-                for (const meshData of meshDataList) {
-                  if (!meshData || !meshData.positions) continue;
-                  
-                  for (let i = 0; i < meshData.positions.length; i += 3) {
-                    itemMin.x = Math.min(itemMin.x, meshData.positions[i]);
-                    itemMin.y = Math.min(itemMin.y, meshData.positions[i + 1]);
-                    itemMin.z = Math.min(itemMin.z, meshData.positions[i + 2]);
-                    itemMax.x = Math.max(itemMax.x, meshData.positions[i]);
-                    itemMax.y = Math.max(itemMax.y, meshData.positions[i + 1]);
-                    itemMax.z = Math.max(itemMax.z, meshData.positions[i + 2]);
-                  }
-                }
-              }
-              
-              const itemSize = new THREE.Vector3().subVectors(itemMax, itemMin);
-              const itemCenter = new THREE.Vector3().addVectors(itemMin, itemMax).multiplyScalar(0.5);
-              
-              // For horizontal elements, swap Y and Z in size calculation after rotation
-              if (isHorizontalElement) {
-                const tempY = itemSize.y;
-                itemSize.y = itemSize.z;
-                itemSize.z = tempY;
-              }
-              
-              itemGeometries.push({
-                itemId,
-                meshDataArray: geometryDataArray,
-                size: itemSize,
-                center: itemCenter
-              });
-        } catch (itemError) {
-          console.warn(`  ⚠️ Error processing item ${itemId}:`, itemError);
-        }
-      }
-      
-      // Second pass: pack items in a grid with proper spacing
-      const itemsPerRow = Math.ceil(Math.sqrt(itemGeometries.length));
-      const padding = 2; // meters padding between items
-      
-      // Calculate row heights and column widths
-      const rowHeights: number[] = [];
-      const colWidths: number[] = [];
-      
-      for (let row = 0; row < Math.ceil(itemGeometries.length / itemsPerRow); row++) {
-        let maxHeight = 0;
-        for (let col = 0; col < itemsPerRow; col++) {
-          const idx = row * itemsPerRow + col;
-          if (idx >= itemGeometries.length) break;
-          maxHeight = Math.max(maxHeight, itemGeometries[idx].size.z);
+        // Get all geometry parts for this item
+        const geometries = await itemGeometry.get();
+        if (!geometries || geometries.length === 0) continue;
+        
+        // Create a group for this item (keeps all parts together)
+        const itemGroup = new THREE.Group();
+        itemGroup.name = `${cluster.category}_Item_${itemId}`;
+        
+        // Store IFC data on the group
+        itemGroup.userData.isClusterMesh = true;
+        itemGroup.userData.modelId = cluster.modelId;
+        itemGroup.userData.expressID = itemId;
+        itemGroup.userData.category = cluster.category;
+        
+        // Create meshes for each geometry part
+        for (const meshData of geometries) {
+          if (!meshData || !meshData.positions || !meshData.indices) continue;
           
-          if (row === 0) {
-            colWidths[col] = Math.max(colWidths[col] || 0, itemGeometries[idx].size.x);
+          // Create BufferGeometry
+          const geometry = new THREE.BufferGeometry();
+          geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+          
+          if (meshData.normals) {
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
+          } else {
+            geometry.computeVertexNormals();
           }
-        }
-        rowHeights[row] = maxHeight;
-      }
-      
-      // Calculate cumulative positions
-      const rowPositions: number[] = [0];
-      for (let i = 0; i < rowHeights.length - 1; i++) {
-        rowPositions[i + 1] = rowPositions[i] + rowHeights[i] + padding;
-      }
-      
-      const colPositions: number[] = [0];
-      for (let i = 0; i < colWidths.length - 1; i++) {
-        colPositions[i + 1] = colPositions[i] + colWidths[i] + padding;
-      }
-      
-      // Calculate total grid size to center it
-      const totalWidth = colPositions[colPositions.length - 1] + (colWidths[colWidths.length - 1] || 0);
-      const totalDepth = rowPositions[rowPositions.length - 1] + (rowHeights[rowHeights.length - 1] || 0);
-      
-      // Third pass: create meshes at calculated positions
-      for (let idx = 0; idx < itemGeometries.length; idx++) {
-        const itemData = itemGeometries[idx];
-        const row = Math.floor(idx / itemsPerRow);
-        const col = idx % itemsPerRow;
-        
-        // Calculate position (centered in grid)
-        const offsetX = colPositions[col] + colWidths[col] / 2 - totalWidth / 2;
-        const offsetZ = rowPositions[row] + rowHeights[row] / 2 - totalDepth / 2;
-        
-        // Process each mesh data in the array
-        // Handle both array and non-array responses
-        const dataArrayToProcess = Array.isArray(itemData.meshDataArray) ? itemData.meshDataArray : [itemData.meshDataArray];
-        
-        for (const meshDataGroup of dataArrayToProcess) {
-          if (!meshDataGroup) continue;
           
-          // meshDataGroup might be an array or a single object
-          const meshDataList = Array.isArray(meshDataGroup) ? meshDataGroup : [meshDataGroup];
+          geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
           
-          for (const meshData of meshDataList) {
-            if (!meshData || !meshData.positions || !meshData.indices) continue;
-            
-            // Create BufferGeometry from the extracted data
-            const geometry = new THREE.BufferGeometry();
-            
-            // Clone the positions array so we can modify it
-            const positions = new Float32Array(meshData.positions);
-            const normals = meshData.normals ? new Float32Array(meshData.normals) : null;
-            
-            // For horizontal elements (slabs, roofs, footings), always rotate to lay flat
-            const applyRotation = isHorizontalElement;
-            
-            // Translate vertices to be centered and positioned in grid
-            for (let i = 0; i < positions.length; i += 3) {
-              let x = positions[i] - itemData.center.x;
-              let y = positions[i + 1] - itemData.center.y;
-              let z = positions[i + 2] - itemData.center.z;
-              
-              // Apply rotation if needed (rotate 90 degrees around X axis to make horizontal)
-              if (applyRotation) {
-                const tempY = y;
-                y = -z;  // Y becomes -Z
-                z = tempY; // Z becomes Y
-              }
-              
-              positions[i] = x + offsetX;     // X - center item, then offset in grid
-              positions[i + 1] = y;            // Y - center item (with rotation if applied)
-              positions[i + 2] = z + offsetZ; // Z - center item, then offset in grid (with rotation if applied)
-            }
-            
-            // Also rotate normals if we rotated the positions
-            if (applyRotation && normals) {
-              for (let i = 0; i < normals.length; i += 3) {
-                const nx = normals[i];
-                const ny = normals[i + 1];
-                const nz = normals[i + 2];
-                
-                // Rotate normals around X axis by 90 degrees
-                normals[i] = nx;      // X unchanged
-                normals[i + 1] = -nz; // Y becomes -Z
-                normals[i + 2] = ny;  // Z becomes Y
-              }
-            }
-            
-            // Update position attribute with translated positions
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            
-            // Set normal attribute (rotated if applicable)
-            if (normals) {
-              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-            } else if (meshData.normals) {
-              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
-            }
-            
-            // Set index
-            geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
-            
-            // Compute normals if not provided
-            if (!meshData.normals && !normals) {
-              geometry.computeVertexNormals();
-            }
-            
-            // OPTIMIZATION: Use shared material instead of creating new one per mesh
-            // Create mesh at grid position
-            const mesh = new THREE.Mesh(geometry, sharedMaterial);
-            mesh.name = `${cluster.category}_Item_${itemData.itemId}_Mesh_${totalMeshes}`;
-            
-            // Store IFC data for selection and properties display
-            mesh.userData.isClusterMesh = true;
-            mesh.userData.modelId = cluster.modelId;
-            mesh.userData.expressID = itemData.itemId;
-            mesh.userData.category = cluster.category;
-            
-            clusterGroup.add(mesh);
-            cluster.clonedMeshes.push(mesh);
-            totalMeshes++;
-            totalVertices += meshData.positions.length / 3;
+          // Create mesh
+          const mesh = new THREE.Mesh(geometry, sharedMaterial);
+          
+          // Apply the transform from IFC (this preserves the original positioning of parts)
+          if (meshData.transform) {
+            mesh.applyMatrix4(meshData.transform);
           }
+          
+          // Store IFC data on each mesh too for raycasting
+          mesh.userData.isClusterMesh = true;
+          mesh.userData.modelId = cluster.modelId;
+          mesh.userData.expressID = itemId;
+          mesh.userData.category = cluster.category;
+          
+          itemGroup.add(mesh);
+        }
+        
+        // Calculate bounding box for this complete item
+        const itemBox = new THREE.Box3().setFromObject(itemGroup);
+        
+        // Apply horizontal rotation if needed (only for slabs, roofs, etc.)
+        if (isHorizontalElement) {
+          itemGroup.rotation.x = Math.PI / 2;
+          // Recalculate box after rotation
+          itemBox.setFromObject(itemGroup);
+        }
+        
+        itemObjects.push({
+          itemId,
+          group: itemGroup,
+          box: itemBox
+        });
+        
+        totalItems++;
+      } catch (error) {
+        console.warn(`  ⚠️ Error processing item ${itemId}:`, error);
+      }
+    }
+    
+    console.log(`  ✅ Created ${totalItems} complete items for ${cluster.category}`);
+    
+    // Sort items from bigger to smaller based on bounding box volume
+    itemObjects.sort((a, b) => {
+      const volumeA = a.box.getSize(new THREE.Vector3()).x * a.box.getSize(new THREE.Vector3()).y * a.box.getSize(new THREE.Vector3()).z;
+      const volumeB = b.box.getSize(new THREE.Vector3()).x * b.box.getSize(new THREE.Vector3()).y * b.box.getSize(new THREE.Vector3()).z;
+      return volumeB - volumeA; // Descending order (bigger first)
+    });
+    console.log(`  📏 Sorted ${itemObjects.length} items by size (biggest first)`);
+    
+    // Grid layout: arrange items in a grid with proper spacing
+    const itemsPerRow = Math.ceil(Math.sqrt(itemObjects.length));
+    const padding = 2; // meters padding between items
+    
+    // Calculate row heights and column widths based on bounding boxes
+    const rowHeights: number[] = [];
+    const colWidths: number[] = [];
+    
+    for (let row = 0; row < Math.ceil(itemObjects.length / itemsPerRow); row++) {
+      let maxHeight = 0;
+      for (let col = 0; col < itemsPerRow; col++) {
+        const idx = row * itemsPerRow + col;
+        if (idx >= itemObjects.length) break;
+        
+        const size = itemObjects[idx].box.getSize(new THREE.Vector3());
+        maxHeight = Math.max(maxHeight, size.z);
+        
+        if (row === 0) {
+          colWidths[col] = Math.max(colWidths[col] || 0, size.x);
         }
       }
+      rowHeights[row] = maxHeight;
+    }
+    
+    // Calculate cumulative positions
+    const rowPositions: number[] = [0];
+    for (let i = 0; i < rowHeights.length - 1; i++) {
+      rowPositions[i + 1] = rowPositions[i] + rowHeights[i] + padding;
+    }
+    
+    const colPositions: number[] = [0];
+    for (let i = 0; i < colWidths.length - 1; i++) {
+      colPositions[i + 1] = colPositions[i] + colWidths[i] + padding;
+    }
+    
+    // Calculate total grid size to center it
+    const totalWidth = colPositions[colPositions.length - 1] + (colWidths[colWidths.length - 1] || 0);
+    const totalDepth = rowPositions[rowPositions.length - 1] + (rowHeights[rowHeights.length - 1] || 0);
+    
+    // Position each item group in the grid
+    for (let idx = 0; idx < itemObjects.length; idx++) {
+      const itemObj = itemObjects[idx];
+      const row = Math.floor(idx / itemsPerRow);
+      const col = idx % itemsPerRow;
       
-      console.log(`  ✅ Created ${totalMeshes} meshes from ${itemGeometries.length} items (${totalWidth.toFixed(1)}m x ${totalDepth.toFixed(1)}m grid) for ${cluster.category}`);
+      // Calculate grid position (centered)
+      const gridX = colPositions[col] + colWidths[col] / 2 - totalWidth / 2;
+      const gridZ = rowPositions[row] + rowHeights[row] / 2 - totalDepth / 2;
       
-      // Update cluster bounding box to match the actual packed geometry size
-      // Add some margin for the bounding box visualization
-      const margin = 2;
-      cluster.boundingBox = new THREE.Box3(
-        new THREE.Vector3(-totalWidth / 2 - margin, -5, -totalDepth / 2 - margin),
-        new THREE.Vector3(totalWidth / 2 + margin, 10, totalDepth / 2 + margin)
+      // Get item's current center
+      const itemCenter = itemObj.box.getCenter(new THREE.Vector3());
+      
+      // Position the group so its center is at the grid position
+      itemObj.group.position.set(
+        gridX - itemCenter.x,
+        -itemCenter.y,
+        gridZ - itemCenter.z
       );
       
+      // Add to cluster group
+      clusterGroup.add(itemObj.group);
+      cluster.clonedMeshes.push(itemObj.group as any);
+    }
+    
+    console.log(`  ✅ Positioned ${itemObjects.length} items in ${totalWidth.toFixed(1)}m x ${totalDepth.toFixed(1)}m grid`);
+    
+    // Update cluster bounding box
+    const margin = 2;
+    cluster.boundingBox = new THREE.Box3(
+      new THREE.Vector3(-totalWidth / 2 - margin, -5, -totalDepth / 2 - margin),
+      new THREE.Vector3(totalWidth / 2 + margin, 10, totalDepth / 2 + margin)
+    );
+    
     this.visualizer.clusterGroup.add(clusterGroup);
   }
 
@@ -883,13 +821,27 @@ class ClusterManager {
     // Remove all cloned meshes and labels
     for (const [, clusters] of this.clusters) {
       for (const cluster of clusters) {
-        // Remove cloned meshes
-        for (const mesh of cluster.clonedMeshes) {
-          this.visualizer.clusterGroup.remove(mesh);
-          mesh.geometry.dispose();
-          // Collect material for later disposal (shared among meshes)
-          if (mesh.material instanceof THREE.Material) {
-            materialsToDispose.add(mesh.material);
+        // Remove cloned meshes (can be Groups or Meshes)
+        for (const object of cluster.clonedMeshes) {
+          this.visualizer.clusterGroup.remove(object);
+          
+          // If it's a Group, dispose all meshes inside
+          if (object instanceof THREE.Group) {
+            object.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material instanceof THREE.Material) {
+                  materialsToDispose.add(child.material);
+                }
+              }
+            });
+          }
+          // If it's a direct Mesh
+          else if (object instanceof THREE.Mesh) {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material instanceof THREE.Material) {
+              materialsToDispose.add(object.material);
+            }
           }
         }
         cluster.clonedMeshes = [];
