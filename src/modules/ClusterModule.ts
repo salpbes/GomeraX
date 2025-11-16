@@ -145,11 +145,10 @@ class ClusterVisualizer {
     }
 
     const box = cluster.boundingBox;
-    const geometry = new THREE.BoxGeometry(
-      box.max.x - box.min.x,
-      box.max.y - box.min.y,
-      box.max.z - box.min.z
-    );
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    
+    const geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 
     const edges = new THREE.EdgesGeometry(geometry);
     const material = new THREE.LineBasicMaterial({ 
@@ -161,10 +160,8 @@ class ClusterVisualizer {
 
     const lineSegments = new THREE.LineSegments(edges, material);
     
-    // Position the box at the center of the bounding box
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    lineSegments.position.copy(center);
+    // Don't position here - will be positioned at cluster position in visualizeClusters()
+    // The geometry is centered at origin, and we'll move the whole thing to clusterPosition
 
     this.clusterGroup.add(lineSegments);
     return lineSegments;
@@ -362,48 +359,71 @@ class ClusterManager {
 
   /**
    * Calculate cluster positions in a grid layout with proper spacing based on bounding box sizes
+   * Groups clusters by model to keep each model's clusters together
    */
   private calculateClusterPositions(clusters: IFCCluster[]): void {
     const gap = 20; // meters gap between cluster bounding boxes
-    const itemsPerRow = Math.ceil(Math.sqrt(clusters.length));
-
-    // Calculate positions row by row
-    let currentZ = 0;
+    const modelGap = 50; // larger gap between different models
     
-    for (let row = 0; row < Math.ceil(clusters.length / itemsPerRow); row++) {
-      let currentX = 0;
-      let maxHeightInRow = 0;
-      
-      // Process each cluster in this row
-      for (let col = 0; col < itemsPerRow; col++) {
-        const index = row * itemsPerRow + col;
-        if (index >= clusters.length) break;
-        
-        const cluster = clusters[index];
-        if (!cluster.boundingBox) continue;
-        
-        const size = new THREE.Vector3();
-        cluster.boundingBox.getSize(size);
-        
-        // Position cluster at current X, Z with its center
-        cluster.clusterPosition = new THREE.Vector3(
-          currentX + size.x / 2,
-          0,
-          currentZ + size.z / 2
-        );
-        
-        // Move X position for next cluster (width + gap)
-        currentX += size.x + gap;
-        
-        // Track max height (Z size) in this row
-        maxHeightInRow = Math.max(maxHeightInRow, size.z);
+    // Group clusters by modelId
+    const clustersByModel = new Map<string, IFCCluster[]>();
+    for (const cluster of clusters) {
+      if (!clustersByModel.has(cluster.modelId)) {
+        clustersByModel.set(cluster.modelId, []);
       }
-      
-      // Move Z position for next row (max height in row + gap)
-      currentZ += maxHeightInRow + gap;
+      clustersByModel.get(cluster.modelId)!.push(cluster);
     }
     
-    console.log(`  📐 Positioned ${clusters.length} clusters in grid layout with ${gap}m gaps`);
+    console.log(`  📐 Positioning ${clusters.length} clusters from ${clustersByModel.size} models...`);
+    
+    // Position each model's clusters in a row, separated by modelGap
+    let currentModelZ = 0;
+    
+    for (const [modelId, modelClusters] of clustersByModel) {
+      console.log(`  📦 Model ${modelId}: ${modelClusters.length} clusters`);
+      
+      // Calculate grid for this model's clusters
+      const itemsPerRow = Math.ceil(Math.sqrt(modelClusters.length));
+      let currentZ = currentModelZ;
+      
+      for (let row = 0; row < Math.ceil(modelClusters.length / itemsPerRow); row++) {
+        let currentX = 0;
+        let maxHeightInRow = 0;
+        
+        // Process each cluster in this row
+        for (let col = 0; col < itemsPerRow; col++) {
+          const index = row * itemsPerRow + col;
+          if (index >= modelClusters.length) break;
+          
+          const cluster = modelClusters[index];
+          if (!cluster.boundingBox) continue;
+          
+          const size = new THREE.Vector3();
+          cluster.boundingBox.getSize(size);
+          
+          // Position cluster at current X, Z with its center
+          cluster.clusterPosition = new THREE.Vector3(
+            currentX + size.x / 2,
+            0,
+            currentZ + size.z / 2
+          );
+          
+          // Move X position for next cluster (width + gap)
+          currentX += size.x + gap;
+          
+          // Track max height (Z size) in this row
+          maxHeightInRow = Math.max(maxHeightInRow, size.z);
+        }
+        
+        // Move Z position for next row (max height in row + gap)
+        currentZ += maxHeightInRow + gap;
+      }
+      
+      // Move to next model position (add model gap)
+      currentModelZ = currentZ + modelGap;
+    }
+    
+    console.log(`  ✅ Positioned clusters grouped by model with ${gap}m cluster gap and ${modelGap}m model gap`);
   }
 
   /**
@@ -436,9 +456,12 @@ class ClusterManager {
     console.log(`  ✅ All geometry created in ${(performance.now() - totalStartTime).toFixed(0)}ms`);
     
     // Second pass: Recalculate positions based on updated bounding boxes
+    // Collect all clusters from all models to prevent overlap
+    const allClusters: IFCCluster[] = [];
     for (const [, clusters] of this.clusters) {
-      this.calculateClusterPositions(clusters);
+      allClusters.push(...clusters);
     }
+    this.calculateClusterPositions(allClusters);
     
     // Third pass: Position cluster groups and add labels
     for (const [modelId, clusters] of this.clusters) {
@@ -448,9 +471,9 @@ class ClusterManager {
       for (const cluster of clusters) {
         if (!cluster.clusterPosition || cluster.clonedMeshes.length === 0) continue;
         
-        // Find the cluster group that was created
+        // Find the cluster group that was created (include modelId to handle multiple models)
         const clusterGroup = this.visualizer.clusterGroup.children.find(
-          (child: any) => child.name === `Cluster_${cluster.category}`
+          (child: any) => child.name === `Cluster_${cluster.modelId}_${cluster.category}`
         );
         
         if (clusterGroup) {
@@ -478,8 +501,11 @@ class ClusterManager {
     console.log(`  📦 ${cluster.category}: ${cluster.itemIds.length} items`);
 
     // Create cluster group (initially at origin, will be positioned later)
+    // Include modelId to avoid name conflicts when multiple models have same category
     const clusterGroup = new THREE.Group();
-    clusterGroup.name = `Cluster_${cluster.category}`;
+    clusterGroup.name = `Cluster_${cluster.modelId}_${cluster.category}`;
+    clusterGroup.userData.modelId = cluster.modelId;
+    clusterGroup.userData.category = cluster.category;
     
     // Get the color for this category
     const categoryColor = this.getCategoryColor(cluster.category);
@@ -871,13 +897,8 @@ class ClusterManager {
    */
   async visualizeClusters(): Promise<void> {
     console.log('🎨 Visualizing clusters...');
-    
-    // Calculate cluster positions
-    for (const clusters of this.clusters.values()) {
-      this.calculateClusterPositions(clusters);
-    }
 
-    // Move geometry to cluster positions
+    // Move geometry to cluster positions (this also calculates positions)
     await this.moveToClusterPositions();
 
     // Create visual helpers
@@ -886,14 +907,14 @@ class ClusterManager {
 
     for (const clusters of this.clusters.values()) {
       for (const cluster of clusters) {
+        if (!cluster.clusterPosition) continue;
+        
         const color = colors[colorIndex % colors.length];
         const visual = this.visualizer.createClusterVisual(cluster, color);
         cluster.visualHelper = visual;
 
-        // Update visual position to cluster position
-        if (cluster.clusterPosition) {
-          visual.position.copy(cluster.clusterPosition);
-        }
+        // Position visual at cluster position
+        visual.position.copy(cluster.clusterPosition);
 
         colorIndex++;
       }
