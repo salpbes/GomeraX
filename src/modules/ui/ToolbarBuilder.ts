@@ -69,13 +69,31 @@ export function createToolbarHTML(): string {
             <span class="icon"><i class="fas fa-times-circle"></i></span>
             <span class="label">Close Floor Plan</span>
           </button>
-          <button class="submenu-btn" data-action="toggleCluster" title="IFC Element Clustering" id="toggleClusterBtn">
-            <span class="icon"><i class="fas fa-object-group"></i></span>
-            <span class="label">Cluster View</span>
+        </div>
+      </div>
+      
+      <!-- Cluster Button (main toolbar button) -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleCluster" title="IFC Element Clustering" id="clusterMainBtn">
+          <span class="icon"><i class="fas fa-object-group"></i></span>
+        </button>
+        <div class="toolbar-submenu" id="clusterSubmenu">
+          <button class="submenu-btn" data-action="cancelClusterMode" title="Exit Cluster Mode & Fit View">
+            <span class="icon"><i class="fas fa-times-circle"></i></span>
+            <span class="label">Cancel Mode</span>
           </button>
-          <button class="submenu-btn" data-action="toggleColorSplash" title="Color Elements by Type" id="toggleColorSplashBtn">
-            <span class="icon"><i class="fas fa-palette"></i></span>
-            <span class="label">Color by Type</span>
+        </div>
+      </div>
+      
+      <!-- Color Splash Button (main toolbar button) -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleColorSplash" title="Color Elements by Type" id="colorSplashMainBtn">
+          <span class="icon"><i class="fas fa-palette"></i></span>
+        </button>
+        <div class="toolbar-submenu" id="colorSplashSubmenu">
+          <button class="submenu-btn" data-action="cancelColorSplashMode" title="Exit Color Splash & Fit View">
+            <span class="icon"><i class="fas fa-times-circle"></i></span>
+            <span class="label">Cancel Mode</span>
           </button>
         </div>
       </div>

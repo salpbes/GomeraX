@@ -661,14 +661,9 @@ export class ToolbarHandlers {
       
       const isActive = this.cluster.isClusteringActive();
       
-      // Update button appearance
-      const btn = document.getElementById('toggleClusterBtn');
+      // Update button appearance (now on main toolbar)
+      const btn = document.getElementById('clusterMainBtn');
       if (btn) {
-        const label = btn.querySelector('.label');
-        if (label) {
-          label.textContent = isActive ? 'Exit Cluster' : 'Cluster View';
-        }
-        
         // Add/remove active class for visual feedback
         if (isActive) {
           btn.classList.add('active');
@@ -703,14 +698,9 @@ export class ToolbarHandlers {
       
       const isActive = this.colorSplash.isColorSplashActive();
       
-      // Update button appearance
-      const btn = document.getElementById('toggleColorSplashBtn');
+      // Update button appearance (now on main toolbar)
+      const btn = document.getElementById('colorSplashMainBtn');
       if (btn) {
-        const label = btn.querySelector('.label');
-        if (label) {
-          label.textContent = isActive ? 'Reset Colors' : 'Color by Type';
-        }
-        
         // Add/remove active class for visual feedback
         if (isActive) {
           btn.classList.add('active');
@@ -728,6 +718,73 @@ export class ToolbarHandlers {
       alert(`Error toggling color splash: ${error}`);
     } finally {
       this.hideLoadingCallback();
+    }
+  }
+
+  /**
+   * Cancel cluster mode and return to normal view
+   */
+  async handleCancelClusterMode(): Promise<void> {
+    if (!this.cluster) {
+      console.warn('⚠️ Cluster module not initialized');
+      return;
+    }
+
+    try {
+      // Exit cluster mode if active
+      if (this.cluster.isClusteringActive()) {
+        await this.cluster.toggleClusters(); // Turn off clustering
+      }
+      
+      // Update button appearance
+      const btn = document.getElementById('clusterMainBtn');
+      if (btn) {
+        btn.classList.remove('active');
+      }
+      
+      // Fit view to show all models
+      if (this.components.camera) {
+        this.components.camera.fit();
+      }
+      
+      console.log('✅ Exited cluster mode and fit view');
+    } catch (error) {
+      console.error('❌ Error canceling cluster mode:', error);
+    }
+  }
+
+  /**
+   * Cancel color splash mode and return to normal view
+   */
+  async handleCancelColorSplashMode(): Promise<void> {
+    if (!this.colorSplash) {
+      console.warn('⚠️ Color splash module not initialized');
+      return;
+    }
+
+    try {
+      // Exit color splash mode if active
+      if (this.colorSplash.isColorSplashActive()) {
+        await this.colorSplash.toggleColorSplash(); // Turn off color splash
+      }
+      
+      // Update button appearance
+      const btn = document.getElementById('colorSplashMainBtn');
+      if (btn) {
+        btn.classList.remove('active');
+      }
+      
+      // Hide color picker panel
+      this.hideColorPickerPanel();
+      
+      // Fit view to show all models
+      if (this.components.camera) {
+        this.components.camera.fit();
+      }
+      
+      console.log('✅ Exited color splash mode and fit view');
+    } catch (error) {
+      console.error('❌ Error canceling color splash mode:', error);
     }
   }
 

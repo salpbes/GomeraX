@@ -257,13 +257,17 @@ export class UIManager {
         const action = (e.currentTarget as HTMLElement).dataset.action;
         
         // Handle expandable groups (show submenu without triggering action)
-        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure') {
+        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash') {
           const group = (e.currentTarget as HTMLElement).closest('.toolbar-group');
           if (group) {
             this.toggleSubmenu(group);
           }
           // For walk mode, also toggle the walk state
           if (action === 'toggleWalkMode') {
+            this.handleToolbarAction(action);
+          }
+          // For cluster and color splash, also toggle their state
+          if (action === 'toggleCluster' || action === 'toggleColorSplash') {
             this.handleToolbarAction(action);
           }
           return;
@@ -504,6 +508,12 @@ export class UIManager {
         break;
       case 'cancelMeasureMode':
         this.toolbarHandlers.handleCancelMeasureMode();
+        break;
+      case 'cancelClusterMode':
+        this.toolbarHandlers.handleCancelClusterMode();
+        break;
+      case 'cancelColorSplashMode':
+        this.toolbarHandlers.handleCancelColorSplashMode();
         break;
       case 'modelinfo':
         this.toolbarHandlers.handleShowModelInfo();
