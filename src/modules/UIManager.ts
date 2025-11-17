@@ -79,6 +79,13 @@ export class UIManager {
       this.updateModelCount();
     });
 
+    // Set up callback to refresh color splash when new model is loaded
+    this.ifcLoader.setOnModelLoaded(() => {
+      if (this.colorSplashModule) {
+        this.colorSplashModule.refreshColorSplash();
+      }
+    });
+
     // Set measurement module if available
     if (this.viewer) {
       const measurement = this.viewer.getMeasurement();

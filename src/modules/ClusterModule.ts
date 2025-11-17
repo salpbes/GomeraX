@@ -334,46 +334,56 @@ class ClusterManager {
 
   /**
    * Generate clusters for specific filtered elements (e.g., one IFC type from color splash)
-   * @param filteredElements Map of modelId -> Set of localIds
-   * @param categoryName Name of the category for labeling
+   * Now supports multiple categories with separate clusters
+   * @param filteredElementsByCategory Map of categoryName -> Map of modelId -> Set of localIds
+   * @param categoryName Name(s) of the category for labeling (can be multiple)
    */
-  async generateFilteredClusters(filteredElements: { [key: string]: Set<number> }, categoryName: string): Promise<void> {
-    console.log(`🔍 Generating cluster for filtered category: ${categoryName}`);
+  async generateFilteredClusters(filteredElementsByCategory: Map<string, { [key: string]: Set<number> }>, categoryName: string): Promise<void> {
+    console.log(`🔍 Generating clusters for filtered categories: ${categoryName}`);
     this.clusters.clear();
 
-    for (const [modelId, localIds] of Object.entries(filteredElements)) {
-      const model = this.fragmentsManager.list.get(modelId);
-      if (!model) {
-        console.warn(`⚠️ Model ${modelId} not found`);
-        continue;
-      }
+    // Process each category separately to create individual clusters
+    for (const [category, filteredElements] of filteredElementsByCategory) {
+      for (const [modelId, localIds] of Object.entries(filteredElements)) {
+        const model = this.fragmentsManager.list.get(modelId);
+        if (!model) {
+          console.warn(`⚠️ Model ${modelId} not found`);
+          continue;
+        }
 
-      try {
-        const itemIds = Array.from(localIds);
-        console.log(`  📊 Processing ${itemIds.length} items for ${categoryName} in model ${modelId}`);
-
-        // Create a single cluster for this category
-        const cluster = new IFCCluster(modelId, categoryName, itemIds);
-
-        // Calculate bounding box
         try {
-          const boundingBox = await this.calculateBoundingBoxForFragments(model, itemIds);
-          if (boundingBox && !boundingBox.isEmpty()) {
-            cluster.boundingBox = boundingBox;
-            this.clusters.set(modelId, [cluster]);
-            console.log(`✅ Created cluster for ${categoryName} in model ${modelId}`);
-          } else {
-            console.warn(`  ⚠️ Empty bounding box for ${categoryName}`);
+          const itemIds = Array.from(localIds);
+          console.log(`  📊 Processing ${itemIds.length} items for ${category} in model ${modelId}`);
+
+          // Create a cluster for this category
+          const cluster = new IFCCluster(modelId, category, itemIds);
+
+          // Calculate bounding box
+          try {
+            const boundingBox = await this.calculateBoundingBoxForFragments(model, itemIds);
+            if (boundingBox && !boundingBox.isEmpty()) {
+              cluster.boundingBox = boundingBox;
+              
+              // Add to model's cluster array (not replace)
+              if (!this.clusters.has(modelId)) {
+                this.clusters.set(modelId, []);
+              }
+              this.clusters.get(modelId)!.push(cluster);
+              
+              console.log(`✅ Created cluster for ${category} in model ${modelId}`);
+            } else {
+              console.warn(`  ⚠️ Empty bounding box for ${category}`);
+            }
+          } catch (error) {
+            console.warn(`  ⚠️ Could not get bounding box for ${category}:`, error);
           }
         } catch (error) {
-          console.warn(`  ⚠️ Could not get bounding box for ${categoryName}:`, error);
+          console.error(`❌ Error processing filtered elements for ${modelId}:`, error);
         }
-      } catch (error) {
-        console.error(`❌ Error processing filtered elements for ${modelId}:`, error);
       }
     }
 
-    console.log(`✅ Filtered cluster generated: ${this.getTotalClusterCount()} cluster(s)`);
+    console.log(`✅ Filtered clusters generated: ${this.getTotalClusterCount()} cluster(s)`);
   }
 
   /**
@@ -1158,11 +1168,11 @@ export class ClusterModule {
   }
 
   /**
-   * Show clusters for specific filtered elements (e.g., one IFC type)
-   * @param filteredElements Map of modelId -> Set of localIds to cluster
-   * @param categoryName Name of the category for labeling
+   * Show clusters for specific filtered elements (e.g., one or more IFC types)
+   * @param filteredElementsByCategory Map of categoryName -> Map of modelId -> Set of localIds
+   * @param categoryName Name(s) of the category for labeling
    */
-  async showFilteredClusters(filteredElements: { [key: string]: Set<number> }, categoryName: string): Promise<void> {
+  async showFilteredClusters(filteredElementsByCategory: Map<string, { [key: string]: Set<number> }>, categoryName: string): Promise<void> {
     if (!this.clusterManager) {
       console.error('❌ ClusterManager not initialized');
       return;
@@ -1175,8 +1185,8 @@ export class ClusterModule {
 
     console.log(`🎯 Showing clusters for ${categoryName}...`);
 
-    // Generate clusters for the filtered elements only
-    await this.clusterManager.generateFilteredClusters(filteredElements, categoryName);
+    // Generate clusters for the filtered elements
+    await this.clusterManager.generateFilteredClusters(filteredElementsByCategory, categoryName);
     
     if (this.clusterManager.getTotalClusterCount() === 0) {
       console.warn(`⚠️ No clusters generated for ${categoryName}.`);

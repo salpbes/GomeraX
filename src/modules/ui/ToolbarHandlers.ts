@@ -31,6 +31,10 @@ export class ToolbarHandlers {
   private modelDashboard: ModelDashboard;
   private components: OBC.Components;
   private uiManager: UIManager;
+  
+  // Persistent state for color splash panel
+  private selectedCategories: Set<string> = new Set();
+  private isInClusterMode: boolean = false;
 
   constructor(
     ifcLoader: IFCLoaderModule,
@@ -837,6 +841,87 @@ export class ToolbarHandlers {
     const sortAlphaBtn = createSortButton('A-Z', '🔤');
     const sortCountBtn = createSortButton('Count', '🔢');
 
+    // Add refresh button
+    const refreshBtn = document.createElement('button');
+    refreshBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: rgba(100, 200, 255, 0.15);
+      border: 1px solid rgba(100, 200, 255, 0.4);
+      border-radius: 4px;
+      color: #aaddff;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    `;
+    refreshBtn.innerHTML = `<span style="font-size: 14px;">🔄</span> Refresh Categories`;
+    
+    refreshBtn.addEventListener('mouseenter', () => {
+      refreshBtn.style.background = 'rgba(100, 200, 255, 0.25)';
+      refreshBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
+      refreshBtn.style.color = '#cceeff';
+    });
+    refreshBtn.addEventListener('mouseleave', () => {
+      refreshBtn.style.background = 'rgba(100, 200, 255, 0.15)';
+      refreshBtn.style.borderColor = 'rgba(100, 200, 255, 0.4)';
+      refreshBtn.style.color = '#aaddff';
+    });
+
+    refreshBtn.addEventListener('click', async () => {
+      try {
+        if (this.colorSplash) {
+          // Show loading state
+          const originalContent = refreshBtn.innerHTML;
+          refreshBtn.innerHTML = `<span style="
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(170, 221, 255, 0.3);
+            border-top-color: #aaddff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+          "></span> Loading...`;
+          refreshBtn.style.cursor = 'wait';
+          refreshBtn.disabled = true;
+          
+          // Add animation keyframes if not already present
+          if (!document.getElementById('spin-animation')) {
+            const style = document.createElement('style');
+            style.id = 'spin-animation';
+            style.textContent = `
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `;
+            document.head.appendChild(style);
+          }
+          
+          console.log('🔄 Refreshing color splash panel...');
+          await this.colorSplash.refreshColorSplash();
+          console.log('✅ Panel refreshed with latest categories');
+          
+          // Restore button state
+          refreshBtn.innerHTML = originalContent;
+          refreshBtn.style.cursor = 'pointer';
+          refreshBtn.disabled = false;
+        }
+      } catch (error) {
+        console.error('Error refreshing panel:', error);
+        // Restore button on error too
+        refreshBtn.innerHTML = `<span style="font-size: 14px;">🔄</span> Refresh Categories`;
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.disabled = false;
+      }
+    });
+
+    panel.appendChild(refreshBtn);
+
     // Add exit cluster button (initially hidden)
     const exitClusterBtn = document.createElement('button');
     exitClusterBtn.style.cssText = `
@@ -874,6 +959,25 @@ export class ToolbarHandlers {
         if (this.cluster) {
           await this.cluster.exitToColorView(); // Exit to color view (not toggle)
           exitClusterBtn.style.display = 'none'; // Hide the button
+          updateClusterBtn.style.display = 'none'; // Hide update button too
+          this.isInClusterMode = false; // Reset cluster mode flag
+          this.selectedCategories.clear(); // Clear selections
+          
+          // Update UI
+          const countSpan = document.getElementById('selectedCount');
+          if (countSpan) {
+            countSpan.textContent = '0';
+          }
+          viewSelectedBtn.style.display = 'none';
+          
+          // Uncheck all checkboxes
+          const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+          checkboxes.forEach(cb => {
+            (cb as HTMLInputElement).checked = false;
+            (cb as HTMLInputElement).style.background = 'rgba(0, 0, 0, 0.3)';
+            (cb as HTMLInputElement).style.borderColor = '#555';
+          });
+          
           console.log('✅ Exited cluster view, returned to color view');
         }
       } catch (error) {
@@ -882,6 +986,151 @@ export class ToolbarHandlers {
     });
 
     panel.appendChild(exitClusterBtn);
+
+    // Add "Update Cluster" button (shown when in cluster mode with selections)
+    const updateClusterBtn = document.createElement('button');
+    updateClusterBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: rgba(100, 200, 100, 0.15);
+      border: 1px solid rgba(100, 200, 100, 0.4);
+      border-radius: 4px;
+      color: #aaffaa;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    `;
+    updateClusterBtn.innerHTML = `<span style="font-size: 14px;">🔄</span> Update Cluster View`;
+    
+    updateClusterBtn.addEventListener('mouseenter', () => {
+      updateClusterBtn.style.background = 'rgba(100, 200, 100, 0.25)';
+      updateClusterBtn.style.borderColor = 'rgba(100, 200, 100, 0.6)';
+      updateClusterBtn.style.color = '#ccffcc';
+    });
+    updateClusterBtn.addEventListener('mouseleave', () => {
+      updateClusterBtn.style.background = 'rgba(100, 200, 100, 0.15)';
+      updateClusterBtn.style.borderColor = 'rgba(100, 200, 100, 0.4)';
+      updateClusterBtn.style.color = '#aaffaa';
+    });
+
+    updateClusterBtn.addEventListener('click', async () => {
+      try {
+        if (this.colorSplash && this.cluster && this.selectedCategories.size > 0) {
+          // Collect elements grouped by category for separate clusters
+          const elementsByCategory = new Map<string, { [key: string]: Set<number> }>();
+          const categoryNames: string[] = [];
+
+          for (const selectionName of this.selectedCategories) {
+            const elements = await this.colorSplash.getCategoryElements(selectionName);
+            if (elements) {
+              // Extract category name from selection name
+              const categoryInfo = categories.find(c => c.selectionName === selectionName);
+              if (categoryInfo) {
+                // Store elements grouped by category name (not merged)
+                elementsByCategory.set(categoryInfo.name, elements);
+                categoryNames.push(categoryInfo.name);
+              }
+            }
+          }
+
+          if (elementsByCategory.size > 0) {
+            // Pass custom colors to cluster module
+            const categoryColors = this.colorSplash.getCategoryColors();
+            this.cluster.setCustomColors(categoryColors);
+            
+            // Show clusters for selected categories (each in its own bounding box)
+            const label = categoryNames.join(', ');
+            await this.cluster.showFilteredClusters(elementsByCategory, label);
+            
+            console.log(`✅ Updated cluster view with ${categoryNames.length} categories`);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating cluster:', error);
+      }
+    });
+
+    panel.appendChild(updateClusterBtn);
+
+    // Add "View Selected" button (initially hidden)
+    const viewSelectedBtn = document.createElement('button');
+    viewSelectedBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: rgba(100, 150, 255, 0.15);
+      border: 1px solid rgba(100, 150, 255, 0.4);
+      border-radius: 4px;
+      color: #aaccff;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    `;
+    viewSelectedBtn.innerHTML = `<span style="font-size: 14px;">📊</span> View Selected (<span id="selectedCount">0</span>)`;
+    
+    viewSelectedBtn.addEventListener('mouseenter', () => {
+      viewSelectedBtn.style.background = 'rgba(100, 150, 255, 0.25)';
+      viewSelectedBtn.style.borderColor = 'rgba(100, 150, 255, 0.6)';
+      viewSelectedBtn.style.color = '#ccddff';
+    });
+    viewSelectedBtn.addEventListener('mouseleave', () => {
+      viewSelectedBtn.style.background = 'rgba(100, 150, 255, 0.15)';
+      viewSelectedBtn.style.borderColor = 'rgba(100, 150, 255, 0.4)';
+      viewSelectedBtn.style.color = '#aaccff';
+    });
+
+    viewSelectedBtn.addEventListener('click', async () => {
+      try {
+        if (this.colorSplash && this.cluster && this.selectedCategories.size > 0) {
+          // Collect elements grouped by category for separate clusters
+          const elementsByCategory = new Map<string, { [key: string]: Set<number> }>();
+          const categoryNames: string[] = [];
+
+          for (const selectionName of this.selectedCategories) {
+            const elements = await this.colorSplash.getCategoryElements(selectionName);
+            if (elements) {
+              // Extract category name from selection name
+              const categoryInfo = categories.find(c => c.selectionName === selectionName);
+              if (categoryInfo) {
+                // Store elements grouped by category name (not merged)
+                elementsByCategory.set(categoryInfo.name, elements);
+                categoryNames.push(categoryInfo.name);
+              }
+            }
+          }
+
+          if (elementsByCategory.size > 0) {
+            // Pass custom colors to cluster module
+            const categoryColors = this.colorSplash.getCategoryColors();
+            this.cluster.setCustomColors(categoryColors);
+            
+            // Show clusters for selected categories (each in its own bounding box)
+            const label = categoryNames.join(', ');
+            await this.cluster.showFilteredClusters(elementsByCategory, label);
+            
+            // Show the exit cluster button and mark as in cluster mode
+            exitClusterBtn.style.display = 'flex';
+            this.isInClusterMode = true;
+            console.log(`✅ Showing cluster view for ${categoryNames.length} selected categories`);
+          }
+        }
+      } catch (error) {
+        console.error('Error showing selected clusters:', error);
+      }
+    });
+
+    panel.appendChild(viewSelectedBtn);
 
     let currentSort: 'alpha' | 'count' | 'none' = 'none';
 
@@ -982,6 +1231,92 @@ export class ToolbarHandlers {
             cursor: default;
           `;
 
+          // Create checkbox for multi-selection
+          const checkboxWrapper = document.createElement('div');
+          checkboxWrapper.style.cssText = `
+            position: relative;
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            flex-shrink: 0;
+          `;
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.style.cssText = `
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            border: 2px solid #555;
+            border-radius: 3px;
+            background: rgba(0, 0, 0, 0.3);
+            transition: all 0.2s;
+            position: relative;
+          `;
+          checkbox.checked = this.selectedCategories.has(cat.selectionName);
+          
+          // Add checked state styling
+          const updateCheckboxStyle = () => {
+            if (checkbox.checked) {
+              checkbox.style.background = '#6495ed';
+              checkbox.style.borderColor = '#6495ed';
+            } else {
+              checkbox.style.background = 'rgba(0, 0, 0, 0.3)';
+              checkbox.style.borderColor = '#555';
+            }
+          };
+          updateCheckboxStyle();
+
+          checkbox.addEventListener('mouseenter', () => {
+            if (!checkbox.checked) {
+              checkbox.style.borderColor = '#777';
+              checkbox.style.background = 'rgba(0, 0, 0, 0.4)';
+            }
+          });
+          checkbox.addEventListener('mouseleave', () => {
+            if (!checkbox.checked) {
+              checkbox.style.borderColor = '#555';
+              checkbox.style.background = 'rgba(0, 0, 0, 0.3)';
+            }
+          });
+          
+          checkbox.addEventListener('change', () => {
+            updateCheckboxStyle();
+            
+            if (checkbox.checked) {
+              this.selectedCategories.add(cat.selectionName);
+            } else {
+              this.selectedCategories.delete(cat.selectionName);
+            }
+            
+            // Update selected count
+            const countSpan = document.getElementById('selectedCount');
+            if (countSpan) {
+              countSpan.textContent = this.selectedCategories.size.toString();
+            }
+            
+            // Show/hide appropriate buttons based on state
+            if (this.selectedCategories.size > 0) {
+              if (this.isInClusterMode) {
+                // In cluster mode: show update button instead of view button
+                updateClusterBtn.style.display = 'flex';
+                viewSelectedBtn.style.display = 'none';
+              } else {
+                // Not in cluster mode: show view button
+                viewSelectedBtn.style.display = 'flex';
+                updateClusterBtn.style.display = 'none';
+              }
+            } else {
+              // No selection: hide both buttons
+              viewSelectedBtn.style.display = 'none';
+              updateClusterBtn.style.display = 'none';
+            }
+          });
+
+          checkboxWrapper.appendChild(checkbox);
+
           const label = document.createElement('div');
           label.style.cssText = `
             font-size: 11px;
@@ -1038,10 +1373,15 @@ export class ToolbarHandlers {
                   const categoryColors = this.colorSplash.getCategoryColors();
                   this.cluster.setCustomColors(categoryColors);
                   
+                  // Create map with single category
+                  const elementsByCategory = new Map<string, { [key: string]: Set<number> }>();
+                  elementsByCategory.set(cat.name, elements);
+                  
                   // Show clusters for just this category
-                  await this.cluster.showFilteredClusters(elements, cat.name);
-                  // Show the exit cluster button
+                  await this.cluster.showFilteredClusters(elementsByCategory, cat.name);
+                  // Show the exit cluster button and mark as in cluster mode
                   exitClusterBtn.style.display = 'flex';
+                  this.isInClusterMode = true;
                   console.log(`✅ Showing cluster view for ${cat.name}`);
                 }
               }
@@ -1102,6 +1442,7 @@ export class ToolbarHandlers {
           colorWrapper.appendChild(colorInput);
           controlsContainer.appendChild(clusterBtn);
           controlsContainer.appendChild(colorWrapper);
+          row.appendChild(checkboxWrapper);
           row.appendChild(label);
           row.appendChild(controlsContainer);
           categoriesContainer.appendChild(row);
@@ -1136,6 +1477,28 @@ export class ToolbarHandlers {
 
     // Initial build with no sorting
     buildModelGroups('none');
+
+    // Restore UI state after panel rebuild
+    const countSpan = document.getElementById('selectedCount');
+    if (countSpan) {
+      countSpan.textContent = this.selectedCategories.size.toString();
+    }
+    
+    if (this.selectedCategories.size > 0) {
+      if (this.isInClusterMode) {
+        updateClusterBtn.style.display = 'flex';
+        viewSelectedBtn.style.display = 'none';
+        exitClusterBtn.style.display = 'flex';
+      } else {
+        viewSelectedBtn.style.display = 'flex';
+        updateClusterBtn.style.display = 'none';
+        exitClusterBtn.style.display = 'none';
+      }
+    } else {
+      viewSelectedBtn.style.display = 'none';
+      updateClusterBtn.style.display = 'none';
+      exitClusterBtn.style.display = this.isInClusterMode ? 'flex' : 'none';
+    }
 
     // Make panel draggable
     let isDragging = false;

@@ -55,6 +55,16 @@ export class ColorSplashModule {
   }
 
   /**
+   * Refresh/update color splash when models change (new model loaded, etc.)
+   */
+  async refreshColorSplash(): Promise<void> {
+    if (this.isActive) {
+      console.log('🔄 Refreshing color splash with updated models...');
+      await this.applyColorByType();
+    }
+  }
+
+  /**
    * Apply colors to elements based on their IFC types
    */
   private async applyColorByType(): Promise<void> {

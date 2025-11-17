@@ -78,6 +78,13 @@ export class IFCLoaderModule {
   }
 
   /**
+   * Set callback for when a model is loaded
+   */
+  public setOnModelLoaded(callback: () => void): void {
+    this.onModelLoaded = callback;
+  }
+
+  /**
    * Set double-sided rendering state
    * @param enabled - Whether to enable double-sided rendering
    */
@@ -279,6 +286,11 @@ export class IFCLoaderModule {
 
       this.loadedModelsCount++;
       console.log(`✅ IFC loaded successfully: ${filename}`);
+      
+      // Trigger callback for model loaded
+      if (this.onModelLoaded) {
+        this.onModelLoaded();
+      }
     } catch (error) {
       console.error('❌ Error loading IFC:', error);
       throw error;
