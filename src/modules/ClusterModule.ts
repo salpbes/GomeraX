@@ -241,11 +241,28 @@ class ClusterManager {
   private clusters: Map<string, IFCCluster[]> = new Map(); // modelId -> clusters[]
   private visualizer: ClusterVisualizer;
   private components: OBC.Components;
+  private colorOverrides: Map<string, THREE.Color> = new Map(); // category -> custom color
 
   constructor(components: OBC.Components, scene: THREE.Scene) {
     this.components = components;
     this.fragmentsManager = components.get(OBC.FragmentsManager);
     this.visualizer = new ClusterVisualizer(scene);
+  }
+
+  /**
+   * Set custom colors for specific categories (from ColorSplashModule)
+   * @param categoryColors Map of category name -> THREE.Color
+   */
+  setColorOverrides(categoryColors: Map<string, THREE.Color>): void {
+    this.colorOverrides = categoryColors;
+    console.log(`🎨 Applied ${categoryColors.size} custom category colors`);
+  }
+
+  /**
+   * Clear custom color overrides
+   */
+  clearColorOverrides(): void {
+    this.colorOverrides.clear();
   }
 
   /**
@@ -313,6 +330,50 @@ class ClusterManager {
     }
 
     console.log(`✅ Total clusters generated: ${this.getTotalClusterCount()}`);
+  }
+
+  /**
+   * Generate clusters for specific filtered elements (e.g., one IFC type from color splash)
+   * @param filteredElements Map of modelId -> Set of localIds
+   * @param categoryName Name of the category for labeling
+   */
+  async generateFilteredClusters(filteredElements: { [key: string]: Set<number> }, categoryName: string): Promise<void> {
+    console.log(`🔍 Generating cluster for filtered category: ${categoryName}`);
+    this.clusters.clear();
+
+    for (const [modelId, localIds] of Object.entries(filteredElements)) {
+      const model = this.fragmentsManager.list.get(modelId);
+      if (!model) {
+        console.warn(`⚠️ Model ${modelId} not found`);
+        continue;
+      }
+
+      try {
+        const itemIds = Array.from(localIds);
+        console.log(`  📊 Processing ${itemIds.length} items for ${categoryName} in model ${modelId}`);
+
+        // Create a single cluster for this category
+        const cluster = new IFCCluster(modelId, categoryName, itemIds);
+
+        // Calculate bounding box
+        try {
+          const boundingBox = await this.calculateBoundingBoxForFragments(model, itemIds);
+          if (boundingBox && !boundingBox.isEmpty()) {
+            cluster.boundingBox = boundingBox;
+            this.clusters.set(modelId, [cluster]);
+            console.log(`✅ Created cluster for ${categoryName} in model ${modelId}`);
+          } else {
+            console.warn(`  ⚠️ Empty bounding box for ${categoryName}`);
+          }
+        } catch (error) {
+          console.warn(`  ⚠️ Could not get bounding box for ${categoryName}:`, error);
+        }
+      } catch (error) {
+        console.error(`❌ Error processing filtered elements for ${modelId}:`, error);
+      }
+    }
+
+    console.log(`✅ Filtered cluster generated: ${this.getTotalClusterCount()} cluster(s)`);
   }
 
   /**
@@ -429,8 +490,9 @@ class ClusterManager {
   /**
    * Move fragments to their cluster positions
    * Uses OBC's getItemsGeometry to extract actual geometry for each cluster
+   * @param hideAllModels If true, hides ALL loaded models (for filtered clusters)
    */
-  private async moveToClusterPositions(): Promise<void> {
+  private async moveToClusterPositions(hideAllModels: boolean = false): Promise<void> {
     console.log('🚚 Creating clustered views with category filtering...');
     
     const totalStartTime = performance.now();
@@ -485,9 +547,23 @@ class ClusterManager {
           this.addClusterLabel(cluster, cluster.clusterPosition);
         }
       }
-      
-      // Hide the original model completely
-      this.visualizer.hideModel(model);
+    }
+    
+    // Hide models based on mode
+    if (hideAllModels) {
+      // In filtered cluster mode: hide ALL models
+      console.log('  🙈 Hiding all models for filtered cluster view...');
+      for (const [, model] of this.fragmentsManager.list) {
+        this.visualizer.hideModel(model);
+      }
+    } else {
+      // In full cluster mode: hide only models that have clusters
+      for (const [modelId, clusters] of this.clusters) {
+        const model = this.fragmentsManager.list.get(modelId);
+        if (model) {
+          this.visualizer.hideModel(model);
+        }
+      }
     }
     
     console.log('✅ Cluster views created with category filtering and labels');
@@ -760,8 +836,16 @@ class ClusterManager {
 
   /**
    * Get color for category visualization
+   * First checks for custom color overrides, then falls back to defaults
    */
   private getCategoryColor(category: string): number {
+    // Check if there's a custom color override from ColorSplashModule
+    if (this.colorOverrides.has(category)) {
+      const customColor = this.colorOverrides.get(category)!;
+      return customColor.getHex();
+    }
+
+    // Fall back to default colors
     const colors: { [key: string]: number } = {
       // Architectural
       'IFCWALL': 0xcccccc,
@@ -894,12 +978,13 @@ class ClusterManager {
 
   /**
    * Visualize all clusters with bounding boxes
+   * @param hideAllModels If true, hides ALL loaded models (for filtered clusters)
    */
-  async visualizeClusters(): Promise<void> {
+  async visualizeClusters(hideAllModels: boolean = false): Promise<void> {
     console.log('🎨 Visualizing clusters...');
 
     // Move geometry to cluster positions (this also calculates positions)
-    await this.moveToClusterPositions();
+    await this.moveToClusterPositions(hideAllModels);
 
     // Create visual helpers
     const colors = this.generateColors(this.getTotalClusterCount());
@@ -1019,6 +1104,16 @@ export class ClusterModule {
   }
 
   /**
+   * Set custom colors for categories (from ColorSplashModule)
+   * @param categoryColors Map of category name -> THREE.Color
+   */
+  public setCustomColors(categoryColors: Map<string, THREE.Color>): void {
+    if (this.clusterManager) {
+      this.clusterManager.setColorOverrides(categoryColors);
+    }
+  }
+
+  /**
    * Initialize the cluster module
    */
   async initialize(): Promise<void> {
@@ -1059,6 +1154,55 @@ export class ClusterModule {
       await this.clusterManager.visualizeClusters();
       this.isActive = true;
       console.log('✅ Cluster view enabled');
+    }
+  }
+
+  /**
+   * Show clusters for specific filtered elements (e.g., one IFC type)
+   * @param filteredElements Map of modelId -> Set of localIds to cluster
+   * @param categoryName Name of the category for labeling
+   */
+  async showFilteredClusters(filteredElements: { [key: string]: Set<number> }, categoryName: string): Promise<void> {
+    if (!this.clusterManager) {
+      console.error('❌ ClusterManager not initialized');
+      return;
+    }
+
+    // First clear any existing clusters
+    if (this.isActive) {
+      await this.clusterManager.clearClusters();
+    }
+
+    console.log(`🎯 Showing clusters for ${categoryName}...`);
+
+    // Generate clusters for the filtered elements only
+    await this.clusterManager.generateFilteredClusters(filteredElements, categoryName);
+    
+    if (this.clusterManager.getTotalClusterCount() === 0) {
+      console.warn(`⚠️ No clusters generated for ${categoryName}.`);
+      return;
+    }
+
+    // Pass hideAllModels=true to hide all models (not just the filtered one)
+    await this.clusterManager.visualizeClusters(true);
+    this.isActive = true;
+    console.log(`✅ Cluster view enabled for ${categoryName}`);
+  }
+
+  /**
+   * Exit cluster mode and restore the color view (not just toggle)
+   */
+  async exitToColorView(): Promise<void> {
+    if (!this.clusterManager) {
+      console.error('❌ ClusterManager not initialized');
+      return;
+    }
+
+    if (this.isActive) {
+      // Clear clusters and restore all models
+      await this.clusterManager.clearClusters();
+      this.isActive = false;
+      console.log('✅ Exited cluster view, restored color view');
     }
   }
 

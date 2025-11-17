@@ -837,6 +837,52 @@ export class ToolbarHandlers {
     const sortAlphaBtn = createSortButton('A-Z', '🔤');
     const sortCountBtn = createSortButton('Count', '🔢');
 
+    // Add exit cluster button (initially hidden)
+    const exitClusterBtn = document.createElement('button');
+    exitClusterBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 100, 100, 0.15);
+      border: 1px solid rgba(255, 100, 100, 0.4);
+      border-radius: 4px;
+      color: #ffaaaa;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    `;
+    exitClusterBtn.innerHTML = `<span style="font-size: 14px;">✖</span> Exit Cluster View`;
+    
+    exitClusterBtn.addEventListener('mouseenter', () => {
+      exitClusterBtn.style.background = 'rgba(255, 100, 100, 0.25)';
+      exitClusterBtn.style.borderColor = 'rgba(255, 100, 100, 0.6)';
+      exitClusterBtn.style.color = '#ffcccc';
+    });
+    exitClusterBtn.addEventListener('mouseleave', () => {
+      exitClusterBtn.style.background = 'rgba(255, 100, 100, 0.15)';
+      exitClusterBtn.style.borderColor = 'rgba(255, 100, 100, 0.4)';
+      exitClusterBtn.style.color = '#ffaaaa';
+    });
+
+    exitClusterBtn.addEventListener('click', async () => {
+      try {
+        if (this.cluster) {
+          await this.cluster.exitToColorView(); // Exit to color view (not toggle)
+          exitClusterBtn.style.display = 'none'; // Hide the button
+          console.log('✅ Exited cluster view, returned to color view');
+        }
+      } catch (error) {
+        console.error('Error exiting cluster view:', error);
+      }
+    });
+
+    panel.appendChild(exitClusterBtn);
+
     let currentSort: 'alpha' | 'count' | 'none' = 'none';
 
     sortAlphaBtn.addEventListener('click', () => {
@@ -946,6 +992,64 @@ export class ToolbarHandlers {
           `;
           label.textContent = `${cat.name.replace('IFC', '')} (${cat.count})`;
 
+          // Create controls container (cluster button + color picker)
+          const controlsContainer = document.createElement('div');
+          controlsContainer.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          `;
+
+          // Create cluster button
+          const clusterBtn = document.createElement('button');
+          clusterBtn.innerHTML = '📊';
+          clusterBtn.title = 'View in cluster mode';
+          clusterBtn.style.cssText = `
+            width: 20px;
+            height: 20px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: all 0.2s;
+            padding: 0;
+          `;
+
+          clusterBtn.addEventListener('mouseenter', () => {
+            clusterBtn.style.background = 'rgba(255, 255, 255, 0.2)';
+            clusterBtn.style.transform = 'scale(1.1)';
+          });
+          clusterBtn.addEventListener('mouseleave', () => {
+            clusterBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+            clusterBtn.style.transform = 'scale(1)';
+          });
+
+          clusterBtn.addEventListener('click', async () => {
+            try {
+              if (this.colorSplash && this.cluster) {
+                // Get the elements for this category
+                const elements = await this.colorSplash.getCategoryElements(cat.selectionName);
+                if (elements) {
+                  // Pass custom colors to cluster module
+                  const categoryColors = this.colorSplash.getCategoryColors();
+                  this.cluster.setCustomColors(categoryColors);
+                  
+                  // Show clusters for just this category
+                  await this.cluster.showFilteredClusters(elements, cat.name);
+                  // Show the exit cluster button
+                  exitClusterBtn.style.display = 'flex';
+                  console.log(`✅ Showing cluster view for ${cat.name}`);
+                }
+              }
+            } catch (error) {
+              console.error('Error showing cluster:', error);
+            }
+          });
+
           // Create a wrapper for the circular color picker
           const colorWrapper = document.createElement('div');
           colorWrapper.style.cssText = `
@@ -996,8 +1100,10 @@ export class ToolbarHandlers {
           });
 
           colorWrapper.appendChild(colorInput);
+          controlsContainer.appendChild(clusterBtn);
+          controlsContainer.appendChild(colorWrapper);
           row.appendChild(label);
-          row.appendChild(colorWrapper);
+          row.appendChild(controlsContainer);
           categoriesContainer.appendChild(row);
         });
 

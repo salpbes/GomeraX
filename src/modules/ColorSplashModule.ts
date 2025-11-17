@@ -255,6 +255,56 @@ export class ColorSplashModule {
   }
 
   /**
+   * Get element IDs for a specific category selection
+   * Returns a map of modelId -> Set of localIds
+   */
+  async getCategoryElements(selectionName: string): Promise<{ [key: string]: Set<number> } | null> {
+    const info = this.categoryInfo.get(selectionName);
+    if (!info) {
+      console.warn(`⚠️ Category ${selectionName} not found`);
+      return null;
+    }
+
+    const model = this.fragmentsManager.list.get(info.modelId);
+    if (!model) {
+      console.warn(`⚠️ Model ${info.modelId} not found`);
+      return null;
+    }
+
+    try {
+      const categoryRegex = new RegExp(`^${info.category}$`);
+      const items = await (model as any).getItemsOfCategories([categoryRegex]);
+      const categoryKey = Object.keys(items).find(key => key.includes(info.category));
+      
+      if (!categoryKey || !items[categoryKey]) {
+        return null;
+      }
+
+      const localIds = items[categoryKey];
+      return {
+        [info.modelId]: new Set(localIds)
+      };
+    } catch (error) {
+      console.error(`❌ Error getting elements for ${selectionName}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get current category colors as a Map<categoryName, THREE.Color>
+   * Used by ClusterModule to apply custom colors in cluster view
+   */
+  getCategoryColors(): Map<string, THREE.Color> {
+    const colorMap = new Map<string, THREE.Color>();
+    
+    for (const [, info] of this.categoryInfo) {
+      colorMap.set(info.category, info.color);
+    }
+    
+    return colorMap;
+  }
+
+  /**
    * Get color for IFC category
    */
   private getCategoryColor(category: string): THREE.Color {
