@@ -736,6 +736,11 @@ export class ToolbarHandlers {
         await this.cluster.toggleClusters(); // Turn off clustering
       }
       
+      // Hide property table if visible
+      if (this.colorSplash) {
+        this.colorSplash.hidePropertyTable();
+      }
+      
       // Update button appearance
       const btn = document.getElementById('clusterMainBtn');
       if (btn) {
@@ -767,6 +772,9 @@ export class ToolbarHandlers {
       if (this.colorSplash.isColorSplashActive()) {
         await this.colorSplash.toggleColorSplash(); // Turn off color splash
       }
+      
+      // Hide property table
+      this.colorSplash.hidePropertyTable();
       
       // Update button appearance
       const btn = document.getElementById('colorSplashMainBtn');
@@ -1020,6 +1028,11 @@ export class ToolbarHandlers {
           this.isInClusterMode = false; // Reset cluster mode flag
           this.selectedCategories.clear(); // Clear selections
           
+          // Hide property table when exiting cluster mode
+          if (this.colorSplash) {
+            this.colorSplash.hidePropertyTable();
+          }
+          
           // Update UI
           const countSpan = document.getElementById('selectedCount');
           if (countSpan) {
@@ -1105,6 +1118,12 @@ export class ToolbarHandlers {
             const label = categoryNames.join(', ');
             await this.cluster.showFilteredClusters(elementsByCategory, label);
             
+            // Update property table with visible elements
+            if (this.colorSplash) {
+              const clusterScene = this.cluster?.getClusterScene();
+              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+            }
+            
             console.log(`✅ Updated cluster view with ${categoryNames.length} categories`);
           }
         }
@@ -1175,6 +1194,12 @@ export class ToolbarHandlers {
             // Show clusters for selected categories (each in its own bounding box)
             const label = categoryNames.join(', ');
             await this.cluster.showFilteredClusters(elementsByCategory, label);
+            
+            // Show property table with visible elements
+            if (this.colorSplash) {
+              const clusterScene = this.cluster?.getClusterScene();
+              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+            }
             
             // Show the exit cluster button and mark as in cluster mode
             exitClusterBtn.style.display = 'flex';
@@ -1436,6 +1461,14 @@ export class ToolbarHandlers {
                   
                   // Show clusters for just this category
                   await this.cluster.showFilteredClusters(elementsByCategory, cat.name);
+                  
+                  // Show property table with visible elements
+                  if (this.colorSplash) {
+                    const clusterScene = this.cluster?.getClusterScene();
+                    console.log('📊 ToolbarHandlers: Passing cluster scene:', !!clusterScene);
+                    await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+                  }
+                  
                   // Show the exit cluster button and mark as in cluster mode
                   exitClusterBtn.style.display = 'flex';
                   this.isInClusterMode = true;

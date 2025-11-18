@@ -1077,6 +1077,13 @@ class ClusterManager {
   }
 
   /**
+   * Get the visualizer (for accessing cluster scene)
+   */
+  getVisualizer(): ClusterVisualizer {
+    return this.visualizer;
+  }
+
+  /**
    * Cleanup resources
    */
   dispose(): void {
@@ -1247,6 +1254,15 @@ export class ClusterModule {
    */
   getClusterManager(): ClusterManager | null {
     return this.clusterManager;
+  }
+
+  /**
+   * Get the cluster scene group for filtering
+   */
+  getClusterScene(): THREE.Group | null {
+    const scene = this.clusterManager?.getVisualizer()?.clusterGroup || null;
+    console.log('📊 ClusterModule.getClusterScene():', !!scene, scene?.name, 'children:', scene?.children.length);
+    return scene;
   }
 
   /**

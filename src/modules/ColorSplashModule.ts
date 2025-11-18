@@ -7,12 +7,14 @@ import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
 import type { WorldManager } from './WorldManager';
+import { PropertyTableModule } from './PropertyTableModule';
 
 export class ColorSplashModule {
   private components: OBC.Components;
   private worldManager: WorldManager;
   private fragmentsManager: OBC.FragmentsManager;
   private highlighter: OBF.Highlighter | null = null;
+  private propertyTable: PropertyTableModule;
   
   /**
    * Tracks whether color splash is currently active
@@ -30,11 +32,18 @@ export class ColorSplashModule {
     categories: Array<{ name: string; color: string; selectionName: string; count: number }>,
     modelGroups: Map<string, Array<{ name: string; color: string; selectionName: string; count: number }>>
   ) => void) | null = null;
+  
+  // Callback for when cluster view is shown (to display property table)
+  public onClusterViewShown: ((elementsByCategory: Map<string, { [key: string]: Set<number> }>) => void) | null = null;
+  
+  // Callback for when cluster view is exited (to hide property table)
+  public onClusterViewExited: (() => void) | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
     this.components = worldManager.getComponents();
     this.fragmentsManager = this.components.get(OBC.FragmentsManager);
+    this.propertyTable = new PropertyTableModule(worldManager);
 
     console.log('✅ ColorSplashModule initialized');
   }
@@ -395,6 +404,31 @@ export class ColorSplashModule {
    */
   isColorSplashActive(): boolean {
     return this.isActive;
+  }
+
+  /**
+   * Show property table with visible elements in cluster view
+   */
+  public async showPropertyTable(elementsByCategory: Map<string, { [key: string]: Set<number> }>, clusterScene?: THREE.Group | null): Promise<void> {
+    // Set cluster scene for filtering if provided
+    if (clusterScene) {
+      this.propertyTable.setClusterScene(clusterScene);
+    }
+    await this.propertyTable.showTable(elementsByCategory);
+  }
+
+  /**
+   * Hide property table
+   */
+  public hidePropertyTable(): void {
+    this.propertyTable.hideTable();
+  }
+
+  /**
+   * Get property table module (for direct access if needed)
+   */
+  public getPropertyTable(): PropertyTableModule {
+    return this.propertyTable;
   }
 
   /**
