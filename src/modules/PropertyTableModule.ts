@@ -30,6 +30,7 @@ export class PropertyTableModule {
   private highlighter: OBF.Highlighter | null = null;
   private allElementIds: number[] = [];
   private clusterScene: THREE.Group | null = null;
+  private clearFiltersBtn: HTMLElement | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
@@ -318,6 +319,31 @@ export class PropertyTableModule {
       align-items: center;
     `;
 
+    // Clear filters button
+    const clearFiltersBtn = document.createElement('button');
+    clearFiltersBtn.innerHTML = '🔄 Clear Filters';
+    clearFiltersBtn.style.cssText = `
+      background: rgba(255, 152, 0, 0.2);
+      border: 1px solid #ff9800;
+      color: #ff9800;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+      display: none;
+    `;
+    clearFiltersBtn.addEventListener('mouseenter', () => {
+      clearFiltersBtn.style.background = 'rgba(255, 152, 0, 0.3)';
+    });
+    clearFiltersBtn.addEventListener('mouseleave', () => {
+      clearFiltersBtn.style.background = 'rgba(255, 152, 0, 0.2)';
+    });
+    clearFiltersBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.clearAllFilters();
+    });
+
     // Export button
     const exportBtn = document.createElement('button');
     exportBtn.innerHTML = '📥 Export CSV';
@@ -379,9 +405,13 @@ export class PropertyTableModule {
       this.hideTable();
     });
 
+    controls.appendChild(clearFiltersBtn);
     controls.appendChild(exportBtn);
     controls.appendChild(collapseIcon);
     controls.appendChild(closeBtn);
+
+    // Store reference to clear filters button
+    this.clearFiltersBtn = clearFiltersBtn;
 
     header.appendChild(title);
     header.appendChild(controls);
@@ -435,6 +465,11 @@ export class PropertyTableModule {
     const countSpan = this.tableContainer.querySelector('#table-count') as HTMLElement;
     if (countSpan) {
       countSpan.textContent = `(${this.currentProperties.length} elements)`;
+    }
+
+    // Show/hide clear filters button based on active filters
+    if (this.clearFiltersBtn) {
+      this.clearFiltersBtn.style.display = this.columnFilters.size > 0 ? 'block' : 'none';
     }
 
     // Get all unique column names
@@ -1096,6 +1131,15 @@ export class PropertyTableModule {
       }
     };
     setTimeout(() => document.addEventListener('click', closeHandler), 0);
+  }
+
+  /**
+   * Clear all column filters
+   */
+  private clearAllFilters(): void {
+    this.columnFilters.clear();
+    this.populateTable(); // Refresh table and restore all opacity
+    console.log('✅ All filters cleared');
   }
 
   /**

@@ -324,78 +324,93 @@ export class ColorSplashModule {
   }
 
   /**
-   * Get color for IFC category
+   * Get color for IFC category - vibrant and highly discriminative colors
    */
   private getCategoryColor(category: string): THREE.Color {
     const colors: { [key: string]: number } = {
-      // Architectural
-      'IFCWALL': 0xf5deb3,  // Wheat/tan color for walls
-      'IFCWALLSTANDARDCASE': 0xe6c89c,  // Lighter tan
-      'IFCSLAB': 0xa0a0a0,  // Concrete gray for slabs
-      'IFCBEAM': 0xff6b6b,
-      'IFCCOLUMN': 0x4ecdc4,
-      'IFCDOOR': 0x8b4513,
-      'IFCWINDOW': 0x87ceeb,
-      'IFCROOF': 0x8b0000,
-      'IFCSTAIR': 0xffd700,
-      'IFCSTAIRFLIGHT': 0xffaa00,
-      'IFCRAILING': 0xc0c0c0,
-      'IFCFURNISHINGELEMENT': 0x9b59b6,
-      'IFCFOOTING': 0x654321,
-      'IFCRAMP': 0xff9900,
-      'IFCRAMPFLIGHT': 0xff7700,
-      // MEP - HVAC (Blue tones)
-      'IFCDUCTFITTING': 0x4169e1,
-      'IFCDUCTSEGMENT': 0x6495ed,
-      'IFCDUCT': 0x4682b4,
-      'IFCAIRTERM': 0x87ceeb,
-      'IFCAIRTERMINAL': 0x87ceeb,
-      'IFCDAMPER': 0x5f9ea0,
-      'IFCFAN': 0x00ced1,
-      'IFCCOIL': 0x4169e1,
-      'IFCCHILLER': 0x1e90ff,
-      'IFCBOILER': 0xff4500,
-      'IFCHEATER': 0xff6347,
-      // MEP - Piping (Green/Cyan tones)
-      'IFCPIPEFITTING': 0x20b2aa,
-      'IFCPIPESEGMENT': 0x3cb371,
-      'IFCPIPE': 0x2e8b57,
-      'IFCVALVE': 0x00fa9a,
-      'IFCPUMP': 0x40e0d0,
-      'IFCFLOWMETER': 0x48d1cc,
-      'IFCFILTER': 0x00ff7f,
-      'IFCTANK': 0x5f9ea0,
-      // MEP - Electrical (Yellow/Orange tones)
-      'IFCCABLEFITTING': 0xffa500,
-      'IFCCABLESEGMENT': 0xff8c00,
-      'IFCCABLE': 0xffd700,
-      'IFCCABLECARRIERFITTING': 0xffb90f,
-      'IFCCABLECARRIERSEGMENT': 0xdaa520,
-      'IFCCABLETRAY': 0xf0e68c,
-      'IFCRACEWAY': 0xeee8aa,
-      'IFCLIGHTFIXTURE': 0xffff00,
-      'IFCLIGHT': 0xffffe0,
-      'IFCOUTLET': 0xffa500,
-      'IFCSWITCH': 0xff8c00,
-      'IFCTRANSFORMER': 0xff4500,
-      'IFCMOTOR': 0xdb7093,
-      'IFCPROTECTIVEDEVICE': 0xff6347,
-      'IFCJUNCTIONBOX': 0xcd853f,
-      // MEP - Controls (Purple/Pink tones)
-      'IFCSENSOR': 0xda70d6,
-      'IFCCONTROLLER': 0xba55d3,
-      'IFCACTUATOR': 0x9370db,
-      'IFCALARM': 0xff1493,
-      // MEP - General Equipment
-      'IFCEQUIPMENT': 0x808080,
-      'IFCFLOWFITTING': 0x696969,
-      'IFCFLOWSEGMENT': 0x778899,
-      'IFCFLOWTERMINAL': 0x708090,
-      'IFCFLOWCONTROLLER': 0x2f4f4f,
-      'IFCDISTRIBUTIONELEMENT': 0x696969,
+      // Architectural - Vibrant distinct colors
+      'IFCWALL': 0xFFE066,  // Bright yellow for walls
+      'IFCWALLSTANDARDCASE': 0xFFD700,  // Gold
+      'IFCSLAB': 0xB0B0B0,  // Light gray for slabs
+      'IFCBEAM': 0xFF3366,  // Bright red-pink
+      'IFCCOLUMN': 0x00D9FF,  // Bright cyan
+      'IFCDOOR': 0x8B4513,  // Saddle brown
+      'IFCWINDOW': 0x00BFFF,  // Deep sky blue
+      'IFCROOF': 0xDC143C,  // Crimson red
+      'IFCSTAIR': 0xFF6F00,  // Vivid orange
+      'IFCSTAIRFLIGHT': 0xFF8C00,  // Dark orange
+      'IFCRAILING': 0xE0E0E0,  // Light gray
+      'IFCFURNISHINGELEMENT': 0xAB47BC,  // Bright purple
+      'IFCFOOTING': 0x795548,  // Brown
+      'IFCRAMP': 0xFFA726,  // Bright orange
+      'IFCRAMPFLIGHT': 0xFF9800,  // Orange
+      'IFCCURTAINWALL': 0x26C6DA,  // Bright light blue
+      'IFCPLATE': 0x90CAF9,  // Light blue
+      'IFCCOVERING': 0xFFAB91,  // Light orange
+      
+      // MEP - HVAC (Vibrant blue spectrum)
+      'IFCDUCTFITTING': 0x2196F3,  // Bright blue
+      'IFCDUCTSEGMENT': 0x42A5F5,  // Light bright blue
+      'IFCDUCT': 0x1976D2,  // Dark blue
+      'IFCAIRTERM': 0x03A9F4,  // Light blue
+      'IFCAIRTERMINAL': 0x00B0FF,  // Bright light blue
+      'IFCDAMPER': 0x0288D1,  // Medium blue
+      'IFCFAN': 0x00E5FF,  // Cyan bright
+      'IFCCOIL': 0x2979FF,  // Bright blue
+      'IFCCHILLER': 0x00C853,  // Bright green
+      'IFCBOILER': 0xFF5722,  // Deep orange/red
+      'IFCHEATER': 0xFF6E40,  // Bright orange
+      'IFCHUMIDIFIER': 0x26C6DA,  // Light cyan
+      
+      // MEP - Piping (Vibrant green spectrum)
+      'IFCPIPEFITTING': 0x00E676,  // Bright green
+      'IFCPIPESEGMENT': 0x4CAF50,  // Green
+      'IFCPIPE': 0x2E7D32,  // Dark green
+      'IFCVALVE': 0x00FF00,  // Lime green
+      'IFCPUMP': 0x1DE9B6,  // Bright teal
+      'IFCFLOWMETER': 0x00BFA5,  // Teal
+      'IFCFILTER': 0x64DD17,  // Light green
+      'IFCTANK': 0x00897B,  // Dark teal
+      
+      // MEP - Electrical (Vibrant yellow/orange spectrum)
+      'IFCCABLEFITTING': 0xFFAB00,  // Amber
+      'IFCCABLESEGMENT': 0xFF9100,  // Deep orange
+      'IFCCABLE': 0xFFD600,  // Bright yellow
+      'IFCCABLECARRIERFITTING': 0xFFEA00,  // Yellow
+      'IFCCABLECARRIERSEGMENT': 0xFFC107,  // Amber
+      'IFCCABLETRAY': 0xFFB300,  // Amber orange
+      'IFCRACEWAY': 0xFFD54F,  // Light amber
+      'IFCLIGHTFIXTURE': 0xFFFF00,  // Pure yellow
+      'IFCLIGHT': 0xFFFF8D,  // Light yellow
+      'IFCOUTLET': 0xFF6F00,  // Orange
+      'IFCSWITCH': 0xFF9800,  // Orange
+      'IFCTRANSFORMER': 0xF57C00,  // Dark orange
+      'IFCMOTOR': 0xFF4081,  // Pink
+      'IFCPROTECTIVEDEVICE': 0xE91E63,  // Pink red
+      'IFCJUNCTIONBOX': 0xFFB74D,  // Light orange
+      
+      // MEP - Controls (Vibrant purple/magenta spectrum)
+      'IFCSENSOR': 0xE040FB,  // Bright purple
+      'IFCCONTROLLER': 0xAB47BC,  // Purple
+      'IFCACTUATOR': 0x9C27B0,  // Deep purple
+      'IFCALARM': 0xFF1744,  // Bright red
+      
+      // MEP - General Equipment (Distinct grays and mixed)
+      'IFCEQUIPMENT': 0x9E9E9E,  // Gray
+      'IFCFLOWFITTING': 0x757575,  // Dark gray
+      'IFCFLOWSEGMENT': 0xBDBDBD,  // Light gray
+      'IFCFLOWTERMINAL': 0x78909C,  // Blue gray
+      'IFCFLOWCONTROLLER': 0x546E7A,  // Dark blue gray
+      'IFCDISTRIBUTIONELEMENT': 0x90A4AE,  // Blue gray light
+      
+      // Additional architectural elements
+      'IFCSPACE': 0xE3F2FD,  // Very light blue (transparent-ish)
+      'IFCSITE': 0x8D6E63,  // Brown gray
+      'IFCBUILDING': 0xBCAAA4,  // Light brown gray
+      'IFCBUILDINGSTOREY': 0xD7CCC8,  // Very light brown
     };
     
-    const colorHex = colors[category] || 0x808080;
+    const colorHex = colors[category] || 0x9E9E9E;  // Medium gray default
     return new THREE.Color(colorHex);
   }
 

@@ -400,6 +400,8 @@ class ClusterManager {
         if (box && !box.isEmpty()) {
           console.log(`  ✅ Got bounding box from getMergedBox`);
           return box;
+        } else {
+          console.warn(`  ⚠️ getMergedBox returned empty box`);
         }
       }
       
@@ -408,10 +410,44 @@ class ClusterManager {
         const boxes = await model.getBoxes(itemIds);
         if (boxes && boxes.length > 0) {
           const mergedBox = new THREE.Box3();
+          let validBoxCount = 0;
           for (const box of boxes) {
-            mergedBox.union(box);
+            if (box && !box.isEmpty()) {
+              mergedBox.union(box);
+              validBoxCount++;
+            }
           }
-          console.log(`  ✅ Merged ${boxes.length} bounding boxes from getBoxes`);
+          if (!mergedBox.isEmpty()) {
+            console.log(`  ✅ Merged ${validBoxCount}/${boxes.length} valid bounding boxes from getBoxes`);
+            return mergedBox;
+          } else {
+            console.warn(`  ⚠️ All boxes from getBoxes were empty (${boxes.length} total)`);
+          }
+        }
+      }
+      
+      // Try to get geometry data directly from fragments
+      if (model.object && model.object.children) {
+        console.log(`  🔍 Attempting to calculate box from fragment geometry...`);
+        const mergedBox = new THREE.Box3();
+        let foundGeometry = false;
+        
+        model.object.traverse((child: THREE.Object3D) => {
+          if (child instanceof THREE.Mesh && child.geometry) {
+            // Check if this mesh belongs to one of our items
+            const expressID = child.userData?.expressID;
+            if (expressID && itemIds.includes(expressID)) {
+              const childBox = new THREE.Box3().setFromObject(child);
+              if (!childBox.isEmpty()) {
+                mergedBox.union(childBox);
+                foundGeometry = true;
+              }
+            }
+          }
+        });
+        
+        if (foundGeometry && !mergedBox.isEmpty()) {
+          console.log(`  ✅ Calculated bounding box from fragment geometry`);
           return mergedBox;
         }
       }
@@ -621,11 +657,42 @@ class ClusterManager {
       try {
         // Get the Item object using OBC API - this preserves IFC grouping
         const item = model.getItem(itemId);
+        if (!item) {
+          console.warn(`  ⚠️ Item ${itemId} not found in model`);
+          continue;
+        }
+        
+        // Check if item has geometry method
+        if (typeof item.getGeometry !== 'function') {
+          console.warn(`  ⚠️ Item ${itemId} does not have getGeometry method`);
+          continue;
+        }
+        
         const itemGeometry = await item.getGeometry();
+        if (!itemGeometry) {
+          console.warn(`  ⚠️ Item ${itemId} returned null geometry`);
+          continue;
+        }
+        
+        // Check if itemGeometry has get method and is iterable
+        if (typeof itemGeometry.get !== 'function') {
+          console.warn(`  ⚠️ Item ${itemId} geometry does not have get method`);
+          continue;
+        }
         
         // Get all geometry parts for this item
-        const geometries = await itemGeometry.get();
-        if (!geometries || geometries.length === 0) continue;
+        let geometries;
+        try {
+          geometries = await itemGeometry.get();
+        } catch (geomError) {
+          console.warn(`  ⚠️ Item ${itemId} failed to get geometries:`, geomError);
+          continue;
+        }
+        
+        if (!geometries || geometries.length === 0) {
+          console.warn(`  ⚠️ Item ${itemId} has no geometries`);
+          continue;
+        }
         
         // Create a group for this item (keeps all parts together)
         const itemGroup = new THREE.Group();
@@ -636,6 +703,8 @@ class ClusterManager {
         itemGroup.userData.modelId = cluster.modelId;
         itemGroup.userData.expressID = itemId;
         itemGroup.userData.category = cluster.category;
+        
+        let meshCount = 0;
         
         // Create meshes for each geometry part
         for (const meshData of geometries) {
@@ -668,6 +737,13 @@ class ClusterManager {
           mesh.userData.category = cluster.category;
           
           itemGroup.add(mesh);
+          meshCount++;
+        }
+        
+        // Skip items with no valid meshes
+        if (meshCount === 0) {
+          console.warn(`  ⚠️ Item ${itemId} has no valid meshes`);
+          continue;
         }
         
         // Calculate bounding box for this complete item
@@ -857,7 +933,7 @@ class ClusterManager {
 
     // Fall back to default colors
     const colors: { [key: string]: number } = {
-      // Architectural
+      // Architectural - Primary Structure
       'IFCWALL': 0xcccccc,
       'IFCWALLSTANDARDCASE': 0xaaaaaa,
       'IFCSLAB': 0x888888,
@@ -873,6 +949,22 @@ class ClusterManager {
       'IFCFOOTING': 0x654321,
       'IFCRAMP': 0xff9900,
       'IFCRAMPFLIGHT': 0xff7700,
+      
+      // Architectural - Secondary Structure & Envelope
+      'IFCCURTAINWALL': 0x26C6DA,
+      'IFCPLATE': 0x90CAF9,
+      'IFCPLATESTANDARDCASE': 0x64B5F6,
+      'IFCCOVERING': 0xFFAB91,
+      'IFCMEMBER': 0xFF8A65,
+      'IFCMEMBERSTANDARDCASE': 0xFF7043,
+      'IFCBUILDINGELEMENTPROXY': 0xBCAAA4,
+      
+      // Spatial Elements
+      'IFCSPACE': 0xE3F2FD,
+      'IFCSITE': 0x8D6E63,
+      'IFCBUILDING': 0xBCAAA4,
+      'IFCBUILDINGSTOREY': 0xD7CCC8,
+      
       // MEP - HVAC (Blue tones)
       'IFCDUCTFITTING': 0x4169e1,
       'IFCDUCTSEGMENT': 0x6495ed,
