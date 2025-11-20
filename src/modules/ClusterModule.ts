@@ -402,6 +402,23 @@ class ClusterManager {
           return box;
         } else {
           console.warn(`  ⚠️ getMergedBox returned empty box`);
+          
+          // Fallback: Check for children if box is empty (e.g. for Curtain Walls)
+          if (typeof model.getItemsChildren === 'function') {
+             try {
+               const children = await model.getItemsChildren(itemIds);
+               if (children && children.length > 0) {
+                  console.log(`  Found ${children.length} children, trying to get their box...`);
+                  const childrenBox = await model.getMergedBox(children);
+                  if (childrenBox && !childrenBox.isEmpty()) {
+                     console.log(`  ✅ Got bounding box from children`);
+                     return childrenBox;
+                  }
+               }
+             } catch (childError) {
+               console.warn(`  ⚠️ Failed to get children box:`, childError);
+             }
+          }
         }
       }
       
@@ -662,28 +679,24 @@ class ClusterManager {
           continue;
         }
         
-        // Check if item has geometry method
-        if (typeof item.getGeometry !== 'function') {
-          console.warn(`  ⚠️ Item ${itemId} does not have getGeometry method`);
-          continue;
-        }
-        
-        const itemGeometry = await item.getGeometry();
-        if (!itemGeometry) {
-          console.warn(`  ⚠️ Item ${itemId} returned null geometry`);
-          continue;
-        }
-        
-        // Check if itemGeometry has get method and is iterable
-        if (typeof itemGeometry.get !== 'function') {
-          console.warn(`  ⚠️ Item ${itemId} geometry does not have get method`);
-          continue;
-        }
-        
         // Get all geometry parts for this item
         let geometries;
         try {
-          geometries = await itemGeometry.get();
+          // Try getting geometry directly using model API
+          const geometriesArray = await model.getItemsGeometry([itemId]);
+          if (geometriesArray && geometriesArray.length > 0) {
+            geometries = geometriesArray[0];
+          }
+          
+          // If no geometry, try getting children (e.g. for IFCCURTAINWALL which is an assembly)
+          if (!geometries || geometries.length === 0) {
+            const children = await model.getItemsChildren([itemId]);
+            if (children && children.length > 0) {
+              const childrenGeometriesArray = await model.getItemsGeometry(children);
+              // Flatten the array of arrays to get all meshes from all children
+              geometries = childrenGeometriesArray.flat();
+            }
+          }
         } catch (geomError) {
           console.warn(`  ⚠️ Item ${itemId} failed to get geometries:`, geomError);
           continue;
@@ -1287,8 +1300,10 @@ export class ClusterModule {
     // Generate clusters for the filtered elements
     await this.clusterManager.generateFilteredClusters(filteredElementsByCategory, categoryName);
     
-    if (this.clusterManager.getTotalClusterCount() === 0) {
+    const totalClusters = this.clusterManager.getTotalClusterCount();
+    if (totalClusters === 0) {
       console.warn(`⚠️ No clusters generated for ${categoryName}.`);
+      alert(`Cannot visualize ${categoryName}\n\nThe ${categoryName} elements in this model cannot be visualized in cluster view due to geometry data limitations in the IFC file.\n\nYou can still view the property table for these ${filteredElementsByCategory.get(categoryName)?.expressIDs?.size || 0} elements.`);
       return;
     }
 
