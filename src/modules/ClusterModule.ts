@@ -222,6 +222,62 @@ class ClusterVisualizer {
   }
 
   /**
+   * Animate clusters entering the scene
+   */
+  animateEntry(duration: number = 500): void {
+    const start = performance.now();
+    const initialScale = 0.01;
+    this.clusterGroup.scale.set(initialScale, initialScale, initialScale);
+    
+    const animate = () => {
+      const now = performance.now();
+      const progress = Math.min((now - start) / duration, 1);
+      
+      // Ease out cubic
+      const ease = 1 - Math.pow(1 - progress, 3);
+      
+      const scale = initialScale + (1 - initialScale) * ease;
+      this.clusterGroup.scale.set(scale, scale, scale);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }
+
+  /**
+   * Animate clusters exiting the scene
+   */
+  animateExit(duration: number = 400, onComplete?: () => void): void {
+    const start = performance.now();
+    
+    const animate = () => {
+      const now = performance.now();
+      const progress = Math.min((now - start) / duration, 1);
+      
+      // Ease in cubic
+      const ease = Math.pow(progress, 3);
+      
+      const scale = 1 - ease;
+      // Prevent going to exactly 0 to avoid matrix singular warnings
+      const safeScale = Math.max(scale, 0.001);
+      this.clusterGroup.scale.set(safeScale, safeScale, safeScale);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        if (onComplete) onComplete();
+        // Reset scale for next time
+        this.clusterGroup.scale.set(1, 1, 1);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }
+
+  /**
    * Cleanup resources
    */
   dispose(): void {
@@ -1098,6 +1154,9 @@ class ClusterManager {
   async visualizeClusters(hideAllModels: boolean = false): Promise<void> {
     console.log('🎨 Visualizing clusters...');
 
+    // Prepare for animation (start small)
+    this.visualizer.clusterGroup.scale.set(0.01, 0.01, 0.01);
+
     // Move geometry to cluster positions (this also calculates positions)
     await this.moveToClusterPositions(hideAllModels);
 
@@ -1120,6 +1179,9 @@ class ClusterManager {
       }
     }
 
+    // Animate clusters entering
+    this.visualizer.animateEntry();
+
     console.log('✅ Cluster visualization complete');
   }
 
@@ -1129,21 +1191,27 @@ class ClusterManager {
   async clearClusters(): Promise<void> {
     console.log('🧹 Clearing clusters...');
     
-    // Restore original positions
-    await this.restoreOriginalPositions();
+    return new Promise<void>((resolve) => {
+      // Animate clusters exiting
+      this.visualizer.animateExit(400, async () => {
+        // Restore original positions
+        await this.restoreOriginalPositions();
 
-    // Clear visuals
-    this.visualizer.clearVisuals();
+        // Clear visuals
+        this.visualizer.clearVisuals();
 
-    // Clear cluster data
-    for (const clusters of this.clusters.values()) {
-      for (const cluster of clusters) {
-        cluster.visualHelper = null;
-        cluster.clusterPosition = null;
-      }
-    }
+        // Clear cluster data
+        for (const clusters of this.clusters.values()) {
+          for (const cluster of clusters) {
+            cluster.visualHelper = null;
+            cluster.clusterPosition = null;
+          }
+        }
 
-    console.log('✅ Clusters cleared');
+        console.log('✅ Clusters cleared');
+        resolve();
+      });
+    });
   }
 
   /**
@@ -1245,6 +1313,47 @@ export class ClusterModule {
   }
 
   /**
+   * Fit camera to view all clusters
+   */
+  private async fitToClusters(): Promise<void> {
+    if (!this.clusterManager || !this.world.camera.controls) return;
+    
+    const clusterGroup = this.clusterManager.getVisualizer().clusterGroup;
+    if (clusterGroup.children.length === 0) return;
+    
+    // Temporarily reset scale to 1 to get correct bounding box
+    // (Animation might have set it to ~0.01)
+    const currentScale = clusterGroup.scale.clone();
+    clusterGroup.scale.set(1, 1, 1);
+    clusterGroup.updateMatrixWorld(true);
+    
+    const box = new THREE.Box3().setFromObject(clusterGroup);
+    
+    // Restore scale so animation continues smoothly
+    clusterGroup.scale.copy(currentScale);
+    clusterGroup.updateMatrixWorld(true);
+    
+    if (box.isEmpty()) return;
+    
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const distance = maxDim * 1.5; // Increased zoom factor for better overview
+    
+    const cameraPos = new THREE.Vector3(
+      center.x + distance * 0.7,
+      center.y + distance * 0.5,
+      center.z + distance * 0.7
+    );
+
+    await this.world.camera.controls.setLookAt(
+      cameraPos.x, cameraPos.y, cameraPos.z,
+      center.x, center.y, center.z,
+      true // animate
+    );
+  }
+
+  /**
    * Toggle cluster view on/off
    */
   async toggleClusters(): Promise<void> {
@@ -1275,6 +1384,10 @@ export class ClusterModule {
 
       await this.clusterManager.visualizeClusters();
       this.isActive = true;
+      
+      // Fit camera to clusters
+      await this.fitToClusters();
+      
       console.log('✅ Cluster view enabled');
     }
   }
@@ -1310,6 +1423,10 @@ export class ClusterModule {
     // Pass hideAllModels=true to hide all models (not just the filtered one)
     await this.clusterManager.visualizeClusters(true);
     this.isActive = true;
+    
+    // Fit camera to clusters
+    await this.fitToClusters();
+    
     console.log(`✅ Cluster view enabled for ${categoryName}`);
   }
 
@@ -1326,6 +1443,12 @@ export class ClusterModule {
       // Clear clusters and restore all models
       await this.clusterManager.clearClusters();
       this.isActive = false;
+      
+      // Fit camera to view all models
+      if (this.modelTransform) {
+        await this.modelTransform.fitCameraToModels();
+      }
+      
       console.log('✅ Exited cluster view, restored color view');
     }
   }
