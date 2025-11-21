@@ -13,6 +13,7 @@
 
 import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
+import * as FRAGS from '@thatopen/fragments';
 import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
 import { IFCLoaderModule } from './IFCLoaderModule';
@@ -32,11 +33,13 @@ export class PropertiesPanelModule {
   private treeExpandTab: HTMLDivElement | null = null;
   private propsExpandTab: HTMLDivElement | null = null;
   private clusterModule: ClusterModule | null = null;
+  private worldManager: WorldManager;
   
   // Store storey data for dashboard
   public storeyData: { [storeyName: string]: { [category: string]: number } } = {};
 
   constructor(worldManager: WorldManager, private ifcLoader: IFCLoaderModule) {
+    this.worldManager = worldManager;
     this.components = worldManager.getComponents();
     this.mouse = new THREE.Vector2();
   }
@@ -89,6 +92,15 @@ export class PropertiesPanelModule {
     try {
       this.highlighter = this.components.get(OBCF.Highlighter);
       await this.highlighter.setup({ world });
+      
+      // Add translucent style for context
+      this.highlighter.styles.set('translucent', {
+        color: new THREE.Color(0xcccccc),
+        transparent: true,
+        opacity: 0.2,
+        depthTest: true,
+        renderedFaces: FRAGS.RenderedFaces.TWO
+      });
     } catch (error) {
       console.warn('Highlighter not available');
     }
@@ -105,6 +117,47 @@ export class PropertiesPanelModule {
 
     const container = this.world.renderer?.three.domElement;
     if (!container) return;
+
+    // Middle mouse double click to fit view
+    let lastMiddleClickTime = 0;
+    container.addEventListener('mousedown', async (event) => {
+      if (event.button === 1) { // Middle mouse button
+        const currentTime = new Date().getTime();
+        const timeDiff = currentTime - lastMiddleClickTime;
+        
+        if (timeDiff < 300) { // Double click detected (300ms threshold)
+          console.log('🖱️ Middle mouse double click - Fitting to view');
+          
+          if (this.world?.camera?.controls && this.fragmentsManager) {
+            // Get all models to calculate bounding box
+            const bbox = new THREE.Box3();
+            let hasModels = false;
+            
+            // Iterate over all models
+            for (const model of this.fragmentsManager.list.values()) {
+               if (model) {
+                 try {
+                   // @ts-ignore
+                   const modelBox = await model.getMergedBox();
+                   if (modelBox && !modelBox.isEmpty()) {
+                     bbox.union(modelBox);
+                     hasModels = true;
+                   }
+                 } catch (e) {
+                   console.warn('Could not get model box', e);
+                 }
+               }
+            }
+            
+            if (hasModels && !bbox.isEmpty()) {
+               await this.world.camera.controls.fitToBox(bbox, true);
+            }
+          }
+        }
+        
+        lastMiddleClickTime = currentTime;
+      }
+    });
 
     container.addEventListener('click', async (event) => {
       // Don't process clicks in floor plan mode to allow camera controls
@@ -1389,7 +1442,8 @@ export class PropertiesPanelModule {
     `;
     
     // Build the spatial structure nodes inside the model node
-    html += await this.buildSpatialNode(model, modelId, spatialStructure, 0);
+    const { html: spatialHtml } = await this.buildSpatialNode(model, modelId, spatialStructure, 0);
+    html += spatialHtml;
     
     html += `
         </ul>
@@ -1402,8 +1456,8 @@ export class PropertiesPanelModule {
   /**
    * Builds a tree node from spatial structure recursively
    */
-  private async buildSpatialNode(model: any, modelId: string, node: any, level: number = 0): Promise<string> {
-    if (!node) return '';
+  private async buildSpatialNode(model: any, modelId: string, node: any, level: number = 0): Promise<{ html: string, ids: number[] }> {
+    if (!node) return { html: '', ids: [] };
     
     const localId = node.localId || node._localId?.value;
     const category = node.category || node._category?.value || 'UNKNOWN';
@@ -1460,26 +1514,33 @@ export class PropertiesPanelModule {
     
     const children = node.children || [];
     const icon = this.getCategoryIcon(category);
-    const hasChildren = children.length > 0;
+    
+    // Collect IDs from this node and children
+    let collectedIds: number[] = [];
+    if (localId) collectedIds.push(localId);
+
+    // Pre-fetch storey elements if applicable
+    let storeyHtml = '';
+    let storeyIds: number[] = [];
+    if (category === 'IFCBUILDINGSTOREY' && localId) {
+       const result = await this.addElementsForStorey(model, modelId, localId, name);
+       storeyHtml = result.html;
+       storeyIds = result.ids;
+       collectedIds.push(...storeyIds);
+    }
+
+    const hasChildren = children.length > 0 || storeyIds.length > 0;
     const isExpanded = level < 2; // Auto-expand first 2 levels (Project, Site, Building)
-    
-    let html = `
-      <li class="tree-node spatial-node ${isExpanded ? 'expanded' : ''}">
-        <div class="tree-node-content ${localId ? 'selectable' : ''}" ${hasChildren ? 'data-toggle="true"' : ''} ${localId ? `data-model-id="${modelId}" data-local-id="${localId}"` : ''}>
-          ${hasChildren ? `<span class="tree-toggle"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></span>` : '<span class="tree-spacer"></span>'}
-          <span class="tree-icon"><i class="${icon}"></i></span>
-          <span class="tree-label" title="${name}">${name}</span>
-          ${children.length > 0 ? `<span class="tree-count">(${children.length})</span>` : ''}
-        </div>
-    `;
-    
+
+    let childrenHtml = '';
     if (hasChildren) {
-      html += '<ul class="tree-children">';
+      childrenHtml += '<ul class="tree-children">';
       
       // Process children recursively
       for (const child of children) {
-        const childHtml = await this.buildSpatialNode(model, modelId, child, level + 1);
-        html += childHtml;
+        const { html: childHtml, ids: childIds } = await this.buildSpatialNode(model, modelId, child, level + 1);
+        childrenHtml += childHtml;
+        collectedIds.push(...childIds);
         
         // If this is the IFCBUILDINGSTOREY grouping node, also add elements for each storey child
         if (category === 'IFCBUILDINGSTOREY' && !localId) {
@@ -1491,12 +1552,35 @@ export class PropertiesPanelModule {
         }
       }
       
-      html += '</ul>';
+      // Append the elements found in the storey
+      childrenHtml += storeyHtml;
+
+      childrenHtml += '</ul>';
     }
     
+    let html = `
+      <li class="tree-node spatial-node ${isExpanded ? 'expanded' : ''}">
+        <div class="tree-node-content ${localId ? 'selectable' : ''}" ${hasChildren ? 'data-toggle="true"' : ''} data-model-id="${modelId}" ${localId ? `data-local-id="${localId}"` : ''} data-ids="${collectedIds.join(',')}">
+          ${hasChildren ? `<span class="tree-toggle"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></span>` : '<span class="tree-spacer"></span>'}
+          <span class="tree-icon"><i class="${icon}"></i></span>
+          <span class="tree-label" title="${name}">${name}</span>
+          ${children.length > 0 ? `<span class="tree-count">(${children.length})</span>` : ''}
+          
+          <div class="tree-actions">
+            <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
+              <i class="fas fa-eye"></i>
+            </button>
+            <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
+              <i class="fas fa-crosshairs"></i>
+            </button>
+          </div>
+        </div>
+    `;
+    
+    html += childrenHtml;
     html += '</li>';
     
-    return html;
+    return { html, ids: collectedIds };
   }
 
   /**
@@ -1661,8 +1745,9 @@ export class PropertiesPanelModule {
   /**
    * Adds IFC elements grouped by category for a specific storey
    */
-  private async addElementsForStorey(model: any, modelId: string, storeyLocalId: number, storeyName?: string): Promise<string> {
+  private async addElementsForStorey(model: any, modelId: string, storeyLocalId: number, storeyName?: string): Promise<{ html: string, ids: number[] }> {
     let html = '';
+    let collectedIds: number[] = [];
     
     try {
       // Get all categories
@@ -1672,7 +1757,7 @@ export class PropertiesPanelModule {
       const spatialCategories = ['IFCPROJECT', 'IFCSITE', 'IFCBUILDING', 'IFCBUILDINGSTOREY', 'IFCSPACE'];
       const elementCategories = categories.filter((cat: string) => !spatialCategories.includes(cat));
       
-      if (elementCategories.length === 0) return html;
+      if (elementCategories.length === 0) return { html, ids: collectedIds };
       
       // Get items for each category
       const categoryRegexps = elementCategories.map((cat: string) => new RegExp(`^${cat}$`));
@@ -1688,7 +1773,7 @@ export class PropertiesPanelModule {
       // For each category, filter items that belong to this storey
       for (const [category, allLocalIds] of Object.entries(itemsByCategory)) {
         const ids = allLocalIds as number[];
-        console.log(`📊 [${storeyName}] Category ${category}: ${ids.length} total items`);
+        // console.log(`📊 [${storeyName}] Category ${category}: ${ids.length} total items`);
         if (ids.length === 0) continue;
         
         // Check which items belong to this storey by checking their ContainedInStructure relation
@@ -1703,14 +1788,6 @@ export class PropertiesPanelModule {
             },
           });
           
-          console.log(`📊 [${storeyName}] Got ${itemsData.length} items data for ${category}`);
-          
-          // Debug: Log the first item's structure to understand the relationship
-          if (itemsData.length > 0 && category === 'IFCDOOR') {
-            console.log(`📊 [${storeyName}] Sample ${category} data structure:`, itemsData[0]);
-            console.log(`📊 [${storeyName}] ContainedInStructure:`, itemsData[0].ContainedInStructure);
-          }
-          
           for (let i = 0; i < itemsData.length; i++) {
             const data = itemsData[i];
             const localId = ids[i];
@@ -1719,47 +1796,50 @@ export class PropertiesPanelModule {
             if (data.ContainedInStructure && Array.isArray(data.ContainedInStructure)) {
               const isInStorey = data.ContainedInStructure.some((rel: any) => {
                 const relLocalId = rel._localId?.value || rel.localId;
-                if (i === 0 && category === 'IFCDOOR') {
-                  console.log(`📊 [${storeyName}] Checking door relationship - rel:`, rel, 'looking for:', storeyLocalId);
-                }
                 return relLocalId === storeyLocalId;
               });
               
               if (isInStorey) {
                 itemsInStorey.push(localId);
               }
-            } else if (i === 0 && category === 'IFCDOOR') {
-              console.log(`📊 [${storeyName}] No ContainedInStructure found for first door`);
             }
           }
           
-          console.log(`📊 [${storeyName}] Found ${itemsInStorey.length} items in storey for ${category}`);
+          // console.log(`📊 [${storeyName}] Found ${itemsInStorey.length} items in storey for ${category}`);
         } catch (error) {
           console.warn(`⚠️ [${storeyName}] Could not filter items for category ${category}:`, error);
-          // Don't include all items on error - this causes incorrect counts
-          // itemsInStorey.push(...ids);
         }
         
         if (itemsInStorey.length === 0) {
-          console.log(`📊 [${storeyName}] Skipping ${category} - no items found in this storey`);
           continue;
         }
+
+        // Add to collected IDs
+        collectedIds.push(...itemsInStorey);
         
         // Store count in storeyData for dashboard
         if (storeyName) {
           this.storeyData[storeyName][category] = (this.storeyData[storeyName][category] || 0) + itemsInStorey.length;
-          console.log(`📊 Stored: ${storeyName} - ${category}: ${itemsInStorey.length}`);
         }
         
         // Add category node
         const categoryIcon = this.getCategoryIcon(category);
         html += `
           <li class="tree-node category-node">
-            <div class="tree-node-content" data-toggle="true">
+            <div class="tree-node-content" data-toggle="true" data-model-id="${modelId}" data-category="${category}" data-ids="${itemsInStorey.join(',')}">
               <span class="tree-toggle"><i class="fas fa-chevron-right"></i></span>
               <span class="tree-icon"><i class="${categoryIcon}"></i></span>
               <span class="tree-label">${category}</span>
               <span class="tree-count">(${itemsInStorey.length})</span>
+              
+              <div class="tree-actions">
+                <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
+                  <i class="fas fa-crosshairs"></i>
+                </button>
+              </div>
             </div>
             <ul class="tree-children">
         `;
@@ -1792,6 +1872,15 @@ export class PropertiesPanelModule {
                   <span class="tree-spacer"></span>
                   <span class="tree-icon"><i class="fas fa-cube"></i></span>
                   <span class="tree-label">${itemName}</span>
+                  
+                  <div class="tree-actions">
+                    <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
+                      <i class="fas fa-crosshairs"></i>
+                    </button>
+                  </div>
                 </div>
               </li>
             `;
@@ -1809,7 +1898,7 @@ export class PropertiesPanelModule {
       console.warn(`⚠️ Could not add elements for storey ${storeyLocalId}:`, error);
     }
     
-    return html;
+    return { html, ids: collectedIds };
   }
 
   /**
@@ -1852,11 +1941,20 @@ export class PropertiesPanelModule {
         
         html += `
           <li class="tree-node category-node">
-            <div class="tree-node-content" data-toggle="true">
+            <div class="tree-node-content" data-toggle="true" data-model-id="${modelId}" data-category="${category}" data-ids="${ids.join(',')}">
               <span class="tree-toggle"><i class="fas fa-chevron-right"></i></span>
               <span class="tree-icon"><i class="${categoryIcon}"></i></span>
               <span class="tree-label">${category}</span>
               <span class="tree-count">(${ids.length})</span>
+              
+              <div class="tree-actions">
+                <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
+                  <i class="fas fa-crosshairs"></i>
+                </button>
+              </div>
             </div>
             <ul class="tree-children">
         `;
@@ -1888,6 +1986,15 @@ export class PropertiesPanelModule {
                   <span class="tree-spacer"></span>
                   <span class="tree-icon"><i class="fas fa-cube"></i></span>
                   <span class="tree-label">${itemName}</span>
+                  
+                  <div class="tree-actions">
+                    <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
+                      <i class="fas fa-crosshairs"></i>
+                    </button>
+                  </div>
                 </div>
               </li>
             `;
@@ -1975,6 +2082,9 @@ export class PropertiesPanelModule {
     const selectables = this.treeContainer.querySelectorAll('.selectable');
     selectables.forEach(selectable => {
       selectable.addEventListener('click', async (e) => {
+        // Don't trigger selection if clicking action buttons
+        if ((e.target as HTMLElement).closest('.tree-action-btn')) return;
+        
         e.stopPropagation();
         
         // Remove previous selection highlight
@@ -2007,6 +2117,259 @@ export class PropertiesPanelModule {
           if (this.highlighter) {
             this.highlighter.clear('select');
             this.highlighter.highlightByID('select', { [modelId]: new Set([localId]) });
+          }
+        }
+      });
+    });
+
+    // Visibility toggle functionality
+    const visibilityBtns = this.treeContainer.querySelectorAll('.visibility-btn');
+    visibilityBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const button = e.currentTarget as HTMLElement;
+        const content = button.closest('.tree-node-content') as HTMLElement;
+        if (!content) return;
+
+        const icon = button.querySelector('i');
+        const isVisible = !button.classList.contains('hidden-state');
+        
+        // Helper to update a node's UI
+        const updateNodeUI = (nodeContent: HTMLElement, hidden: boolean) => {
+            if (hidden) {
+                nodeContent.classList.add('node-hidden');
+                const btn = nodeContent.querySelector('.visibility-btn');
+                if (btn) {
+                    btn.classList.add('hidden-state');
+                    const i = btn.querySelector('i');
+                    if (i) i.className = 'fas fa-eye-slash';
+                }
+            } else {
+                nodeContent.classList.remove('node-hidden');
+                const btn = nodeContent.querySelector('.visibility-btn');
+                if (btn) {
+                    btn.classList.remove('hidden-state');
+                    const i = btn.querySelector('i');
+                    if (i) i.className = 'fas fa-eye';
+                }
+            }
+        };
+
+        // Update current node and all descendants
+        const parentLi = content.closest('.tree-node');
+        if (parentLi) {
+            const allNodes = parentLi.querySelectorAll('.tree-node-content');
+            allNodes.forEach(node => {
+                updateNodeUI(node as HTMLElement, isVisible);
+            });
+        } else {
+            // Fallback if structure is weird
+            updateNodeUI(content, isVisible);
+        }
+
+        // Get IDs to toggle
+        const modelId = content.dataset.modelId;
+        let idsToToggle: number[] = [];
+
+        // Case 1: Category group OR Spatial node (has data-ids) - PREFER THIS
+        if (content.dataset.ids) {
+          idsToToggle = content.dataset.ids.split(',')
+            .map(id => parseInt(id, 10))
+            .filter(id => !isNaN(id));
+        }
+        // Case 2: Single element (fallback if no data-ids)
+        else if (content.dataset.localId) {
+          idsToToggle.push(parseInt(content.dataset.localId, 10));
+        } 
+        // Case 3: Fallback for Spatial node without data-ids
+        else {
+          const childElements = content.parentElement?.querySelectorAll('.element-node .tree-node-content[data-local-id]');
+          childElements?.forEach(el => {
+            const localId = (el as HTMLElement).dataset.localId;
+            if (localId) idsToToggle.push(parseInt(localId, 10));
+          });
+        }
+
+        console.log(`👁️ Toggling visibility for ${idsToToggle.length} items (visible: ${!isVisible})`);
+
+        if (modelId && idsToToggle.length > 0) {
+          const model = this.fragmentsManager?.list.get(modelId);
+          if (model) {
+            const hider = this.worldManager.getComponents().get(OBC.Hider);
+            if (hider) {
+              hider.set(!isVisible, { [modelId]: new Set(idsToToggle) });
+            } else {
+              await model.setVisible(idsToToggle, !isVisible);
+            }
+          }
+        }
+      });
+    });
+
+    // Isolate functionality
+    const isolateBtns = this.treeContainer.querySelectorAll('.isolate-btn');
+    isolateBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const button = e.currentTarget as HTMLElement;
+        const content = button.closest('.tree-node-content') as HTMLElement;
+        if (!content) return;
+
+        // Toggle isolation state
+        const isIsolated = button.classList.contains('active-isolation');
+        
+        // Reset all isolate buttons first
+        this.treeContainer?.querySelectorAll('.isolate-btn').forEach(b => {
+          b.classList.remove('active-isolation');
+          b.innerHTML = '<i class="fas fa-crosshairs"></i>';
+        });
+        
+        // Reset all node isolation styles
+        this.treeContainer?.querySelectorAll('.node-isolated').forEach(node => {
+          node.classList.remove('node-isolated');
+        });
+
+        const modelId = content.dataset.modelId;
+        const model = modelId ? this.fragmentsManager?.list.get(modelId) : null;
+        const hider = this.worldManager.getComponents().get(OBC.Hider);
+        const highlighter = this.highlighter;
+
+        // If already isolated, we want to exit isolation (Show All)
+        if (isIsolated) {
+          if (model && hider) {
+            // Show everything
+            hider.set(true); // true = visible
+            
+            // Clear highlights
+            if (highlighter) {
+              highlighter.clear('select');
+              highlighter.clear('translucent');
+            }
+            
+            // Reset camera to fit whole model
+            if (this.worldManager.world?.camera?.controls) {
+               const bbox = await (model as any).getMergedBox(); // Get full model box
+               if (bbox && !bbox.isEmpty()) {
+                 await this.worldManager.world.camera.controls.fitToBox(bbox, true);
+               }
+            }
+          }
+          return; // Exit
+        }
+
+        // Otherwise, activate isolation
+        button.classList.add('active-isolation');
+        content.classList.add('node-isolated');
+        button.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>'; // Change icon to indicate "exit"
+
+        // Get IDs to isolate
+        let idsToIsolate: number[] = [];
+
+        // Case 1: Category group OR Spatial node (has data-ids) - PREFER THIS
+        if (content.dataset.ids) {
+          idsToIsolate = content.dataset.ids.split(',')
+            .map(id => parseInt(id, 10))
+            .filter(id => !isNaN(id));
+        }
+        // Case 2: Single element (fallback if no data-ids)
+        else if (content.dataset.localId) {
+          idsToIsolate.push(parseInt(content.dataset.localId, 10));
+        } 
+        // Case 3: Fallback for Spatial node without data-ids
+        else {
+          const childElements = content.parentElement?.querySelectorAll('.element-node .tree-node-content[data-local-id]');
+          childElements?.forEach(el => {
+            const localId = (el as HTMLElement).dataset.localId;
+            if (localId) idsToIsolate.push(parseInt(localId, 10));
+          });
+        }
+
+        if (modelId && idsToIsolate.length > 0 && model) {
+          if (hider && highlighter) {
+            try {
+              // Get all items in the model
+              let allIds: number[] = [];
+              
+              // Robust way to get all item IDs
+              // @ts-ignore
+              if (model.itemTypes && typeof model.itemTypes.keys === 'function') {
+                 // @ts-ignore
+                 allIds = Array.from(model.itemTypes.keys());
+              } else if ((model as any).ids instanceof Set) {
+                 allIds = Array.from((model as any).ids);
+              } else if ((model as any).items instanceof Map) {
+                 allIds = Array.from((model as any).items.keys());
+              } else {
+                 // Fallback: try getAllItemsWithGeometry
+                 try {
+                    const allItems = await (model as any).getAllItemsWithGeometry();
+                    if (Array.isArray(allItems)) {
+                        allIds = allItems;
+                    } else if (allItems instanceof Set) {
+                        allIds = Array.from(allItems);
+                    } else if (typeof allItems === 'object') {
+                        allIds = Object.values(allItems).flat() as number[];
+                    }
+                 } catch (e) {
+                    console.warn('Could not get all items with geometry', e);
+                 }
+              }
+              
+              if (allIds.length > 0) {
+                console.log(`👻 Ghost Mode: Found ${allIds.length} total items, isolating ${idsToIsolate.length} items`);
+                const others = allIds.filter(id => !idsToIsolate.includes(id));
+                
+                // 1. Hide "others" (original meshes)
+                hider.set(false, { [modelId]: new Set(others) });
+                
+                // 2. Ensure "selection" is visible (original meshes)
+                hider.set(true, { [modelId]: new Set(idsToIsolate) });
+                
+                // 3. Highlight "others" with translucent style
+                highlighter.clear('translucent');
+                highlighter.highlightByID('translucent', { [modelId]: new Set(others) });
+                
+                // 4. Highlight "selection" with select style (optional, maybe just outline?)
+                // If we want to keep original look, we might not want to overlay 'select' color on the whole face.
+                // But the user probably expects the selection highlight.
+                highlighter.clear('select');
+                highlighter.highlightByID('select', { [modelId]: new Set(idsToIsolate) });
+              } else {
+                // Fallback if we can't get all IDs
+                hider.isolate({ [modelId]: new Set(idsToIsolate) });
+              }
+            } catch (err) {
+              console.warn('Error in ghost isolation:', err);
+              hider.isolate({ [modelId]: new Set(idsToIsolate) });
+            }
+          } else if (hider) {
+             hider.isolate({ [modelId]: new Set(idsToIsolate) });
+          }
+          
+          // 2. Zoom to elements with Isometric View
+          if (this.worldManager.world?.camera?.controls) {
+             // Use getMergedBox
+             const bbox = await (model as any).getMergedBox(idsToIsolate);
+             if (bbox && !bbox.isEmpty()) {
+               // Calculate isometric position
+               const center = new THREE.Vector3();
+               bbox.getCenter(center);
+               const size = new THREE.Vector3();
+               bbox.getSize(size);
+               const maxDim = Math.max(size.x, size.y, size.z);
+               const dist = maxDim * 1.5;
+               
+               // Isometric vector (1, 1, 1)
+               const isoVector = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(dist);
+               const cameraPos = center.clone().add(isoVector);
+               
+               // Set camera position and target
+               await this.worldManager.world.camera.controls.setLookAt(
+                 cameraPos.x, cameraPos.y, cameraPos.z,
+                 center.x, center.y, center.z,
+                 true
+               );
+             }
           }
         }
       });

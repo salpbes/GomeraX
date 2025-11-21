@@ -801,3 +801,112 @@ canvas {
   }
 }
 
+/* Tree Node Actions */
+.tree-node-content {
+  position: relative;
+  padding-right: 60px; /* Make space for buttons */
+  display: flex;
+  align-items: center;
+  height: 28px; /* Fixed height for consistency */
+}
+
+.tree-toggle,
+.tree-icon,
+.tree-spacer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+
+.tree-count {
+  flex-shrink: 0;
+  margin-left: 4px;
+  font-size: 0.85em;
+  color: #888;
+}
+
+.tree-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none; /* Hidden by default */
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.9); /* Add background to ensure visibility over text */
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.tree-node-content:hover .tree-actions {
+  display: flex;
+}
+
+.tree-action-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #666;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.tree-action-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.tree-action-btn.visibility-btn:hover {
+  color: #667eea;
+}
+
+.tree-action-btn.isolate-btn:hover {
+  color: #e74c3c;
+}
+
+/* Hidden state for visibility button */
+.tree-action-btn.hidden-state {
+  color: #ccc;
+}
+
+.tree-action-btn.hidden-state:hover {
+  color: #999;
+}
+
+/* Node states */
+.tree-node-content.node-hidden {
+  opacity: 0.6;
+}
+
+.tree-node-content.node-hidden .tree-label {
+  text-decoration: line-through;
+  color: #999;
+}
+
+.tree-node-content.node-isolated {
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 4px;
+}
+
+.tree-node-content.node-isolated .tree-label {
+  font-weight: 600;
+  color: #c0392b;
+}
+
+/* Ensure text doesn't overlap buttons */
+.tree-label {
+  flex: 1;
+  min-width: 0; /* Required for text-overflow to work in flex item */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
