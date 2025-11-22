@@ -45,24 +45,32 @@ export class PropertyTableModule {
    * Show the property table with data from visible elements
    */
   public async showTable(elementsByCategory: Map<string, { [key: string]: Set<number> }>): Promise<void> {
-    // Collect all visible element IDs
-    this.allElementIds = [];
+    // Group IDs by Model ID to prevent cross-model ID collisions
+    const idsByModel = new Map<string, number[]>();
+    let totalCount = 0;
+    
     for (const [category, elements] of elementsByCategory) {
       for (const modelId in elements) {
-        elements[modelId].forEach(id => this.allElementIds.push(id));
+        if (!idsByModel.has(modelId)) {
+          idsByModel.set(modelId, []);
+        }
+        const modelIds = idsByModel.get(modelId)!;
+        elements[modelId].forEach(id => {
+          modelIds.push(id);
+          totalCount++;
+        });
       }
     }
 
-    console.log(`📊 PropertyTable: Collecting properties for ${this.allElementIds.length} elements`);
-    console.log(`📊 Element IDs:`, this.allElementIds.slice(0, 10)); // Show first 10
+    console.log(`📊 PropertyTable: Collecting properties for ${totalCount} elements across ${idsByModel.size} models`);
 
-    if (this.allElementIds.length === 0) {
+    if (totalCount === 0) {
       console.warn('⚠️ No elements to display in table');
       return;
     }
 
-    // Fetch properties for all elements
-    this.currentProperties = await this.fetchProperties(this.allElementIds);
+    // Fetch properties for all elements, respecting model boundaries
+    this.currentProperties = await this.fetchProperties(idsByModel);
 
     console.log(`📊 PropertyTable: Fetched ${this.currentProperties.length} property rows`);
 
@@ -148,12 +156,18 @@ export class PropertyTableModule {
   }
 
   /**
-   * Fetch IFC properties for given element IDs
+   * Fetch IFC properties for given element IDs, grouped by model
    */
-  private async fetchProperties(elementIds: number[]): Promise<PropertyRow[]> {
+  private async fetchProperties(idsByModel: Map<string, number[]>): Promise<PropertyRow[]> {
     const properties: PropertyRow[] = [];
 
-    for (const [modelId, model] of this.fragmentsManager.list) {
+    for (const [modelId, elementIds] of idsByModel) {
+      const model = this.fragmentsManager.list.get(modelId);
+      if (!model) {
+        console.warn(`⚠️ Model ${modelId} not found`);
+        continue;
+      }
+
       // Check if model has getItemsData method
       if (typeof (model as any).getItemsData !== 'function') {
         console.warn(`⚠️ Model ${modelId} does not have getItemsData method`);
@@ -161,7 +175,7 @@ export class PropertyTableModule {
       }
 
       try {
-        // Get IFC data for all element IDs in this model
+        // Get IFC data for ONLY the element IDs in THIS model
         const ifcDataArray = await (model as any).getItemsData(elementIds, {
           attributesDefault: true,
           relations: {
