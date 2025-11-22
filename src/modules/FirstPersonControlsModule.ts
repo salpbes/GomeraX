@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
+import { NotificationHelper } from './ui/NotificationHelper';
 
 export class FirstPersonControlsModule {
   private world: OBC.World | null = null;
@@ -38,6 +39,9 @@ export class FirstPersonControlsModule {
   private originalCameraNear: number = 0.1; // Store original near plane value
   private doorCategories: Set<string> = new Set(); // Store door/window category names to exclude
   private windowCategories: Set<string> = new Set();
+  private isGravityEnabled: boolean = false;
+  private gravityRaycaster: THREE.Raycaster = new THREE.Raycaster();
+  private floors: { elevation: number; name: string }[] = [];
 
   /**
    * Initialize the first person controls
@@ -71,6 +75,7 @@ export class FirstPersonControlsModule {
   /**
    * Update collision meshes from loaded models
    * Collects wall and door/window categories for category-based collision filtering
+   * Also collects building storeys for gravity alignment
    */
   public async updateCollisionMeshes(): Promise<void> {
     if (!this.world?.scene || !this.fragmentsManager || !this.components) {
@@ -82,15 +87,16 @@ export class FirstPersonControlsModule {
     this.wallCategories.clear();
     this.doorCategories.clear();
     this.windowCategories.clear();
+    this.floors = [];
     
-    console.log('🔍 Identifying wall and door/window categories for collision filtering...');
+    console.log('🔍 Identifying categories and storeys...');
 
     // Iterate through all loaded Fragment models
     for (const [modelId, model] of this.fragmentsManager.list) {
       console.log(`📦 Processing model: ${modelId}`);
       
       try {
-        // Get all categories in the model
+        // 1. Get Categories
         const categories = await (model as any).getCategories();
         
         // Find wall categories
@@ -111,25 +117,46 @@ export class FirstPersonControlsModule {
           return upper.includes('WINDOW') || upper.includes('OPENING');
         });
         
-        console.log(`   Wall categories:`, wallCats);
-        console.log(`   Door categories:`, doorCats);
-        console.log(`   Window categories:`, windowCats);
-        
         // Store categories
         wallCats.forEach((cat: string) => this.wallCategories.add(cat));
         doorCats.forEach((cat: string) => this.doorCategories.add(cat));
         windowCats.forEach((cat: string) => this.windowCategories.add(cat));
+
+        // 2. Get Storeys
+        const storeys = await model.getItemsOfCategories([/BUILDINGSTOREY/]);
+        const categoryKey = Object.keys(storeys).find(key => key.includes('BUILDINGSTOREY'));
+        
+        if (categoryKey && storeys[categoryKey]) {
+            const localIds = storeys[categoryKey];
+            const data = await model.getItemsData(localIds, {
+                attributesDefault: false,
+                attributes: ['Name', 'Elevation']
+            });
+            
+            for (const attrs of data) {
+                const nameAttr = attrs.Name as any;
+                const elevationAttr = attrs.Elevation as any;
+                
+                const name = nameAttr?.value || 'Unknown Storey';
+                const elevation = elevationAttr?.value || 0;
+                
+                this.floors.push({ name, elevation });
+            }
+        }
         
       } catch (err) {
         console.warn(`   ⚠️ Error processing model ${modelId}:`, err);
         continue;
       }
     }
+    
+    // Sort floors by elevation
+    this.floors.sort((a, b) => a.elevation - b.elevation);
 
     console.log(`📊 Collision detection setup complete:`);
     console.log(`   Wall categories: ${Array.from(this.wallCategories).join(', ')}`);
-    console.log(`   Door categories: ${Array.from(this.doorCategories).join(', ')}`);
-    console.log(`   Window categories: ${Array.from(this.windowCategories).join(', ')}`);
+    console.log(`   Floors found: ${this.floors.length}`);
+    this.floors.forEach(f => console.log(`     - ${f.name}: ${f.elevation.toFixed(2)}m`));
     console.log(`🧱 Collision detection: ACTIVE (Fragment raycast-based with category filtering)`);
   }
 
@@ -149,6 +176,9 @@ export class FirstPersonControlsModule {
     
     this.isEnabled = true;
     this.keys.clear();
+    
+    // Update collision and floor data
+    this.updateCollisionMeshes();
     
     // Add keyboard event listeners
     document.addEventListener('keydown', this.handleKeyDown);
@@ -224,6 +254,27 @@ export class FirstPersonControlsModule {
   }
 
   /**
+   * Toggle gravity mode
+   */
+  public toggleGravity(): void {
+    this.isGravityEnabled = !this.isGravityEnabled;
+    console.log(`Gravity ${this.isGravityEnabled ? 'enabled' : 'disabled'}`);
+    
+    NotificationHelper.show({
+      title: this.isGravityEnabled ? 'Gravity ON' : 'Gravity OFF',
+      message: this.isGravityEnabled 
+        ? 'Camera will maintain 1.6m height above floors' 
+        : 'Free flight mode enabled',
+      type: 'info',
+      duration: 3000
+    });
+    
+    if (this.isGravityEnabled) {
+      console.log('  - Camera will maintain 1.6m height above floors');
+    }
+  }
+
+  /**
    * Handle keydown events
    */
   private handleKeyDown = (event: KeyboardEvent): void => {
@@ -233,6 +284,12 @@ export class FirstPersonControlsModule {
     }
 
     const key = event.key.toLowerCase();
+    
+    // Toggle gravity with 'g'
+    if (key === 'g') {
+      this.toggleGravity();
+      return;
+    }
     
     // Add key to active keys set
     if (this.isMovementKey(key)) {
@@ -366,7 +423,10 @@ export class FirstPersonControlsModule {
    * Update camera position based on active keys
    */
   private async updateMovement(): Promise<void> {
-    if (!this.world?.camera || this.keys.size === 0) return;
+    if (!this.world?.camera) return;
+    
+    // If no keys pressed and gravity disabled, nothing to do
+    if (this.keys.size === 0 && !this.isGravityEnabled) return;
 
     const camera = this.world.camera.three as THREE.PerspectiveCamera | THREE.OrthographicCamera;
     
@@ -399,12 +459,14 @@ export class FirstPersonControlsModule {
       movement.add(right);
     }
     
-    // Up/Down (vertical movement)
-    if (this.keys.has(' ')) { // Space key
-      movement.y += 1;
-    }
-    if (this.keys.has('shift')) { // Shift key
-      movement.y -= 1;
+    // Up/Down (vertical movement) - Only if gravity is NOT enabled
+    if (!this.isGravityEnabled) {
+      if (this.keys.has(' ')) { // Space key
+        movement.y += 1;
+      }
+      if (this.keys.has('shift')) { // Shift key
+        movement.y -= 1;
+      }
     }
     
     // Normalize to prevent faster diagonal movement
@@ -417,29 +479,41 @@ export class FirstPersonControlsModule {
       // Adjust camera near plane based on proximity to walls
       this.adjustCameraNearPlane(camera, movement);
       
-      if (hasCollision) {
-        return; // Don't move if collision detected
+      if (!hasCollision) {
+        // Update camera position
+        camera.position.add(movement);
       }
+    }
+
+    // Apply gravity if enabled (independent of movement)
+    if (this.isGravityEnabled) {
+      this.applyGravity(camera);
+    }
+    
+    // Update camera controls target (look-at point)
+    const controls = (this.world.camera as OBC.OrthoPerspectiveCamera).controls;
+    if (controls) {
+      // We need to update the target to match the new camera position
+      // The target should be at a fixed distance in the look direction
+      const lookDir = new THREE.Vector3();
+      camera.getWorldDirection(lookDir);
+      const target = camera.position.clone().add(lookDir);
       
-      // Update camera position
-      camera.position.add(movement);
-      
-      // Update camera controls target (look-at point)
-      const controls = (this.world.camera as OBC.OrthoPerspectiveCamera).controls;
-      if (controls) {
-        const target = new THREE.Vector3();
-        controls.getTarget(target);
-        target.add(movement);
-        controls.setLookAt(
-          camera.position.x,
-          camera.position.y,
-          camera.position.z,
-          target.x,
-          target.y,
-          target.z,
-          false // Don't animate
-        );
-      }
+      controls.setLookAt(
+        camera.position.x,
+        camera.position.y,
+        camera.position.z,
+        target.x,
+        target.y,
+        target.z,
+        false // Don't animate
+      );
+    }
+
+    // Force camera update to refresh culling/LOD/rendering
+    // This ensures that when we turn around, the geometry is refreshed immediately
+    if (this.world?.camera) {
+        (this.world.camera as any).update();
     }
   }
 
@@ -516,6 +590,39 @@ export class FirstPersonControlsModule {
     }
 
     return false; // No wall collision
+  }
+
+  private frameCount = 0;
+
+  /**
+   * Apply gravity to keep camera at fixed height above floor
+   */
+  private applyGravity(camera: THREE.Camera): void {
+    // If no floors found, we can't do anything
+    if (this.floors.length === 0) return;
+
+    const eyeHeight = 1.6;
+    const currentFeetY = camera.position.y - eyeHeight;
+    
+    // Find the floor closest to our feet
+    let bestFloor = this.floors[0];
+    let minDiff = Math.abs(currentFeetY - bestFloor.elevation);
+    
+    for (const floor of this.floors) {
+        const diff = Math.abs(currentFeetY - floor.elevation);
+        if (diff < minDiff) {
+            minDiff = diff;
+            bestFloor = floor;
+        }
+    }
+    
+    const targetY = bestFloor.elevation + eyeHeight;
+    const delta = targetY - camera.position.y;
+    
+    // Smooth transition
+    if (Math.abs(delta) > 0.001) {
+        camera.position.y += delta * 0.1;
+    }
   }
 
   /**
