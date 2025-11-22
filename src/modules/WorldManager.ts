@@ -19,6 +19,7 @@ export class WorldManager {
   private components: OBC.Components;
   public world: OBC.World | null = null;
   private grid: OBC.SimpleGrid | null = null;
+  private headlight: THREE.DirectionalLight | null = null;
 
   constructor() {
     // Initialize the main components instance
@@ -57,6 +58,13 @@ export class WorldManager {
     // Setup the camera (after renderer is created)
     this.world.camera = new OBC.OrthoPerspectiveCamera(this.components);
     
+    // Add a headlight (directional light attached to camera) to ensure visibility from all angles
+    // This fixes the issue where one side of a corridor is dark
+    this.headlight = new THREE.DirectionalLight(0xffffff, 0.5);
+    this.headlight.position.set(0, 0, 1); // Pointing forward from camera
+    this.world.camera.three.add(this.headlight);
+    sceneThree.add(this.world.camera.three); // Add camera to scene so the light works
+
     // Initialize all components (must be done before enabling postproduction or camera controls)
     await this.components.init();
     
@@ -106,6 +114,11 @@ export class WorldManager {
     const simpleScene = this.world.scene as OBC.SimpleScene;
     simpleScene.config.directionalLight.intensity = directional;
     simpleScene.config.ambientLight.intensity = ambient;
+
+    // Update headlight intensity (keep it proportional, e.g., 50% of main directional)
+    if (this.headlight) {
+      this.headlight.intensity = directional * 0.5;
+    }
   }
 
   /**
@@ -250,6 +263,26 @@ export class WorldManager {
     const renderer = this.world.renderer as OBF.PostproductionRenderer;
     renderer.postproduction.style = style;
     console.log(`✅ Postproduction style set to: ${style}`);
+  }
+
+  /**
+   * Configures the global edge detection (Pen) effect
+   * @param color - Color of the edges (hex number, e.g. 0x000000)
+   * @param opacity - Opacity of the edges (0-1)
+   * @param tolerance - Sensitivity of edge detection (default 1)
+   */
+  public setGlobalEdgeSettings(color: number = 0x000000, opacity: number = 1, tolerance: number = 1): void {
+    if (!this.world?.renderer) return;
+    const renderer = this.world.renderer as OBF.PostproductionRenderer;
+    
+    // Access custom effects (using any to bypass potential type missing)
+    const effects = (renderer.postproduction as any).customEffects;
+    if (effects) {
+      if (effects.outlineColor !== undefined) effects.outlineColor = color;
+      if (effects.outlineOpacity !== undefined) effects.outlineOpacity = opacity;
+      if (effects.tolerance !== undefined) effects.tolerance = tolerance;
+      console.log('✅ Global edge settings updated');
+    }
   }
 
   /**
