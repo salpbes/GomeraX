@@ -39,6 +39,8 @@ export class FirstPersonControlsModule {
   private originalCameraNear: number = 0.1; // Store original near plane value
   private doorCategories: Set<string> = new Set(); // Store door/window category names to exclude
   private windowCategories: Set<string> = new Set();
+  private stairCategories: Set<string> = new Set(); // Store stair/slab categories for climbing
+  private maxStepHeight: number = 0.3; // Maximum height we can climb in one step (30cm)
   private isGravityEnabled: boolean = false;
   private gravityRaycaster: THREE.Raycaster = new THREE.Raycaster();
   private floors: { elevation: number; name: string }[] = [];
@@ -116,11 +118,18 @@ export class FirstPersonControlsModule {
           const upper = cat.toUpperCase();
           return upper.includes('WINDOW') || upper.includes('OPENING');
         });
+
+        // Find stair/slab categories
+        const stairCats = categories.filter((cat: string) => {
+          const upper = cat.toUpperCase();
+          return upper.includes('STAIR') || upper.includes('RAMP') || upper.includes('SLAB') || upper.includes('FLIGHT');
+        });
         
         // Store categories
         wallCats.forEach((cat: string) => this.wallCategories.add(cat));
         doorCats.forEach((cat: string) => this.doorCategories.add(cat));
         windowCats.forEach((cat: string) => this.windowCategories.add(cat));
+        stairCats.forEach((cat: string) => this.stairCategories.add(cat));
 
         // 2. Get Storeys
         const storeys = await model.getItemsOfCategories([/BUILDINGSTOREY/]);
@@ -155,6 +164,7 @@ export class FirstPersonControlsModule {
 
     console.log(`📊 Collision detection setup complete:`);
     console.log(`   Wall categories: ${Array.from(this.wallCategories).join(', ')}`);
+    console.log(`   Stair categories: ${Array.from(this.stairCategories).join(', ')}`);
     console.log(`   Floors found: ${this.floors.length}`);
     this.floors.forEach(f => console.log(`     - ${f.name}: ${f.elevation.toFixed(2)}m`));
     console.log(`🧱 Collision detection: ACTIVE (Fragment raycast-based with category filtering)`);
@@ -474,14 +484,14 @@ export class FirstPersonControlsModule {
       movement.normalize().multiplyScalar(this.moveSpeed);
       
       // Check for collisions before moving (async)
-      const hasCollision = await this.checkCollision(camera.position, movement);
+      const collisionResult = await this.checkCollisionWithStepClimbing(camera.position, movement);
       
       // Adjust camera near plane based on proximity to walls
       this.adjustCameraNearPlane(camera, movement);
       
-      if (!hasCollision) {
-        // Update camera position
-        camera.position.add(movement);
+      if (!collisionResult.blocked) {
+        // Update camera position (potentially adjusted for step climbing)
+        camera.position.add(collisionResult.adjustedMovement);
       }
     }
 
@@ -528,17 +538,21 @@ export class FirstPersonControlsModule {
   }
 
   /**
-   * Check for collisions using Fragment's raycast API with category filtering
+   * Check for collisions with step climbing support
    * @param position - Current camera position
    * @param movement - Intended movement vector
-   * @returns true if collision detected with a wall (not door/window), false otherwise
+   * @returns Object with blocked status and adjusted movement
    */
-  private async checkCollision(position: THREE.Vector3, movement: THREE.Vector3): Promise<boolean> {
+  private async checkCollisionWithStepClimbing(position: THREE.Vector3, movement: THREE.Vector3): Promise<{
+    blocked: boolean;
+    adjustedMovement: THREE.Vector3;
+  }> {
     if (!this.fragmentsManager || !this.world?.camera || !this.world?.renderer?.three.domElement) {
-      return false;
+      console.log('⚠️ FragmentsManager or renderer not available for collision');
+      return { blocked: false, adjustedMovement: movement };
     }
 
-    // Cast a ray in the movement direction
+    // Cast a ray in the movement direction using Fragment's raycast API
     const direction = movement.clone().normalize();
     const rayEnd = position.clone().add(direction.multiplyScalar(this.collisionDistance));
     
@@ -572,56 +586,151 @@ export class FirstPersonControlsModule {
           if (itemData && itemData.length > 0) {
             const category = itemData[0]._category?.value || '';
             
-            // Check if it's a wall (not a door or window)
+            // Check if it's a wall (not a door, window, or stair)
             const isWall = this.wallCategories.has(category);
             const isDoor = this.doorCategories.has(category);
             const isWindow = this.windowCategories.has(category);
+            const isStair = this.stairCategories.has(category);
+            
+            if (isStair) {
+              return { blocked: false, adjustedMovement: movement };
+            }
             
             // Only block if it's a wall, allow passage through doors and windows
             if (isWall && !isDoor && !isWindow) {
-              return true; // Collision with wall
+              return { blocked: true, adjustedMovement: new THREE.Vector3() };
             }
           }
         }
       }
     } catch (error) {
       // If raycasting fails, allow movement (fail open)
-      return false;
+      return { blocked: false, adjustedMovement: movement };
     }
 
-    return false; // No wall collision
+    return { blocked: false, adjustedMovement: movement };
+  }
+
+  /**
+   * Update cached ground height using Fragment raycast
+   */
+  private async updateGroundHeight(camera: THREE.Camera): Promise<void> {
+    if (!this.fragmentsManager || !this.world?.camera || !this.world?.renderer?.three.domElement) {
+      return;
+    }
+
+    const eyeHeight = 1.6;
+    const rayEnd = camera.position.clone();
+    rayEnd.y -= 10; // Check 10m below
+    
+    // Convert to screen coordinates for Fragment raycast
+    const cam = this.world.camera.three;
+    const dom = this.world.renderer.three.domElement;
+    
+    // Project the point below to screen space
+    const screenPos = rayEnd.clone().project(cam);
+    const mouse = new THREE.Vector2(
+      ((screenPos.x + 1) / 2) * dom.clientWidth,
+      ((-screenPos.y + 1) / 2) * dom.clientHeight
+    );
+
+    try {
+      let closestGroundHit: { height: number; category: string } | null = null;
+      
+      for (const [modelId, model] of this.fragmentsManager.list) {
+        const result = await (model as any).raycast({
+          camera: cam,
+          mouse: mouse,
+          dom: dom,
+        });
+
+        if (result && result.point && result.point.y < camera.position.y) {
+          // Get category to verify it's a floor/stair
+          const itemData = await (model as any).getItemsData([result.localId], {
+            attributesDefault: false,
+            attributes: [],
+          });
+          
+          if (itemData && itemData.length > 0) {
+            const category = itemData[0]._category?.value || '';
+            const hitHeight = result.point.y;
+            
+            // Accept floors, slabs, and stairs as ground
+            const isGround = category.toUpperCase().includes('SLAB') || 
+                             category.toUpperCase().includes('STAIR') ||
+                             category.toUpperCase().includes('FLOOR');
+            
+            if (isGround) {
+              if (!closestGroundHit || hitHeight > closestGroundHit.height) {
+                closestGroundHit = { height: hitHeight, category: category };
+              }
+            }
+          }
+        }
+      }
+      
+      if (closestGroundHit) {
+        this.cachedGroundHeight = closestGroundHit.height;
+      }
+    } catch (error) {
+      // Silently fail
+    }
   }
 
   private frameCount = 0;
+  private lastLoggedHeight = 0;
+  private cachedGroundHeight: number | null = null;
+  private lastGroundCheckTime = 0;
 
   /**
    * Apply gravity to keep camera at fixed height above floor
    */
   private applyGravity(camera: THREE.Camera): void {
-    // If no floors found, we can't do anything
-    if (this.floors.length === 0) return;
-
     const eyeHeight = 1.6;
-    const currentFeetY = camera.position.y - eyeHeight;
-    
-    // Find the floor closest to our feet
-    let bestFloor = this.floors[0];
-    let minDiff = Math.abs(currentFeetY - bestFloor.elevation);
-    
-    for (const floor of this.floors) {
-        const diff = Math.abs(currentFeetY - floor.elevation);
-        if (diff < minDiff) {
-            minDiff = diff;
-            bestFloor = floor;
+    let targetY: number | null = null;
+
+    this.frameCount++;
+    const now = Date.now();
+
+    // Update ground height detection periodically (every 100ms to avoid performance issues)
+    if (now - this.lastGroundCheckTime > 100) {
+      this.lastGroundCheckTime = now;
+      this.updateGroundHeight(camera);
+    }
+
+    // Use cached ground height if available
+    if (this.cachedGroundHeight !== null) {
+      targetY = this.cachedGroundHeight + eyeHeight;
+    }
+
+    // 2. Fallback to Storey-based gravity if no geometry hit
+    // This preserves the original behavior for flat floors or when raycast fails
+    if (targetY === null && this.floors.length > 0) {
+        const currentFeetY = camera.position.y - eyeHeight;
+        
+        // Find the floor closest to our feet
+        let bestFloor = this.floors[0];
+        let minDiff = Math.abs(currentFeetY - bestFloor.elevation);
+        
+        for (const floor of this.floors) {
+            const diff = Math.abs(currentFeetY - floor.elevation);
+            if (diff < minDiff) {
+                minDiff = diff;
+                bestFloor = floor;
+            }
         }
+        
+        targetY = bestFloor.elevation + eyeHeight;
     }
     
-    const targetY = bestFloor.elevation + eyeHeight;
-    const delta = targetY - camera.position.y;
-    
-    // Smooth transition
-    if (Math.abs(delta) > 0.001) {
-        camera.position.y += delta * 0.1;
+    // 3. Apply movement
+    if (targetY !== null) {
+        const delta = targetY - camera.position.y;
+        
+        // Smooth transition
+        if (Math.abs(delta) > 0.001) {
+            camera.position.y += delta * 0.2;
+        }
     }
   }
 
