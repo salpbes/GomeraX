@@ -72,8 +72,8 @@ export function createToolbarHTML(): string {
         </div>
       </div>
       
-      <!-- Cluster Button (main toolbar button) -->
-      <div class="toolbar-group">
+      <!-- Cluster Button (main toolbar button) - HIDDEN but keeping logic -->
+      <div class="toolbar-group" style="display: none;">
         <button class="toolbar-btn" data-action="toggleCluster" title="IFC Element Clustering" id="clusterMainBtn">
           <span class="icon"><i class="fas fa-cubes"></i></span>
         </button>
