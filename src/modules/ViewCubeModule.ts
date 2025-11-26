@@ -265,7 +265,7 @@ export class ViewCubeModule {
 
     // Determine size. 
     const frontFace = cube.querySelector('.face-front') as HTMLElement;
-    let size = 120; // Default to 120 as per library default
+    let size = 120; // Back to original size
     if (frontFace) {
       if (frontFace.offsetWidth > 0) {
         size = frontFace.offsetWidth;
@@ -273,7 +273,7 @@ export class ViewCubeModule {
     }
     
     const half = size / 2;
-    const cornerSize = 20;
+    const cornerSize = 18;
     const edgeThickness = 10;
     // Edge length should fill the gap between corners
     const edgeLength = size - cornerSize; 
@@ -296,13 +296,21 @@ export class ViewCubeModule {
         transition: background-color 0.2s;
       }
 
-      /* Corner Colors */
-      .cube-corner .box-face { background-color: #FF6B6B; }
-      .cube-corner:hover .box-face { background-color: #FFD93D; }
+      /* Corner Colors - Modern Gradient */
+      .cube-corner .box-face { 
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      }
+      .cube-corner:hover .box-face { 
+        background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      }
 
-      /* Edge Colors */
-      .cube-edge .box-face { background-color: #4D96FF; }
-      .cube-edge:hover .box-face { background-color: #6BCB77; }
+      /* Edge Colors - Modern Gradient */
+      .cube-edge .box-face { 
+        background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
+      }
+      .cube-edge:hover .box-face { 
+        background: linear-gradient(135deg, #60a5fa 0%, #22d3ee 100%);
+      }
     `;
     root.appendChild(style);
 
