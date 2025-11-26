@@ -75,7 +75,7 @@ export function createToolbarHTML(): string {
       <!-- Cluster Button (main toolbar button) -->
       <div class="toolbar-group">
         <button class="toolbar-btn" data-action="toggleCluster" title="IFC Element Clustering" id="clusterMainBtn">
-          <span class="icon"><i class="fas fa-object-group"></i></span>
+          <span class="icon"><i class="fas fa-cubes"></i></span>
         </button>
         <div class="toolbar-submenu" id="clusterSubmenu">
           <button class="submenu-btn" data-action="cancelClusterMode" title="Exit Cluster Mode & Fit View">
@@ -88,7 +88,7 @@ export function createToolbarHTML(): string {
       <!-- Color Splash Button (main toolbar button) -->
       <div class="toolbar-group">
         <button class="toolbar-btn" data-action="toggleColorSplash" title="Color Elements by Type" id="colorSplashMainBtn">
-          <span class="icon"><i class="fas fa-palette"></i></span>
+          <span class="icon"><i class="fas fa-paint-brush"></i></span>
         </button>
         <div class="toolbar-submenu" id="colorSplashSubmenu">
           <button class="submenu-btn" data-action="cancelColorSplashMode" title="Exit Color Splash & Fit View">

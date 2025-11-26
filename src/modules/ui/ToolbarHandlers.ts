@@ -812,93 +812,114 @@ export class ToolbarHandlers {
       position: fixed;
       top: 80px;
       right: 20px;
-      background: rgba(30, 30, 30, 0.95);
-      border: 1px solid #555;
-      border-radius: 8px;
-      padding: 15px;
+      background: linear-gradient(135deg, rgba(40, 40, 70, 0.95) 0%, rgba(30, 30, 50, 0.95) 100%);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
       max-height: 600px;
-      overflow-y: auto;
+      overflow: hidden;
       z-index: 1000;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-      min-width: 300px;
-      cursor: move;
-      scrollbar-width: thin;
-      scrollbar-color: #555 rgba(0, 0, 0, 0.3);
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
     `;
 
     // Add webkit scrollbar styles
     const style = document.createElement('style');
     style.textContent = `
-      #colorPickerPanel::-webkit-scrollbar {
-        width: 8px;
+      #colorPickerPanel .scrollable-content::-webkit-scrollbar {
+        width: 10px;
       }
-      #colorPickerPanel::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 4px;
+      #colorPickerPanel .scrollable-content::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
       }
-      #colorPickerPanel::-webkit-scrollbar-thumb {
-        background: #555;
-        border-radius: 4px;
+      #colorPickerPanel .scrollable-content::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.6) 0%, rgba(168, 85, 247, 0.6) 100%);
+        border-radius: 5px;
         transition: background 0.2s;
       }
-      #colorPickerPanel::-webkit-scrollbar-thumb:hover {
-        background: #777;
+      #colorPickerPanel .scrollable-content::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.8) 0%, rgba(168, 85, 247, 0.8) 100%);
       }
     `;
     document.head.appendChild(style);
     (panel as any)._styleElement = style;
 
+    // Create sticky header container
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = `
+      padding: 18px 18px 0 18px;
+      background: linear-gradient(135deg, rgba(40, 40, 70, 0.95) 0%, rgba(30, 30, 50, 0.95) 100%);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      cursor: move;
+    `;
+
     const title = document.createElement('div');
     title.textContent = 'Category Colors';
     title.style.cssText = `
-      font-size: 14px;
-      font-weight: bold;
-      color: #fff;
-      margin-bottom: 8px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #555;
+      font-size: 15px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       cursor: move;
       user-select: none;
+      letter-spacing: 0.5px;
     `;
-    panel.appendChild(title);
+    headerContainer.appendChild(title);
 
     // Add sorting buttons
     const sortContainer = document.createElement('div');
     sortContainer.style.cssText = `
       display: flex;
-      gap: 6px;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     `;
 
     const createSortButton = (text: string, icon: string) => {
       const btn = document.createElement('button');
       btn.style.cssText = `
         flex: 1;
-        padding: 4px 8px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid #555;
-        border-radius: 4px;
-        color: #ccc;
-        font-size: 10px;
+        padding: 6px 10px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        color: #e0e0ff;
+        font-size: 11px;
+        font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
+        gap: 5px;
       `;
-      btn.innerHTML = `<span style="font-size: 12px;">${icon}</span> ${text}`;
+      btn.innerHTML = `<span style="font-size: 13px;">${icon}</span> ${text}`;
       btn.addEventListener('mouseenter', () => {
-        btn.style.background = 'rgba(255, 255, 255, 0.15)';
-        btn.style.borderColor = '#777';
+        btn.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.25) 100%)';
+        btn.style.borderColor = 'rgba(255, 255, 255, 0.25)';
         btn.style.color = '#fff';
+        btn.style.transform = 'translateY(-1px)';
+        btn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
       });
       btn.addEventListener('mouseleave', () => {
-        btn.style.background = 'rgba(255, 255, 255, 0.08)';
-        btn.style.borderColor = '#555';
-        btn.style.color = '#ccc';
+        btn.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)';
+        btn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+        btn.style.color = '#e0e0ff';
+        btn.style.transform = 'translateY(0)';
+        btn.style.boxShadow = 'none';
       });
       return btn;
     };
@@ -910,32 +931,37 @@ export class ToolbarHandlers {
     const refreshBtn = document.createElement('button');
     refreshBtn.style.cssText = `
       width: 100%;
-      padding: 8px;
-      background: rgba(100, 200, 255, 0.15);
-      border: 1px solid rgba(100, 200, 255, 0.4);
-      border-radius: 4px;
-      color: #aaddff;
-      font-size: 11px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(14, 165, 233, 0.2) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 8px;
+      color: #bae6fd;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      margin-bottom: 8px;
-      font-weight: 600;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
     `;
-    refreshBtn.innerHTML = `<span style="font-size: 14px;">🔄</span> Refresh Categories`;
+    refreshBtn.innerHTML = `<span style="font-size: 15px;">🔄</span> Refresh Categories`;
     
     refreshBtn.addEventListener('mouseenter', () => {
-      refreshBtn.style.background = 'rgba(100, 200, 255, 0.25)';
-      refreshBtn.style.borderColor = 'rgba(100, 200, 255, 0.6)';
-      refreshBtn.style.color = '#cceeff';
+      refreshBtn.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(14, 165, 233, 0.3) 100%)';
+      refreshBtn.style.borderColor = 'rgba(59, 130, 246, 0.6)';
+      refreshBtn.style.color = '#e0f2fe';
+      refreshBtn.style.transform = 'translateY(-1px)';
+      refreshBtn.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
     });
     refreshBtn.addEventListener('mouseleave', () => {
-      refreshBtn.style.background = 'rgba(100, 200, 255, 0.15)';
-      refreshBtn.style.borderColor = 'rgba(100, 200, 255, 0.4)';
-      refreshBtn.style.color = '#aaddff';
+      refreshBtn.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(14, 165, 233, 0.2) 100%)';
+      refreshBtn.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+      refreshBtn.style.color = '#bae6fd';
+      refreshBtn.style.transform = 'translateY(0)';
+      refreshBtn.style.boxShadow = 'none';
     });
 
     refreshBtn.addEventListener('click', async () => {
@@ -985,38 +1011,43 @@ export class ToolbarHandlers {
       }
     });
 
-    panel.appendChild(refreshBtn);
+    headerContainer.appendChild(refreshBtn);
 
     // Add exit cluster button (initially hidden)
     const exitClusterBtn = document.createElement('button');
     exitClusterBtn.style.cssText = `
       width: 100%;
-      padding: 8px;
-      background: rgba(255, 100, 100, 0.15);
-      border: 1px solid rgba(255, 100, 100, 0.4);
-      border-radius: 4px;
-      color: #ffaaaa;
-      font-size: 11px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 8px;
+      color: #fecaca;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s;
       display: none;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      margin-bottom: 8px;
-      font-weight: 600;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
     `;
-    exitClusterBtn.innerHTML = `<span style="font-size: 14px;">✖</span> Exit Cluster View`;
+    exitClusterBtn.innerHTML = `<span style="font-size: 15px;">✖</span> Exit Cluster View`;
     
     exitClusterBtn.addEventListener('mouseenter', () => {
-      exitClusterBtn.style.background = 'rgba(255, 100, 100, 0.25)';
-      exitClusterBtn.style.borderColor = 'rgba(255, 100, 100, 0.6)';
-      exitClusterBtn.style.color = '#ffcccc';
+      exitClusterBtn.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.3) 100%)';
+      exitClusterBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+      exitClusterBtn.style.color = '#fee2e2';
+      exitClusterBtn.style.transform = 'translateY(-1px)';
+      exitClusterBtn.style.boxShadow = '0 6px 20px rgba(239, 68, 68, 0.4)';
     });
     exitClusterBtn.addEventListener('mouseleave', () => {
-      exitClusterBtn.style.background = 'rgba(255, 100, 100, 0.15)';
-      exitClusterBtn.style.borderColor = 'rgba(255, 100, 100, 0.4)';
-      exitClusterBtn.style.color = '#ffaaaa';
+      exitClusterBtn.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%)';
+      exitClusterBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      exitClusterBtn.style.color = '#fecaca';
+      exitClusterBtn.style.transform = 'translateY(0)';
+      exitClusterBtn.style.boxShadow = 'none';
     });
 
     exitClusterBtn.addEventListener('click', async () => {
@@ -1055,38 +1086,43 @@ export class ToolbarHandlers {
       }
     });
 
-    panel.appendChild(exitClusterBtn);
+    headerContainer.appendChild(exitClusterBtn);
 
     // Add "Update Cluster" button (shown when in cluster mode with selections)
     const updateClusterBtn = document.createElement('button');
     updateClusterBtn.style.cssText = `
       width: 100%;
-      padding: 8px;
-      background: rgba(100, 200, 100, 0.15);
-      border: 1px solid rgba(100, 200, 100, 0.4);
-      border-radius: 4px;
-      color: #aaffaa;
-      font-size: 11px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(20, 184, 166, 0.2) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: 8px;
+      color: #a7f3d0;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s;
       display: none;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      margin-bottom: 8px;
-      font-weight: 600;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
     `;
-    updateClusterBtn.innerHTML = `<span style="font-size: 14px;">🔄</span> Update Cluster View`;
+    updateClusterBtn.innerHTML = `<span style="font-size: 15px;">🔄</span> Update Cluster View`;
     
     updateClusterBtn.addEventListener('mouseenter', () => {
-      updateClusterBtn.style.background = 'rgba(100, 200, 100, 0.25)';
-      updateClusterBtn.style.borderColor = 'rgba(100, 200, 100, 0.6)';
-      updateClusterBtn.style.color = '#ccffcc';
+      updateClusterBtn.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(20, 184, 166, 0.3) 100%)';
+      updateClusterBtn.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+      updateClusterBtn.style.color = '#d1fae5';
+      updateClusterBtn.style.transform = 'translateY(-1px)';
+      updateClusterBtn.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)';
     });
     updateClusterBtn.addEventListener('mouseleave', () => {
-      updateClusterBtn.style.background = 'rgba(100, 200, 100, 0.15)';
-      updateClusterBtn.style.borderColor = 'rgba(100, 200, 100, 0.4)';
-      updateClusterBtn.style.color = '#aaffaa';
+      updateClusterBtn.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(20, 184, 166, 0.2) 100%)';
+      updateClusterBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      updateClusterBtn.style.color = '#a7f3d0';
+      updateClusterBtn.style.transform = 'translateY(0)';
+      updateClusterBtn.style.boxShadow = 'none';
     });
 
     updateClusterBtn.addEventListener('click', async () => {
@@ -1132,38 +1168,43 @@ export class ToolbarHandlers {
       }
     });
 
-    panel.appendChild(updateClusterBtn);
+    headerContainer.appendChild(updateClusterBtn);
 
     // Add "View Selected" button (initially hidden)
     const viewSelectedBtn = document.createElement('button');
     viewSelectedBtn.style.cssText = `
       width: 100%;
-      padding: 8px;
-      background: rgba(100, 150, 255, 0.15);
-      border: 1px solid rgba(100, 150, 255, 0.4);
-      border-radius: 4px;
-      color: #aaccff;
-      font-size: 11px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.2) 100%);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      border-radius: 8px;
+      color: #e9d5ff;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.3s;
       display: none;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      margin-bottom: 8px;
-      font-weight: 600;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
     `;
-    viewSelectedBtn.innerHTML = `<span style="font-size: 14px;">📊</span> View Selected (<span id="selectedCount">0</span>)`;
+    viewSelectedBtn.innerHTML = `<span style="font-size: 15px;">📊</span> View Selected (<span id="selectedCount">0</span>)`;
     
     viewSelectedBtn.addEventListener('mouseenter', () => {
-      viewSelectedBtn.style.background = 'rgba(100, 150, 255, 0.25)';
-      viewSelectedBtn.style.borderColor = 'rgba(100, 150, 255, 0.6)';
-      viewSelectedBtn.style.color = '#ccddff';
+      viewSelectedBtn.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.3) 100%)';
+      viewSelectedBtn.style.borderColor = 'rgba(139, 92, 246, 0.6)';
+      viewSelectedBtn.style.color = '#f3e8ff';
+      viewSelectedBtn.style.transform = 'translateY(-1px)';
+      viewSelectedBtn.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.4)';
     });
     viewSelectedBtn.addEventListener('mouseleave', () => {
-      viewSelectedBtn.style.background = 'rgba(100, 150, 255, 0.15)';
-      viewSelectedBtn.style.borderColor = 'rgba(100, 150, 255, 0.4)';
-      viewSelectedBtn.style.color = '#aaccff';
+      viewSelectedBtn.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.2) 100%)';
+      viewSelectedBtn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+      viewSelectedBtn.style.color = '#e9d5ff';
+      viewSelectedBtn.style.transform = 'translateY(0)';
+      viewSelectedBtn.style.boxShadow = 'none';
     });
 
     viewSelectedBtn.addEventListener('click', async () => {
@@ -1212,7 +1253,7 @@ export class ToolbarHandlers {
       }
     });
 
-    panel.appendChild(viewSelectedBtn);
+    headerContainer.appendChild(viewSelectedBtn);
 
     let currentSort: 'alpha' | 'count' | 'none' = 'none';
 
@@ -1228,11 +1269,26 @@ export class ToolbarHandlers {
 
     sortContainer.appendChild(sortAlphaBtn);
     sortContainer.appendChild(sortCountBtn);
-    panel.appendChild(sortContainer);
+    headerContainer.appendChild(sortContainer);
+    
+    // Append header to panel
+    panel.appendChild(headerContainer);
+    
+    // Create scrollable content container
+    const scrollableContent = document.createElement('div');
+    scrollableContent.className = 'scrollable-content';
+    scrollableContent.style.cssText = `
+      padding: 0 18px 18px 18px;
+      overflow-y: auto;
+      max-height: calc(600px - 280px);
+      scrollbar-width: thin;
+      scrollbar-color: rgba(139, 92, 246, 0.6) rgba(0, 0, 0, 0.2);
+    `;
+    panel.appendChild(scrollableContent);
 
     const rebuildPanel = (sortType: 'alpha' | 'count') => {
-      // Remove all existing group containers
-      const existingGroups = panel.querySelectorAll('.model-group-container');
+      // Remove all existing group containers from scrollable content
+      const existingGroups = scrollableContent.querySelectorAll('.model-group-container');
       existingGroups.forEach(g => g.remove());
 
       // Rebuild groups with sorted categories
@@ -1253,39 +1309,45 @@ export class ToolbarHandlers {
         const groupContainer = document.createElement('div');
         groupContainer.className = 'model-group-container';
         groupContainer.style.cssText = `
-          margin-bottom: 8px;
-          border: 1px solid #444;
-          border-radius: 4px;
+          margin-bottom: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
           overflow: hidden;
+          background: rgba(255, 255, 255, 0.03);
         `;
 
         // Create model header (expandable)
         const modelHeader = document.createElement('div');
         modelHeader.style.cssText = `
-          padding: 8px 10px;
-          background: rgba(255, 255, 255, 0.08);
+          padding: 10px 12px;
+          background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
           cursor: pointer;
           user-select: none;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          transition: background 0.2s;
+          transition: all 0.3s;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         `;
 
         const modelTitle = document.createElement('div');
         modelTitle.style.cssText = `
-          font-size: 12px;
-          font-weight: 600;
-          color: #fff;
+          font-size: 13px;
+          font-weight: 700;
+          background: linear-gradient(135deg, #a5b4fc 0%, #c4b5fd 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          letter-spacing: 0.3px;
         `;
         modelTitle.textContent = modelId;
 
         const expandIcon = document.createElement('span');
         expandIcon.textContent = '▼';
         expandIcon.style.cssText = `
-          font-size: 10px;
-          color: #999;
-          transition: transform 0.2s;
+          font-size: 11px;
+          color: #a5b4fc;
+          transition: transform 0.3s;
         `;
 
         modelHeader.appendChild(modelTitle);
@@ -1297,7 +1359,7 @@ export class ToolbarHandlers {
           max-height: 500px;
           overflow: hidden;
           transition: max-height 0.3s ease;
-          background: rgba(0, 0, 0, 0.2);
+          background: rgba(0, 0, 0, 0.15);
         `;
 
         // Add color pickers for each category in this model
@@ -1307,11 +1369,19 @@ export class ToolbarHandlers {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.03);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
             cursor: default;
+            transition: background 0.2s;
           `;
+          
+          row.addEventListener('mouseenter', () => {
+            row.style.background = 'rgba(255, 255, 255, 0.05)';
+          });
+          row.addEventListener('mouseleave', () => {
+            row.style.background = 'rgba(255, 255, 255, 0.02)';
+          });
 
           // Create checkbox for multi-selection
           const checkboxWrapper = document.createElement('div');
@@ -1326,15 +1396,15 @@ export class ToolbarHandlers {
           const checkbox = document.createElement('input');
           checkbox.type = 'checkbox';
           checkbox.style.cssText = `
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             cursor: pointer;
             appearance: none;
             -webkit-appearance: none;
-            border: 2px solid #555;
-            border-radius: 3px;
+            border: 2px solid rgba(139, 92, 246, 0.4);
+            border-radius: 4px;
             background: rgba(0, 0, 0, 0.3);
-            transition: all 0.2s;
+            transition: all 0.3s;
             position: relative;
           `;
           checkbox.checked = this.selectedCategories.has(cat.selectionName);
@@ -1342,24 +1412,26 @@ export class ToolbarHandlers {
           // Add checked state styling
           const updateCheckboxStyle = () => {
             if (checkbox.checked) {
-              checkbox.style.background = '#6495ed';
-              checkbox.style.borderColor = '#6495ed';
+              checkbox.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)';
+              checkbox.style.borderColor = '#8b5cf6';
+              checkbox.style.boxShadow = '0 2px 8px rgba(139, 92, 246, 0.5)';
             } else {
               checkbox.style.background = 'rgba(0, 0, 0, 0.3)';
-              checkbox.style.borderColor = '#555';
+              checkbox.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+              checkbox.style.boxShadow = 'none';
             }
           };
           updateCheckboxStyle();
 
           checkbox.addEventListener('mouseenter', () => {
             if (!checkbox.checked) {
-              checkbox.style.borderColor = '#777';
-              checkbox.style.background = 'rgba(0, 0, 0, 0.4)';
+              checkbox.style.borderColor = 'rgba(139, 92, 246, 0.6)';
+              checkbox.style.background = 'rgba(139, 92, 246, 0.1)';
             }
           });
           checkbox.addEventListener('mouseleave', () => {
             if (!checkbox.checked) {
-              checkbox.style.borderColor = '#555';
+              checkbox.style.borderColor = 'rgba(139, 92, 246, 0.4)';
               checkbox.style.background = 'rgba(0, 0, 0, 0.3)';
             }
           });
@@ -1401,11 +1473,12 @@ export class ToolbarHandlers {
 
           const label = document.createElement('div');
           label.style.cssText = `
-            font-size: 11px;
-            color: #ccc;
+            font-size: 12px;
+            color: #e0e0ff;
             flex: 1;
             margin-right: 10px;
             user-select: none;
+            font-weight: 500;
           `;
           label.textContent = `${cat.name.replace('IFC', '')} (${cat.count})`;
 
@@ -1419,30 +1492,37 @@ export class ToolbarHandlers {
 
           // Create cluster button
           const clusterBtn = document.createElement('button');
-          clusterBtn.innerHTML = '📊';
+          clusterBtn.innerHTML = '<i class="fas fa-cubes" style="font-size: 11px;"></i>';
           clusterBtn.title = 'View in cluster mode';
           clusterBtn.style.cssText = `
-            width: 20px;
-            height: 20px;
-            border: none;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.1);
+            width: 28px;
+            height: 28px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(14, 165, 233, 0.15) 100%);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 12px;
-            transition: all 0.2s;
+            color: #60a5fa;
+            transition: all 0.3s;
             padding: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
           `;
 
           clusterBtn.addEventListener('mouseenter', () => {
-            clusterBtn.style.background = 'rgba(255, 255, 255, 0.2)';
-            clusterBtn.style.transform = 'scale(1.1)';
+            clusterBtn.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(14, 165, 233, 0.25) 100%)';
+            clusterBtn.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+            clusterBtn.style.color = '#93c5fd';
+            clusterBtn.style.transform = 'translateY(-2px)';
+            clusterBtn.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.5)';
           });
           clusterBtn.addEventListener('mouseleave', () => {
-            clusterBtn.style.background = 'rgba(255, 255, 255, 0.1)';
-            clusterBtn.style.transform = 'scale(1)';
+            clusterBtn.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(14, 165, 233, 0.15) 100%)';
+            clusterBtn.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+            clusterBtn.style.color = '#60a5fa';
+            clusterBtn.style.transform = 'translateY(0)';
+            clusterBtn.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
           });
 
           clusterBtn.addEventListener('click', async () => {
@@ -1484,15 +1564,27 @@ export class ToolbarHandlers {
           const colorWrapper = document.createElement('div');
           colorWrapper.style.cssText = `
             position: relative;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
             overflow: hidden;
-            border: 2px solid #666;
+            border: 2px solid rgba(255, 255, 255, 0.3);
             cursor: pointer;
-            transition: border-color 0.2s, transform 0.1s;
+            transition: all 0.3s;
             flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
           `;
+          
+          colorWrapper.addEventListener('mouseenter', () => {
+            colorWrapper.style.borderColor = 'rgba(255, 255, 255, 0.6)';
+            colorWrapper.style.transform = 'scale(1.15)';
+            colorWrapper.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.5)';
+          });
+          colorWrapper.addEventListener('mouseleave', () => {
+            colorWrapper.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            colorWrapper.style.transform = 'scale(1)';
+            colorWrapper.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.3)';
+          });
 
           const colorInput = document.createElement('input');
           colorInput.type = 'color';
@@ -1561,7 +1653,7 @@ export class ToolbarHandlers {
 
         groupContainer.appendChild(modelHeader);
         groupContainer.appendChild(categoriesContainer);
-        panel.appendChild(groupContainer);
+        scrollableContent.appendChild(groupContainer);
       }
     };
 
@@ -1592,38 +1684,42 @@ export class ToolbarHandlers {
 
     // Make panel draggable
     let isDragging = false;
-    let currentX = 0;
-    let currentY = 0;
-    let initialX = 0;
-    let initialY = 0;
+    let offsetX = 0;
+    let offsetY = 0;
 
     const dragStart = (e: MouseEvent) => {
-      if (e.target === title || e.target === panel) {
-        initialX = e.clientX - currentX;
-        initialY = e.clientY - currentY;
+      // Only allow dragging from title or headerContainer, not from buttons or scrollable area
+      const target = e.target as HTMLElement;
+      if (target === title || target === headerContainer || target.classList.contains('brand-text')) {
+        const rect = panel.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
         isDragging = true;
         panel.style.cursor = 'grabbing';
+        headerContainer.style.cursor = 'grabbing';
       }
     };
 
     const drag = (e: MouseEvent) => {
       if (isDragging) {
         e.preventDefault();
-        currentX = e.clientX - initialX;
-        currentY = e.clientY - initialY;
-        panel.style.left = currentX + 'px';
-        panel.style.top = currentY + 'px';
+        const newX = e.clientX - offsetX;
+        const newY = e.clientY - offsetY;
+        
+        panel.style.left = newX + 'px';
+        panel.style.top = newY + 'px';
         panel.style.right = 'auto';
       }
     };
 
     const dragEnd = () => {
       isDragging = false;
-      panel.style.cursor = 'move';
+      panel.style.cursor = 'default';
+      headerContainer.style.cursor = 'move';
     };
 
+    headerContainer.addEventListener('mousedown', dragStart);
     title.addEventListener('mousedown', dragStart);
-    panel.addEventListener('mousedown', dragStart);
     document.addEventListener('mousemove', drag);
     document.addEventListener('mouseup', dragEnd);
 

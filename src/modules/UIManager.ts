@@ -853,9 +853,7 @@ export class UIManager {
     if (!walkBtn) return;
 
     if (isActive) {
-      walkBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-      walkBtn.style.color = 'white';
-      walkBtn.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.8)';
+      walkBtn.classList.add('active');
       // Show indicator
       if (walkIndicator) {
         walkIndicator.style.display = 'block';
@@ -869,9 +867,7 @@ export class UIManager {
         helper.classList.add('visible');
       }
     } else {
-      walkBtn.style.background = '';
-      walkBtn.style.color = '';
-      walkBtn.style.boxShadow = '';
+      walkBtn.classList.remove('active');
       // Hide indicator
       if (walkIndicator) {
         walkIndicator.style.display = 'none';
@@ -1025,12 +1021,8 @@ export class UIManager {
     if (clipperBtn) {
       if (isEnabled) {
         clipperBtn.classList.add('active');
-        clipperBtn.style.backgroundColor = '#3b82f6';
-        clipperBtn.style.color = 'white';
       } else {
         clipperBtn.classList.remove('active');
-        clipperBtn.style.backgroundColor = '';
-        clipperBtn.style.color = '';
       }
     }
   }
@@ -1049,14 +1041,28 @@ export class UIManager {
     const settingsPanel = document.getElementById('settingsPanel');
     if (settingsPanel) settingsPanel.style.display = 'none';
     
+    // Get the parent button to manage active state
+    const button = group.querySelector('.toolbar-btn') as HTMLElement;
+    const action = button?.dataset.action;
+    
     // Toggle this submenu
     if (!isVisible) {
       submenu.classList.add('visible');
       this.isSubmenuOpen = true;
       this.hideModelTooltip();
+      
+      // Add active class for measurement and information buttons
+      if (button && (action === 'toggleMeasure' || action === 'toggleInfo')) {
+        button.classList.add('active');
+      }
     } else {
       this.isSubmenuOpen = false;
       this.showModelTooltip();
+      
+      // Remove active class for measurement and information buttons
+      if (button && (action === 'toggleMeasure' || action === 'toggleInfo')) {
+        button.classList.remove('active');
+      }
     }
   }
 
@@ -1068,6 +1074,12 @@ export class UIManager {
     submenus.forEach(menu => {
       menu.classList.remove('visible');
     });
+    
+    // Remove active class from measurement and information buttons
+    const measureBtn = document.querySelector('[data-action="toggleMeasure"]');
+    const infoBtn = document.querySelector('[data-action="toggleInfo"]');
+    if (measureBtn) measureBtn.classList.remove('active');
+    if (infoBtn) infoBtn.classList.remove('active');
     
     // Restore tooltip visibility only if no submenu is currently open
     if (!skipShowTooltip && !this.isSubmenuOpen) {
