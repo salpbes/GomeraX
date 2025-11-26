@@ -51,72 +51,72 @@ export class AdaptiveQualityController {
     'ultra': {
       name: 'Ultra Quality',
       aoParameters: {
-        samples: 32,
-        radius: 0.25,
-        scale: 1.0,
+        samples: 24,
+        radius: 0.2,
+        scale: 0.9,
         distanceExponent: 1,
         thickness: 1,
         distanceFallOff: 1,
         screenSpaceRadius: true,
       },
       clipStylerPerformanceMode: 'high', // Full opacity
-      fpsThreshold: { min: 55, max: 999 },
+      fpsThreshold: { min: 50, max: 999 },
     },
     'high': {
       name: 'High Quality',
       aoParameters: {
-        samples: 16,
-        radius: 0.25,
-        scale: 0.8,
+        samples: 12,
+        radius: 0.18,
+        scale: 0.75,
         distanceExponent: 1,
         thickness: 1,
         distanceFallOff: 1,
         screenSpaceRadius: true,
       },
       clipStylerPerformanceMode: 'balanced', // Moderate opacity
-      fpsThreshold: { min: 45, max: 55 },
+      fpsThreshold: { min: 40, max: 50 },
     },
     'balanced': {
       name: 'Balanced',
       aoParameters: {
-        samples: 12,
-        radius: 0.15,
-        scale: 0.7,
+        samples: 8,
+        radius: 0.12,
+        scale: 0.6,
         distanceExponent: 1.2,
         thickness: 0.8,
         distanceFallOff: 0.9,
         screenSpaceRadius: true,
       },
       clipStylerPerformanceMode: 'balanced', // Moderate opacity
-      fpsThreshold: { min: 35, max: 45 },
+      fpsThreshold: { min: 30, max: 40 },
     },
     'performance': {
       name: 'Performance',
       aoParameters: {
-        samples: 8,
-        radius: 0.1,
-        scale: 0.5,
+        samples: 4,
+        radius: 0.08,
+        scale: 0.4,
         distanceExponent: 1.5,
         thickness: 0.6,
         distanceFallOff: 0.8,
         screenSpaceRadius: true,
       },
       clipStylerPerformanceMode: 'performance', // Minimal opacity
-      fpsThreshold: { min: 25, max: 35 },
+      fpsThreshold: { min: 20, max: 30 },
     },
     'ultra-performance': {
       name: 'Ultra Performance',
       aoParameters: {
-        samples: 4,
-        radius: 0.08,
-        scale: 0.3,
+        samples: 2,
+        radius: 0.05,
+        scale: 0.2,
         distanceExponent: 2,
-        thickness: 0.5,
-        distanceFallOff: 0.7,
+        thickness: 0.4,
+        distanceFallOff: 0.5,
         screenSpaceRadius: true,
       },
       clipStylerPerformanceMode: 'performance', // Minimal opacity
-      fpsThreshold: { min: 0, max: 25 },
+      fpsThreshold: { min: 0, max: 20 },
     },
   };
 
@@ -250,11 +250,11 @@ export class AdaptiveQualityController {
       }
     }
     
-    // Fallback based on FPS ranges
-    if (fps >= 55) return 'ultra';
-    if (fps >= 45) return 'high';
-    if (fps >= 35) return 'balanced';
-    if (fps >= 25) return 'performance';
+    // Fallback based on FPS ranges (updated thresholds)
+    if (fps >= 50) return 'ultra';
+    if (fps >= 40) return 'high';
+    if (fps >= 30) return 'balanced';
+    if (fps >= 20) return 'performance';
     return 'ultra-performance';
   }
 
@@ -290,23 +290,23 @@ export class AdaptiveQualityController {
     return {
       'ultra': {
         name: this.qualityPresets['ultra'].name,
-        description: '32 samples, full quality shadows (Heavy)',
+        description: '24 samples, high quality AO (Heavy)',
       },
       'high': {
         name: this.qualityPresets['high'].name,
-        description: '16 samples, high quality shadows (Medium-Heavy)',
+        description: '12 samples, good quality AO (Medium)',
       },
       'balanced': {
         name: this.qualityPresets['balanced'].name,
-        description: '12 samples, balanced quality/performance (Medium)',
+        description: '8 samples, balanced quality/performance',
       },
       'performance': {
         name: this.qualityPresets['performance'].name,
-        description: '8 samples, optimized for performance (Light)',
+        description: '4 samples, optimized for speed (Light)',
       },
       'ultra-performance': {
         name: this.qualityPresets['ultra-performance'].name,
-        description: '4 samples, maximum performance (Very Light)',
+        description: '2 samples, maximum FPS (Very Light)',
       },
     };
   }
