@@ -202,6 +202,10 @@ export class UIManager {
               <kbd>Shift</kbd>
               <span class="walk-helper-desc">Down</span>
             </div>
+            <div class="walk-helper-key-group">
+              <kbd>G</kbd>
+              <span class="walk-helper-desc">Toggle Gravity</span>
+            </div>
           </div>
         </div>
         <div class="walk-helper-section">

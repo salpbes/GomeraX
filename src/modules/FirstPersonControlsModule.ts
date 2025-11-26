@@ -205,6 +205,7 @@ export class FirstPersonControlsModule {
     console.log('✅ Keyboard controls enabled');
     console.log('  - WASD / Arrows: Move horizontally');
     console.log('  - Space: Move up | Shift: Move down');
+    console.log('  - G: Toggle gravity mode (for stair climbing)');
     console.log('✅ Mouse look enabled - Click to lock pointer');
     
     if (this.wallCategories.size > 0) {
