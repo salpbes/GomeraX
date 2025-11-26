@@ -282,38 +282,31 @@ export class PropertiesPanelModule {
    *    - Returns information about what was hit (element ID, distance, point)
    *    - STOPS at first solid surface (can't pass through walls/roofs)
    * 
-   * 2. GPU vs CPU CLIPPING:
-   *    - GPU Clipping (WebGLRenderer.clippingPlanes): Affects VISUAL rendering only
-   *      * Makes geometry invisible on screen
-   *      * Geometry still exists in memory
-   *    - CPU Raycasting: Works on FULL geometry in memory
-   *      * Doesn't know about GPU clipping
-   *      * Can hit "hidden" geometry that's visually clipped
+   * 2. CLIPPING PLANES INTEGRATION (v3.2.11+):
+   *    - Fragment models now support `getClippingPlanesEvent` callback
+   *    - This is set up in IFCLoaderModule when models are loaded
+   *    - The Fragment raycaster uses these planes to filter results
+   *    - Clipped geometry is automatically excluded from raycast results
+   *    - Reference: https://docs.thatopen.com/Tutorials/Fragments/Fragments/FragmentsModels/BuildingConfigurator
    * 
    * 3. OBC FRAGMENT RAYCASTING:
-   *    - FragmentsModel.raycast(): Returns FIRST hit (closest intersection)
-   *    - FragmentsModel.raycastAll(): Should return ALL hits, but in practice
-   *      only returns first hit per unique element (not all geometric hits)
+   *    - FragmentsModel.raycast(): Returns FIRST visible hit (closest intersection)
+   *    - FragmentsModel.raycastAll(): Returns ALL visible hits along the ray path
    *    - Works in Web Worker thread for performance
    *    - Uses optimized Fragment geometry (not raw THREE.js meshes)
+   *    - Clipping planes are now respected via getClippingPlanesEvent
    * 
-   * 4. THE PROBLEM WE'RE SOLVING:
-   *    - User clicks on interior element visible in section view
-   *    - Ray hits CLIPPED geometry first (wall that's visually hidden)
-   *    - OBC raycast returns that clipped element
-   *    - We need to FILTER OUT clipped hits and find first VISIBLE one
-   * 
-   * 5. OUR SOLUTION:
-   *    - Get raycast hit(s) from OBC Fragment raycasting
-   *    - Check if hit point is on VISIBLE side of clipping planes
-   *    - Filter out hits that are behind clipping planes
-   *    - Return closest VISIBLE hit
+   * 4. BACKUP FILTERING:
+   *    - We still keep manual clipping plane filtering as a backup
+   *    - This handles edge cases where getClippingPlanesEvent might not work
+   *    - isPointVisible() checks if a hit point is on the visible side of planes
    * 
    * CONNECTIONS TO OTHER CODE:
    * ==========================
-   * - ClipperModule: Creates clipping planes (affects GPU rendering)
+   * - IFCLoaderModule: Sets up getClippingPlanesEvent on each model
+   * - ClipperModule: Creates clipping planes (affects GPU rendering + raycasting)
    * - ClipStylerModule: Creates section fill meshes (visual only)
-   * - isPointVisible(): Our helper that checks if point is clipped (CPU check)
+   * - isPointVisible(): Backup check if point is clipped
    * - Highlighter: Highlights selected element
    * - showIfcProperties(): Displays properties of selected element
    */
@@ -328,15 +321,16 @@ export class PropertiesPanelModule {
     console.log(`🎯 Raycasting with mouse position:`, { x: event.clientX, y: event.clientY });
     console.log(`📦 Available models:`, Array.from(this.fragmentsManager.list.keys()));
 
-    // STEP 1: Get active clipping planes for filtering
-    // These are GPU clipping planes created by ClipperModule
-    // They make geometry invisible but don't affect raycasting
+    // STEP 1: Check for active clipping planes
+    // With getClippingPlanesEvent set up in IFCLoaderModule, Fragment raycasting
+    // should now automatically filter out clipped geometry
     const clipper = this.components.get(OBC.Clipper);
     const hasActiveClipping = clipper && clipper.list.size > 0;
     
     if (hasActiveClipping) {
       console.log(`✂️ Active clipping planes detected: ${clipper.list.size}`);
-      console.log(`   Will filter results to only return visible intersections`);
+      console.log(`   Fragment raycast should auto-filter via getClippingPlanesEvent`);
+      console.log(`   Backup filtering also enabled for edge cases`);
     }
 
     // STEP 2: Collect all intersections from all models
@@ -349,49 +343,21 @@ export class PropertiesPanelModule {
       try {
         console.log(`🔍 Trying raycast on model: ${modelId}`);
         
-        // STEP 3a: Try OBC Fragment raycastAll() first (if available)
+        // STEP 3a: Use OBC Fragment raycast() - now with clipping plane awareness
         // 
-        // WHY raycastAll() EXISTS:
-        // - Designed to return ALL intersections along the ray path
-        // - Should help find visible geometry behind clipped surfaces
-        // 
-        // WHY raycastAll() FAILS IN OUR VERSION (3.2.2):
-        // 1. INCOMPLETE IMPLEMENTATION: The method exists but the 'returnAll' flag
-        //    wasn't properly implemented in version 3.2.2
-        // 2. RECENT FIX: GitHub commit 7012998 (4 days ago) added proper returnAll
-        //    support, but this isn't in npm release yet
-        // 3. CURRENT BEHAVIOR: raycastAll() in 3.2.2 returns only 1 result,
-        //    same as regular raycast()
+        // With getClippingPlanesEvent configured (see IFCLoaderModule):
+        // - Fragment raycaster knows about active clipping planes
+        // - Results are automatically filtered to only return VISIBLE hits
+        // - No need to manually filter afterwards (but we keep backup filtering)
         //
-        // RELEASE STATUS:
-        // - Commit is merged to main branch ✅
-        // - All CI checks passed ✅
-        // - NPM publish is SKIPPED (waiting for release) ⏳
-        // - REVERTED to npm v3.2.2 (GitHub version needs monorepo build)
-        // - Will update when v3.2.3+ is released on npm
-        //
-        // WHAT THE FIX DOES (in latest GitHub main branch):
-        // - Passes 'returnAll: true' flag to worker thread
-        // - Worker iterates through ALL hits and returns array
-        // - Should properly return multiple intersections along ray path
-        //
-        // TESTED SCENARIOS WHERE v3.2.2 FAILS:
-        // ❌ Clicking roof from above → Only returns roof (not floors/walls below)
-        // ❌ Clicking exterior wall → Only returns wall (not interior objects)
-        // ❌ Section mode with clipped wall → Only returns the clipped wall
-        //
-        // IMPORTANT LIMITATION (even with fix):
-        // - Raycasting still can't pass THROUGH solid geometry
-        // - Clicking a roof won't reach objects below the solid roof surface
-        // - raycastAll() returns hits along ray until it hits solid surface
-        // - To select interior objects: use clipping planes to reveal them first
-        //
-        // TODO: Update to newer @thatopen/fragments version when released
-        // to get proper raycastAll() support with returnAll flag
+        // raycast() vs raycastAll():
+        // - raycast(): Returns FIRST visible hit (optimized for most use cases)
+        // - raycastAll(): Returns ALL visible hits (useful for special cases)
+        // - Both now respect clipping planes via getClippingPlanesEvent
         //
         let results = null;
         if (typeof (model as any).raycastAll === 'function') {
-          console.log('   Using OBC Fragment raycastAll() - checking if returnAll works in this version...');
+          console.log('   Using OBC Fragment raycastAll() v3.2.11+');
           
           // Call raycastAll with camera, mouse position, and canvas
           results = await (model as any).raycastAll({
@@ -406,11 +372,8 @@ export class PropertiesPanelModule {
           }
           
           console.log(`   ℹ️  raycastAll() returned ${results?.length || 0} result(s)`);
-          if (results && results.length === 1) {
-            console.log(`   ⚠️  Only 1 result - returnAll flag not working in v3.2.2`);
-            console.log(`      (Fix committed to GitHub 4 days ago, not in npm release yet)`);
-          } else if (results && results.length > 1) {
-            console.log(`   ✅  Multiple results! returnAll is working in this version`);
+          if (results && results.length > 1) {
+            console.log(`   ✅  Multiple results - raycastAll working correctly`);
           }
           if (results && results.length > 0) {
             results.forEach((r: any, idx: number) => {
@@ -439,7 +402,7 @@ export class PropertiesPanelModule {
           }
         } else {
           // STEP 3b: Fallback to THREE.js raycaster (for very old OBC versions)
-          // This shouldn't happen with OBC 3.2.2, but kept for safety
+          // This shouldn't happen with OBC 3.2.11+, but kept for safety
           console.log('   Using THREE.js Raycaster (OBC raycast not available)');
           const raycaster = new THREE.Raycaster();
           raycaster.setFromCamera(mouse, this.world.camera.three);
@@ -499,24 +462,21 @@ export class PropertiesPanelModule {
       })));
     }
 
-    // STEP 5: Filter out intersections on the CLIPPED side of active clipping planes
-    // This is THE KEY STEP that solves the section mode selection problem!
-    // - GPU clipping planes hide geometry visually
-    // - But CPU raycasting still hits that geometry
-    // - We manually check each hit point against clipping planes
-    // - Filter out hits that are on the "hidden" side
+    // STEP 5: Backup filtering - check intersections against clipping planes
+    // With getClippingPlanesEvent, Fragment raycasting should already filter results
+    // This is kept as a backup for edge cases or older behavior
     const visibleIntersections = allIntersections.filter(intersection => {
       const isVisible = this.isPointVisible(intersection.point);  // Check against clipping planes
       if (!isVisible && intersection.point) {
-        console.log(`❌ Filtered out: modelId=${intersection.modelId}, localId=${intersection.localId}, distance=${intersection.distance.toFixed(2)}`);
-        console.log(`   Point was behind clipping plane`);
+        console.log(`❌ Backup filter removed: modelId=${intersection.modelId}, localId=${intersection.localId}, distance=${intersection.distance.toFixed(2)}`);
+        console.log(`   Point was behind clipping plane (getClippingPlanesEvent may not have filtered this)`);
       }
       return isVisible;
     });
 
     // STEP 6: Display summary of VISIBLE hits after filtering
     if (visibleIntersections.length > 0 && visibleIntersections.length < allIntersections.length) {
-      console.log('\n✅ VISIBLE HITS (after clipping plane filter):');
+      console.log('\n✅ VISIBLE HITS (after backup clipping plane filter):');
       console.table(visibleIntersections.map((hit, index) => ({
         '#': index + 1,
         'localId': hit.localId,
@@ -545,14 +505,9 @@ export class PropertiesPanelModule {
 
     if (allIntersections.length > 0) {
       console.log(`❌ Found ${allIntersections.length} intersections but all are on clipped side`);
-      console.log(`ℹ️  NOTE: This happens when the raycast hits clipped geometry first.`);
-      console.log(`   OBC Fragment raycasting returns the FIRST geometric hit,`);
-      console.log(`   which may be behind the clipping plane even though there's`);
-      console.log(`   visible geometry further along the ray.`);
-      console.log(`   This is a known limitation of GPU-based clipping:`);
-      console.log(`   - GPU clipping affects RENDERING only (visual clipping)`);
-      console.log(`   - CPU raycasting still sees the FULL geometry`);
-      console.log(`   - Fragment raycasting is optimized and may not return all hits`);
+      console.log(`ℹ️  NOTE: This shouldn't happen with getClippingPlanesEvent properly configured.`);
+      console.log(`   Check that IFCLoaderModule sets model.getClippingPlanesEvent`);
+      console.log(`   and that clipping planes are being returned correctly.`);
     } else {
       console.log('❌ No intersection found');
     }

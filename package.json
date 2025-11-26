@@ -9,11 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@thatopen/components": "3.2.2",
-    "@thatopen/components-front": "3.2.1",
-    "@thatopen/fragments": "3.2.2",
-    "@thatopen/ui": "3.2.0",
-    "@thatopen/ui-obc": "3.2.2",
+    "@thatopen/components": "^3.2.6",
+    "@thatopen/components-front": "^3.2.14",
+    "@thatopen/fragments": "^3.2.11",
+    "@thatopen/ui": "^3.2.0",
+    "@thatopen/ui-obc": "^3.2.2",
     "chart.js": "^4.5.1",
     "stats.js": "^0.17.0",
     "three": "^0.175.0",

@@ -185,6 +185,17 @@ export class IFCLoaderModule {
       // Add the model to the scene
       world.scene.three.add(model.object);
       
+      // CRITICAL: Set up clipping planes event for Fragment raycasting
+      // This tells the model's raycast system about active clipping planes
+      // so it can properly filter out clipped geometry during raycasting
+      // (not after, as we were doing manually before)
+      // Reference: https://docs.thatopen.com/Tutorials/Fragments/Fragments/FragmentsModels/BuildingConfigurator
+      model.getClippingPlanesEvent = () => {
+        // Return the renderer's clipping planes (set by Clipper component)
+        return Array.from(world.renderer?.three.clippingPlanes || []);
+      };
+      console.log(`✅ Set up getClippingPlanesEvent for model ${uuid}`);
+      
       // Trigger an update to render the model
       this.fragments?.core.update(true);
       
