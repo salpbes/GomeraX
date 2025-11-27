@@ -166,6 +166,20 @@ export class PropertiesPanelModule {
         return;
       }
       
+      // Check if we're in first-person mode with pointer locked
+      // In that case, skip selection on click (use crosshair selection instead)
+      const viewer = (window as any).viewer;
+      const fpControls = viewer?.getFirstPersonControls?.();
+      const isFirstPersonPointerLocked = fpControls?.isActive?.() && fpControls?.isPointerLockedMode?.();
+      
+      if (isFirstPersonPointerLocked) {
+        // In first-person mode with pointer locked, we'll handle selection via center-screen raycast
+        // This click is likely just the user pressing a button, not trying to select
+        console.log('🎯 First-person mode - using crosshair selection');
+        await this.performCenterScreenSelection();
+        return;
+      }
+      
       console.log('🖱️ Click detected');
       
       // Clear previous selection first
@@ -214,6 +228,67 @@ export class PropertiesPanelModule {
         this.clearSelection();
       }
     });
+  }
+
+  /**
+   * Perform selection using center-screen raycast (for first-person mode)
+   * This allows selection in walking mode by aiming the crosshair at an object and clicking
+   */
+  private async performCenterScreenSelection(): Promise<void> {
+    if (!this.world?.renderer?.three.domElement || !this.world.camera || !this.fragmentsManager) {
+      return;
+    }
+
+    console.log('🎯 Performing center-screen selection for first-person mode');
+
+    // Clear previous selection first
+    if (this.selectedObject && this.selectedObject.userData?.isClusterMesh && this.selectedObject instanceof THREE.Mesh) {
+      if (this.selectedObject.userData.originalMaterial) {
+        this.selectedObject.material = this.selectedObject.userData.originalMaterial;
+      }
+    }
+
+    const container = this.world.renderer.three.domElement;
+    const rect = container.getBoundingClientRect();
+    
+    // Use center of screen for raycast
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    // Create a synthetic mouse event at screen center
+    const syntheticEvent = {
+      clientX: centerX,
+      clientY: centerY
+    } as MouseEvent;
+
+    // First check for cluster meshes at center
+    if (this.clusterModule && this.clusterModule.isClusteringActive()) {
+      const clusterMeshHit = await this.checkClusterMeshClick(syntheticEvent);
+      if (clusterMeshHit) {
+        console.log('✅ Center-screen cluster mesh hit:', clusterMeshHit);
+        const { modelId, expressID, mesh, category } = clusterMeshHit;
+        
+        this.selectedObject = mesh;
+        await this.showIfcProperties(modelId, expressID, mesh);
+        this.highlightObject(mesh, modelId, expressID);
+        return;
+      }
+    }
+
+    // Otherwise, use normal IFC raycasting at center
+    const intersection = await this.castRay(syntheticEvent);
+    
+    if (intersection) {
+      console.log('✅ Center-screen hit found:', intersection);
+      const { modelId, localId, object } = intersection;
+      
+      this.selectedObject = object;
+      await this.showIfcProperties(modelId, localId, object);
+      this.highlightObject(object, modelId, localId);
+    } else {
+      console.log('❌ No object at center of screen');
+      this.clearSelection();
+    }
   }
 
   /**

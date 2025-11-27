@@ -483,11 +483,13 @@ export class ToolbarHandlers {
     if (currentMode === MeasurementMode.LENGTH) {
       // Toggle off
       this.measurement.setMode(MeasurementMode.DISABLED);
+      this.updateMeasureButtonState(false);
       console.log('📏 Length measurement disabled');
       NotificationHelper.close();
     } else {
       // Enable length measurement
       this.measurement.setMode(MeasurementMode.LENGTH);
+      this.updateMeasureButtonState(true);
       console.log('📏 Length measurement enabled - Double-click to measure');
       NotificationHelper.show({
         title: '📏 Length Measurement Active',
@@ -511,11 +513,13 @@ export class ToolbarHandlers {
     if (currentMode === MeasurementMode.AREA) {
       // Toggle off
       this.measurement.setMode(MeasurementMode.DISABLED);
+      this.updateMeasureButtonState(false);
       console.log('📐 Area measurement disabled');
       NotificationHelper.close();
     } else {
       // Enable area measurement
       this.measurement.setMode(MeasurementMode.AREA);
+      this.updateMeasureButtonState(true);
       console.log('📐 Area measurement enabled - Double-click to start, Enter to finish');
       NotificationHelper.show({
         title: '📐 Area Measurement Active',
@@ -539,11 +543,13 @@ export class ToolbarHandlers {
     if (currentMode === MeasurementMode.VOLUME) {
       // Toggle off
       this.measurement.setMode(MeasurementMode.DISABLED);
+      this.updateMeasureButtonState(false);
       console.log('📦 Volume measurement disabled');
       NotificationHelper.close();
     } else {
       // Enable volume measurement
       this.measurement.setMode(MeasurementMode.VOLUME);
+      this.updateMeasureButtonState(true);
       console.log('📦 Volume measurement enabled - Double-click on object to measure');
       NotificationHelper.show({
         title: '📦 Volume Measurement Active',
@@ -640,8 +646,23 @@ export class ToolbarHandlers {
     }
 
     this.measurement.setMode(MeasurementMode.DISABLED);
+    this.updateMeasureButtonState(false);
     NotificationHelper.close();
     console.log('✅ Measurement mode canceled');
+  }
+
+  /**
+   * Updates the measurement button active state
+   */
+  private updateMeasureButtonState(isActive: boolean): void {
+    const measureBtn = document.getElementById('measureBtn');
+    if (measureBtn) {
+      if (isActive) {
+        measureBtn.classList.add('active');
+      } else {
+        measureBtn.classList.remove('active');
+      }
+    }
   }
 
   /**

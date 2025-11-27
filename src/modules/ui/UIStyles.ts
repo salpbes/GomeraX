@@ -415,6 +415,16 @@ export function getToolbarStyles(): string {
       transform: scale(0.95);
     }
     
+    /* Active state for submenu buttons (e.g., click surface mode) */
+    .submenu-btn.active {
+      background: linear-gradient(135deg, #10b981 0%, #14b8a6 100%) !important;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5) !important;
+    }
+    
+    .submenu-btn.active:hover {
+      background: linear-gradient(135deg, #34d399 0%, #2dd4bf 100%) !important;
+    }
+    
     .submenu-btn .icon {
       font-size: 16px;
       line-height: 1;

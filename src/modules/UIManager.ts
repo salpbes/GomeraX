@@ -209,11 +209,15 @@ export class UIManager {
           </div>
         </div>
         <div class="walk-helper-section">
-          <div class="walk-helper-label">Look Around</div>
+          <div class="walk-helper-label">Look & Select</div>
           <div class="walk-helper-keys">
             <div class="walk-helper-key-group">
               <i class="fas fa-mouse"></i>
-              <span class="walk-helper-desc">Click to lock pointer</span>
+              <span class="walk-helper-desc">Right-click to look</span>
+            </div>
+            <div class="walk-helper-key-group">
+              <i class="fas fa-hand-pointer"></i>
+              <span class="walk-helper-desc">Left-click to select</span>
             </div>
             <div class="walk-helper-key-group">
               <kbd>ESC</kbd>
@@ -485,6 +489,9 @@ export class UIManager {
         break;
       case 'clipperZ':
         this.handleClipperPreset('z');
+        break;
+      case 'clipperSurface':
+        this.handleClipperSurfaceMode();
         break;
       case 'clipperFlip':
         this.handleClipperFlip();
@@ -954,6 +961,49 @@ export class UIManager {
   }
 
   /**
+   * Enables surface click mode for creating clipping planes
+   * Double-click on any surface to create a section plane at that point
+   */
+  private handleClipperSurfaceMode(): void {
+    if (!this.viewer) {
+      console.warn('⚠️ Viewer reference not available');
+      return;
+    }
+
+    const clipper = this.viewer.getClipper();
+    if (!clipper) {
+      console.warn('⚠️ Clipper module not initialized');
+      return;
+    }
+
+    try {
+      // Enable clipper mode - this allows double-click to create planes on surfaces
+      clipper.setEnabled(true);
+      this.updateClipperButtonState(true);
+      
+      // Update the surface button to show active state
+      const surfaceBtn = document.getElementById('clipperSurfaceBtn');
+      if (surfaceBtn) {
+        surfaceBtn.classList.add('active');
+      }
+      
+      console.log('🎯 Surface section mode enabled - Double-click on any surface to create section plane');
+      
+      // Show notification to guide the user
+      import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+        NotificationHelper.show({
+          title: '🎯 Click Surface Mode',
+          message: 'Double-click on any surface to create a section plane at that point',
+          type: 'info',
+          duration: 3000
+        });
+      });
+    } catch (error) {
+      console.error('❌ Error enabling surface section mode:', error);
+    }
+  }
+
+  /**
    * Flips clipping planes to show the other side
    */
   private handleClipperFlip(): void {
@@ -1004,8 +1054,14 @@ export class UIManager {
       // Then disable clipper
       clipper.setEnabled(false);
       
-      // Update button state
+      // Update button states
       this.updateClipperButtonState(false);
+      
+      // Remove active state from surface button
+      const surfaceBtn = document.getElementById('clipperSurfaceBtn');
+      if (surfaceBtn) {
+        surfaceBtn.classList.remove('active');
+      }
       
       console.log('✅ Clipper mode canceled');
     } catch (error) {
@@ -1024,6 +1080,29 @@ export class UIManager {
       } else {
         clipperBtn.classList.remove('active');
       }
+    }
+  }
+
+  /**
+   * Updates the measurement button state based on active measurement mode
+   */
+  private updateMeasurementButtonState(): void {
+    const measureBtn = document.getElementById('measureBtn');
+    if (!measureBtn) return;
+    
+    // Check if measurement module has an active mode
+    const measurement = this.viewer?.getMeasurement?.();
+    if (measurement) {
+      const mode = measurement.getMode();
+      // MeasurementMode.DISABLED = 'DISABLED', any other mode is active
+      if (mode && mode !== 'DISABLED') {
+        measureBtn.classList.add('active');
+      } else {
+        measureBtn.classList.remove('active');
+      }
+    } else {
+      // No measurement module means not active
+      measureBtn.classList.remove('active');
     }
   }
 
@@ -1051,19 +1130,22 @@ export class UIManager {
       this.isSubmenuOpen = true;
       this.hideModelTooltip();
       
-      // Add active class for measurement and information buttons
-      if (button && (action === 'toggleMeasure' || action === 'toggleInfo')) {
+      // Add active class for information button only (measurement handled by mode state)
+      if (button && action === 'toggleInfo') {
         button.classList.add('active');
       }
     } else {
       this.isSubmenuOpen = false;
       this.showModelTooltip();
       
-      // Remove active class for measurement and information buttons
-      if (button && (action === 'toggleMeasure' || action === 'toggleInfo')) {
+      // Remove active class for information button only
+      if (button && action === 'toggleInfo') {
         button.classList.remove('active');
       }
     }
+    
+    // Always update measurement button state based on actual mode
+    this.updateMeasurementButtonState();
   }
 
   /**
@@ -1075,11 +1157,12 @@ export class UIManager {
       menu.classList.remove('visible');
     });
     
-    // Remove active class from measurement and information buttons
-    const measureBtn = document.querySelector('[data-action="toggleMeasure"]');
+    // Only remove active class from info button (not measurement - it should stay active if mode is active)
     const infoBtn = document.querySelector('[data-action="toggleInfo"]');
-    if (measureBtn) measureBtn.classList.remove('active');
     if (infoBtn) infoBtn.classList.remove('active');
+    
+    // Update measurement button state based on actual mode
+    this.updateMeasurementButtonState();
     
     // Restore tooltip visibility only if no submenu is currently open
     if (!skipShowTooltip && !this.isSubmenuOpen) {

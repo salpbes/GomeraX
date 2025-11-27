@@ -145,6 +145,10 @@ export function createToolbarHTML(): string {
             <span class="icon">Z</span>
             <span class="label">Section Z</span>
           </button>
+          <button class="submenu-btn" data-action="clipperSurface" title="Double-click on any surface to create section" id="clipperSurfaceBtn">
+            <span class="icon"><i class="fas fa-mouse-pointer"></i></span>
+            <span class="label">Click Surface</span>
+          </button>
           <button class="submenu-btn" data-action="clipperFlip" title="Flip Section (Show Other Side)">
             <span class="icon"><i class="fas fa-exchange-alt"></i></span>
             <span class="label">Flip Side</span>

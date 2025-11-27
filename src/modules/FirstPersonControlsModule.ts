@@ -44,6 +44,7 @@ export class FirstPersonControlsModule {
   private isGravityEnabled: boolean = false;
   private gravityRaycaster: THREE.Raycaster = new THREE.Raycaster();
   private floors: { elevation: number; name: string }[] = [];
+  private gravityIndicator: HTMLDivElement | null = null; // Visual indicator for gravity mode
 
   /**
    * Initialize the first person controls
@@ -194,19 +195,26 @@ export class FirstPersonControlsModule {
     document.addEventListener('keydown', this.handleKeyDown);
     document.addEventListener('keyup', this.handleKeyUp);
     
-    // Add pointer lock listeners
-    document.addEventListener('click', this.requestPointerLock);
+    // Add pointer lock listeners - use RIGHT-CLICK to lock pointer (left-click for selection)
+    document.addEventListener('contextmenu', this.handleContextMenu);
+    document.addEventListener('mousedown', this.handleMouseDown);
     document.addEventListener('pointerlockchange', this.handlePointerLockChange);
     document.addEventListener('mousemove', this.handleMouseMove);
     
+    // Add crosshair for first-person aiming
+    this.createCrosshair();
+    
     // Start animation loop
     this.startMovementLoop();
+    
+    // Show the gravity indicator with current state
+    this.updateGravityIndicator();
     
     console.log('✅ Keyboard controls enabled');
     console.log('  - WASD / Arrows: Move horizontally');
     console.log('  - Space: Move up | Shift: Move down');
     console.log('  - G: Toggle gravity mode (for stair climbing)');
-    console.log('✅ Mouse look enabled - Click to lock pointer');
+    console.log('✅ Mouse look enabled - Right-click to lock pointer, Left-click to select');
     
     if (this.wallCategories.size > 0) {
       console.log(`🧱 Wall collision detection active (${this.wallCategories.size} wall types)`);
@@ -234,9 +242,13 @@ export class FirstPersonControlsModule {
     document.removeEventListener('keyup', this.handleKeyUp);
     
     // Remove pointer lock listeners
-    document.removeEventListener('click', this.requestPointerLock);
+    document.removeEventListener('contextmenu', this.handleContextMenu);
+    document.removeEventListener('mousedown', this.handleMouseDown);
     document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
     document.removeEventListener('mousemove', this.handleMouseMove);
+    
+    // Remove crosshair
+    this.removeCrosshair();
     
     // Exit pointer lock if active
     if (this.isPointerLocked && document.pointerLockElement) {
@@ -245,6 +257,9 @@ export class FirstPersonControlsModule {
     
     // Stop animation loop
     this.stopMovementLoop();
+    
+    // Remove the gravity indicator
+    this.removeGravityIndicator();
     
     console.log('✅ Keyboard controls disabled');
   }
@@ -271,18 +286,80 @@ export class FirstPersonControlsModule {
     this.isGravityEnabled = !this.isGravityEnabled;
     console.log(`Gravity ${this.isGravityEnabled ? 'enabled' : 'disabled'}`);
     
-    NotificationHelper.show({
-      title: this.isGravityEnabled ? 'Gravity ON' : 'Gravity OFF',
-      message: this.isGravityEnabled 
-        ? 'Camera will maintain 1.6m height above floors' 
-        : 'Free flight mode enabled',
-      type: 'info',
-      duration: 3000
-    });
-    
-    if (this.isGravityEnabled) {
-      console.log('  - Camera will maintain 1.6m height above floors');
+    // Update the visual badge indicator (no popup notification needed)
+    this.updateGravityIndicator();
+  }
+
+  /**
+   * Create and update the gravity mode visual indicator
+   */
+  private updateGravityIndicator(): void {
+    // Create indicator if it doesn't exist
+    if (!this.gravityIndicator) {
+      this.gravityIndicator = document.createElement('div');
+      this.gravityIndicator.id = 'gravity-mode-indicator';
+      this.gravityIndicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        z-index: 9999;
+        pointer-events: none;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      `;
+      document.body.appendChild(this.gravityIndicator);
     }
+    
+    // Update indicator appearance based on gravity state
+    if (this.isGravityEnabled) {
+      this.gravityIndicator.style.background = 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)';
+      this.gravityIndicator.style.color = 'white';
+      this.gravityIndicator.innerHTML = `
+        <span style="font-size: 16px;">🚶</span>
+        <span>WALKING MODE</span>
+        <span style="opacity: 0.8; font-weight: 400; font-size: 11px;">(G to toggle)</span>
+      `;
+    } else {
+      this.gravityIndicator.style.background = 'linear-gradient(135deg, #2196F3 0%, #1565C0 100%)';
+      this.gravityIndicator.style.color = 'white';
+      this.gravityIndicator.innerHTML = `
+        <span style="font-size: 16px;">🚀</span>
+        <span>FLYING MODE</span>
+        <span style="opacity: 0.8; font-weight: 400; font-size: 11px;">(G to toggle)</span>
+      `;
+    }
+  }
+
+  /**
+   * Remove the gravity indicator
+   */
+  private removeGravityIndicator(): void {
+    if (this.gravityIndicator) {
+      this.gravityIndicator.remove();
+      this.gravityIndicator = null;
+    }
+  }
+
+  /**
+   * Check if gravity is currently enabled
+   */
+  public isGravityMode(): boolean {
+    return this.isGravityEnabled;
+  }
+
+  /**
+   * Check if pointer is currently locked (mouse look is active)
+   */
+  public isPointerLockedMode(): boolean {
+    return this.isPointerLocked;
   }
 
   /**
@@ -317,21 +394,78 @@ export class FirstPersonControlsModule {
     this.keys.delete(key);
   };
 
+  private crosshairElement: HTMLDivElement | null = null;
+
   /**
-   * Request pointer lock for mouse look
+   * Create crosshair for first-person aiming
    */
-  private requestPointerLock = (): void => {
+  private createCrosshair(): void {
+    if (this.crosshairElement) return;
+    
+    this.crosshairElement = document.createElement('div');
+    this.crosshairElement.id = 'fp-crosshair';
+    this.crosshairElement.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      z-index: 9998;
+      opacity: 0.7;
+    `;
+    this.crosshairElement.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="10" cy="10" r="3" stroke="white" stroke-width="1.5" fill="none"/>
+        <line x1="10" y1="0" x2="10" y2="6" stroke="white" stroke-width="1.5"/>
+        <line x1="10" y1="14" x2="10" y2="20" stroke="white" stroke-width="1.5"/>
+        <line x1="0" y1="10" x2="6" y2="10" stroke="white" stroke-width="1.5"/>
+        <line x1="14" y1="10" x2="20" y2="10" stroke="white" stroke-width="1.5"/>
+      </svg>
+    `;
+    document.body.appendChild(this.crosshairElement);
+  }
+
+  /**
+   * Remove crosshair
+   */
+  private removeCrosshair(): void {
+    if (this.crosshairElement) {
+      this.crosshairElement.remove();
+      this.crosshairElement = null;
+    }
+  }
+
+  /**
+   * Prevent context menu in first-person mode
+   */
+  private handleContextMenu = (event: MouseEvent): void => {
+    if (!this.isEnabled) return;
+    event.preventDefault();
+  };
+
+  /**
+   * Handle mouse down for pointer lock (right-click) 
+   */
+  private handleMouseDown = (event: MouseEvent): void => {
     if (!this.isEnabled) return;
     
-    // Don't lock if clicking on UI elements
-    const target = event?.target as HTMLElement;
-    if (target?.closest('.toolbar-container') || 
-        target?.closest('.properties-panel') || 
-        target?.closest('.model-count-badge')) {
-      return;
+    // Right-click (button 2) to lock pointer for mouse look
+    if (event.button === 2) {
+      // Don't lock if clicking on UI elements
+      const target = event.target as HTMLElement;
+      if (target?.closest('.toolbar-container') || 
+          target?.closest('.properties-panel') || 
+          target?.closest('.ifc-tree-panel') ||
+          target?.closest('.ifc-properties-panel') ||
+          target?.closest('.model-count-badge') ||
+          target?.closest('.expand-tab')) {
+        return;
+      }
+      
+      document.body.requestPointerLock();
     }
-    
-    document.body.requestPointerLock();
   };
 
   /**
