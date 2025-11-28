@@ -251,43 +251,53 @@ export function createToolbarHTML(): string {
           <input type="checkbox" id="doubleSidedRenderingToggle" checked>
           <span>Double-Sided Rendering</span>
         </label>
-        <label class="checkbox-label">
-          <input type="checkbox" id="sectionHatchesToggle" checked>
-          <span>Section Fills (Clean Cut View)</span>
-        </label>
         
-        <!-- Fill Opacity Selector -->
-        <div style="margin-top: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);">
-          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-            Fill Opacity:
+        <!-- Section Cut Settings Group -->
+        <div class="settings-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">
+          <h4 style="margin: 0 0 12px 0; font-size: 13px; color: rgba(255,255,255,0.9); display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-cut" style="color: #4dabf7;"></i>
+            Section Cut Settings
+          </h4>
+          
+          <label class="checkbox-label">
+            <input type="checkbox" id="sectionHatchesToggle" checked>
+            <span>Enable Section Fills</span>
           </label>
-          <select id="hatchPerformanceModeSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
-            <option value="high">High (50%)</option>
-            <option value="balanced" selected>Balanced (30%)</option>
-            <option value="performance">Subtle (10%)</option>
-          </select>
-        </div>
-        
-        <!-- Fill Color Selector -->
-        <div style="margin-top: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1);">
-          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-            Section Fill Color:
-          </label>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="color" id="sectionFillColorPicker" value="#add8e6" style="width: 50px; height: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); border-radius: 4px; cursor: pointer;">
-            <select id="sectionFillColorPreset" style="flex: 1; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
-              <option value="#add8e6" selected>Light Blue</option>
-              <option value="#ffcccb">Light Red</option>
-              <option value="#90ee90">Light Green</option>
-              <option value="#ffffe0">Light Yellow</option>
-              <option value="#dda0dd">Light Purple</option>
-              <option value="#ffa07a">Light Orange</option>
-              <option value="#d3d3d3">Light Gray</option>
-              <option value="custom">Custom...</option>
+          
+          <!-- Fill Opacity Selector -->
+          <div style="margin-top: 10px;">
+            <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+              Fill Opacity:
+            </label>
+            <select id="hatchPerformanceModeSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+              <option value="high">High (50%)</option>
+              <option value="balanced" selected>Balanced (30%)</option>
+              <option value="performance">Subtle (10%)</option>
             </select>
           </div>
-          <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 4px;">
-            💡 Clean section cuts without hatch lines
+          
+          <!-- Fill Color Selector -->
+          <div style="margin-top: 10px;">
+            <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+              Fill Color:
+            </label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="color" id="sectionFillColorPicker" value="#add8e6" style="width: 50px; height: 30px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); border-radius: 4px; cursor: pointer;">
+              <select id="sectionFillColorPreset" style="flex: 1; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+                <option value="#add8e6" selected>Light Blue</option>
+                <option value="#ffcccb">Light Red</option>
+                <option value="#90ee90">Light Green</option>
+                <option value="#ffffe0">Light Yellow</option>
+                <option value="#dda0dd">Light Purple</option>
+                <option value="#ffa07a">Light Orange</option>
+                <option value="#d3d3d3">Light Gray</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+          </div>
+          
+          <div style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; line-height: 1.4;">
+            💡 Section fills show clean cut<br>surfaces when using sectioning tool
           </div>
         </div>
       </div>
