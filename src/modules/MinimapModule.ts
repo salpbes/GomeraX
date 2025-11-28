@@ -45,6 +45,26 @@ export class MinimapModule {
   private scratchProjected: THREE.Vector3 = new THREE.Vector3();
   private scratchPlane: THREE.Plane = new THREE.Plane();
   
+  // Minimap interaction state (for panning inside minimap)
+  private isDragging: boolean = false;
+  private dragStartX: number = 0;
+  private dragStartY: number = 0;
+  private cameraOffsetX: number = 0;
+  private cameraOffsetZ: number = 0;
+  private currentZoomLevel: number = 1;
+  private minZoom: number = 0.5;
+  private maxZoom: number = 4;
+  
+  // Minimap window dragging state
+  private isWindowDragging: boolean = false;
+  private windowDragStartX: number = 0;
+  private windowDragStartY: number = 0;
+  private windowPosX: number = 0;
+  private windowPosY: number = 0;
+  
+  // Minimize state
+  private isMinimized: boolean = false;
+  
   private config: MinimapConfig = {
     width: 300,
     height: 300,
@@ -78,21 +98,154 @@ export class MinimapModule {
    * Create the HTML container for the minimap
    */
   private createMinimapContainer(): void {
+    // Create outer wrapper for title + minimap
+    const wrapper = document.createElement('div');
+    wrapper.id = 'minimap-wrapper';
+    wrapper.style.position = 'fixed';
+    wrapper.style.zIndex = '1000';
+    wrapper.style.display = 'none'; // Hidden by default
+    
+    // Create title bar above minimap (draggable)
+    const titleBar = document.createElement('div');
+    titleBar.id = 'minimap-title-bar';
+    titleBar.style.display = 'flex';
+    titleBar.style.justifyContent = 'space-between';
+    titleBar.style.alignItems = 'center';
+    titleBar.style.background = '#363c6a';
+    titleBar.style.color = 'white';
+    titleBar.style.padding = '6px 10px';
+    titleBar.style.borderRadius = '8px 8px 0 0';
+    titleBar.style.fontSize = '12px';
+    titleBar.style.fontWeight = 'bold';
+    titleBar.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+    titleBar.style.cursor = 'move';
+    titleBar.style.userSelect = 'none';
+    
+    // Setup window dragging on title bar
+    this.setupWindowDragging(titleBar, wrapper);
+    
+    // Title text with drag hint
+    const titleText = document.createElement('span');
+    titleText.innerHTML = '<i class="fas fa-grip-vertical" style="margin-right: 6px; color: rgba(255,255,255,0.4);"></i><i class="fas fa-map-marked-alt" style="margin-right: 6px; color: #4dabf7;"></i>Minimap';
+    titleText.title = 'Drag to move';
+    titleBar.appendChild(titleText);
+    
+    // Controls container (zoom buttons + minimize + close)
+    const controlsContainer = document.createElement('div');
+    controlsContainer.style.display = 'flex';
+    controlsContainer.style.alignItems = 'center';
+    controlsContainer.style.gap = '4px';
+    
+    // Helper function to create control buttons
+    const createControlBtn = (icon: string, title: string, onClick: () => void, id?: string) => {
+      const btn = document.createElement('button');
+      if (id) btn.id = id;
+      btn.innerHTML = `<i class="fas ${icon}"></i>`;
+      btn.style.background = 'transparent';
+      btn.style.border = 'none';
+      btn.style.color = 'rgba(255,255,255,0.6)';
+      btn.style.cursor = 'pointer';
+      btn.style.fontSize = '12px';
+      btn.style.padding = '2px 6px';
+      btn.style.borderRadius = '4px';
+      btn.style.transition = 'all 0.2s ease';
+      btn.title = title;
+      btn.onmouseenter = () => {
+        btn.style.background = 'rgba(255,255,255,0.15)';
+        btn.style.color = 'white';
+      };
+      btn.onmouseleave = () => {
+        btn.style.background = 'transparent';
+        btn.style.color = 'rgba(255,255,255,0.6)';
+      };
+      btn.onclick = (e) => {
+        e.stopPropagation(); // Prevent drag from triggering
+        onClick();
+      };
+      return btn;
+    };
+    
+    // Zoom in button
+    const zoomInBtn = createControlBtn('fa-search-plus', 'Zoom In', () => {
+      this.currentZoomLevel = Math.min(this.maxZoom, this.currentZoomLevel * 1.2);
+      this.applyMinimapZoom();
+    });
+    controlsContainer.appendChild(zoomInBtn);
+    
+    // Zoom out button
+    const zoomOutBtn = createControlBtn('fa-search-minus', 'Zoom Out', () => {
+      this.currentZoomLevel = Math.max(this.minZoom, this.currentZoomLevel * 0.8);
+      this.applyMinimapZoom();
+    });
+    controlsContainer.appendChild(zoomOutBtn);
+    
+    // Reset view button
+    const resetBtn = createControlBtn('fa-compress-arrows-alt', 'Reset View (Double-click)', () => {
+      this.resetMinimapView();
+    });
+    controlsContainer.appendChild(resetBtn);
+    
+    // Separator
+    const separator = document.createElement('span');
+    separator.style.width = '1px';
+    separator.style.height = '14px';
+    separator.style.background = 'rgba(255,255,255,0.2)';
+    separator.style.margin = '0 4px';
+    controlsContainer.appendChild(separator);
+    
+    // Minimize button
+    const minimizeBtn = createControlBtn('fa-window-minimize', 'Minimize', () => {
+      this.toggleMinimize();
+    }, 'minimap-minimize-btn');
+    controlsContainer.appendChild(minimizeBtn);
+    
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.id = 'minimap-close-btn';
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.color = 'rgba(255,255,255,0.6)';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontSize = '14px';
+    closeBtn.style.padding = '2px 6px';
+    closeBtn.style.borderRadius = '4px';
+    closeBtn.style.transition = 'all 0.2s ease';
+    closeBtn.title = 'Close Minimap';
+    closeBtn.onmouseenter = () => {
+      closeBtn.style.background = 'rgba(255,100,100,0.3)';
+      closeBtn.style.color = '#ff6b6b';
+    };
+    closeBtn.onmouseleave = () => {
+      closeBtn.style.background = 'transparent';
+      closeBtn.style.color = 'rgba(255,255,255,0.6)';
+    };
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.disable();
+      // Also update the minimap button state
+      const minimapBtn = document.getElementById('minimapBtn');
+      if (minimapBtn) {
+        minimapBtn.classList.remove('active');
+        const label = minimapBtn.querySelector('.label');
+        if (label) label.textContent = 'Show Minimap';
+      }
+    };
+    controlsContainer.appendChild(closeBtn);
+    
+    titleBar.appendChild(controlsContainer);
+    
+    wrapper.appendChild(titleBar);
+    
+    // Create minimap container
     this.container = document.createElement('div');
     this.container.id = 'minimap-container';
-    this.container.style.position = 'fixed';
     this.container.style.width = `${this.config.width}px`;
     this.container.style.height = `${this.config.height}px`;
-    this.container.style.zIndex = '1000';
-    this.container.style.borderRadius = '8px';
     this.container.style.overflow = 'hidden';
-    this.container.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
-    this.container.style.border = '2px solid #4a5568';
-    this.container.style.display = 'none'; // Hidden by default
+    this.container.style.background = '#1a1a2e';
+    this.container.style.borderRadius = '0 0 8px 8px';
     this.container.style.opacity = String(this.config.opacity);
-    
-    // Position based on config
-    this.updateContainerPosition();
     
     // Create canvas
     this.canvas = document.createElement('canvas');
@@ -101,23 +254,241 @@ export class MinimapModule {
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.canvas.style.display = 'block';
+    this.canvas.style.cursor = 'grab';
     
-    // Add title overlay
-    const titleOverlay = document.createElement('div');
-    titleOverlay.style.position = 'absolute';
-    titleOverlay.style.top = '8px';
-    titleOverlay.style.left = '8px';
-    titleOverlay.style.background = 'rgba(0, 0, 0, 0.7)';
-    titleOverlay.style.color = 'white';
-    titleOverlay.style.padding = '4px 8px';
-    titleOverlay.style.borderRadius = '4px';
-    titleOverlay.style.fontSize = '12px';
-    titleOverlay.style.fontWeight = 'bold';
-    titleOverlay.textContent = 'Minimap';
+    // Add mouse event handlers for zoom and drag
+    this.setupMinimapInteraction();
     
     this.container.appendChild(this.canvas);
-    this.container.appendChild(titleOverlay);
-    document.body.appendChild(this.container);
+    wrapper.appendChild(this.container);
+    
+    // Apply wrapper styling
+    wrapper.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.4)';
+    wrapper.style.borderRadius = '8px';
+    wrapper.style.border = '1px solid rgba(255,255,255,0.1)';
+    
+    // Store wrapper reference for position updates
+    (this.container as any)._wrapper = wrapper;
+    
+    // Position based on config
+    this.updateContainerPosition();
+    
+    document.body.appendChild(wrapper);
+  }
+
+  /**
+   * Setup mouse interaction for zoom and drag on minimap
+   */
+  private setupMinimapInteraction(): void {
+    if (!this.canvas) return;
+
+    // Mouse wheel for zoom
+    this.canvas.addEventListener('wheel', (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1; // Zoom out or in
+      this.currentZoomLevel = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoomLevel * zoomDelta));
+      
+      this.applyMinimapZoom();
+    }, { passive: false });
+
+    // Mouse down for drag start
+    this.canvas.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button === 0) { // Left click only
+        this.isDragging = true;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
+        this.canvas!.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
+
+    // Mouse move for dragging
+    this.canvas.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!this.isDragging || !this.minimapCamera) return;
+      
+      const deltaX = e.clientX - this.dragStartX;
+      const deltaY = e.clientY - this.dragStartY;
+      
+      // Calculate world units per pixel based on camera frustum
+      const frustumWidth = this.minimapCamera.right - this.minimapCamera.left;
+      const frustumHeight = this.minimapCamera.top - this.minimapCamera.bottom;
+      const worldPerPixelX = frustumWidth / (this.config.width * this.minimapCamera.zoom);
+      const worldPerPixelZ = frustumHeight / (this.config.height * this.minimapCamera.zoom);
+      
+      // Update camera offset (invert for natural drag direction)
+      this.cameraOffsetX -= deltaX * worldPerPixelX;
+      this.cameraOffsetZ -= deltaY * worldPerPixelZ;
+      
+      // Apply the offset to camera position
+      this.minimapCamera.position.x = this.geometryCenter.x + this.cameraOffsetX;
+      this.minimapCamera.position.z = this.geometryCenter.z + this.cameraOffsetZ;
+      this.minimapCamera.lookAt(
+        this.geometryCenter.x + this.cameraOffsetX,
+        0,
+        this.geometryCenter.z + this.cameraOffsetZ
+      );
+      
+      this.dragStartX = e.clientX;
+      this.dragStartY = e.clientY;
+    });
+
+    // Mouse up for drag end
+    this.canvas.addEventListener('mouseup', () => {
+      this.isDragging = false;
+      this.canvas!.style.cursor = 'grab';
+    });
+
+    // Mouse leave also ends drag
+    this.canvas.addEventListener('mouseleave', () => {
+      this.isDragging = false;
+      this.canvas!.style.cursor = 'grab';
+    });
+
+    // Double-click to reset view
+    this.canvas.addEventListener('dblclick', (e: MouseEvent) => {
+      e.preventDefault();
+      this.resetMinimapView();
+    });
+  }
+
+  /**
+   * Apply current zoom level to minimap camera
+   */
+  private applyMinimapZoom(): void {
+    if (!this.minimapCamera) return;
+    
+    // Store the base zoom from the snapshot and multiply by our zoom level
+    const baseZoom = this.activeSnapshot ? (this.activeSnapshot.cameraFrustum.zoom ?? 1) * 2.5 : 1;
+    this.minimapCamera.zoom = baseZoom * this.currentZoomLevel;
+    this.minimapCamera.updateProjectionMatrix();
+  }
+
+  /**
+   * Reset minimap view to default (center and zoom)
+   */
+  private resetMinimapView(): void {
+    this.currentZoomLevel = 1;
+    this.cameraOffsetX = 0;
+    this.cameraOffsetZ = 0;
+    
+    if (this.minimapCamera) {
+      this.applyMinimapZoom();
+      this.minimapCamera.position.x = this.geometryCenter.x;
+      this.minimapCamera.position.z = this.geometryCenter.z;
+      this.minimapCamera.lookAt(this.geometryCenter.x, 0, this.geometryCenter.z);
+    }
+    
+    console.log('🗺️ Minimap view reset');
+  }
+
+  /**
+   * Setup window dragging on the title bar
+   */
+  private setupWindowDragging(titleBar: HTMLElement, wrapper: HTMLElement): void {
+    titleBar.addEventListener('mousedown', (e: MouseEvent) => {
+      // Only start drag if not clicking on a button
+      if ((e.target as HTMLElement).closest('button')) return;
+      
+      this.isWindowDragging = true;
+      this.windowDragStartX = e.clientX;
+      this.windowDragStartY = e.clientY;
+      
+      // Get current position
+      const rect = wrapper.getBoundingClientRect();
+      this.windowPosX = rect.left;
+      this.windowPosY = rect.top;
+      
+      // Clear any position presets
+      wrapper.style.top = `${rect.top}px`;
+      wrapper.style.left = `${rect.left}px`;
+      wrapper.style.right = '';
+      wrapper.style.bottom = '';
+      
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!this.isWindowDragging) return;
+      
+      const deltaX = e.clientX - this.windowDragStartX;
+      const deltaY = e.clientY - this.windowDragStartY;
+      
+      let newX = this.windowPosX + deltaX;
+      let newY = this.windowPosY + deltaY;
+      
+      // Constrain to viewport
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const maxX = window.innerWidth - wrapperRect.width;
+      const maxY = window.innerHeight - wrapperRect.height;
+      
+      newX = Math.max(0, Math.min(newX, maxX));
+      newY = Math.max(0, Math.min(newY, maxY));
+      
+      wrapper.style.left = `${newX}px`;
+      wrapper.style.top = `${newY}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      this.isWindowDragging = false;
+    });
+  }
+
+  /**
+   * Toggle minimize state of minimap
+   */
+  private toggleMinimize(): void {
+    if (!this.container) return;
+    
+    this.isMinimized = !this.isMinimized;
+    
+    const minimizeBtn = document.getElementById('minimap-minimize-btn');
+    const wrapper = (this.container as any)._wrapper as HTMLElement;
+    
+    if (this.isMinimized) {
+      // Minimize - hide the container, keep title bar
+      this.container.style.display = 'none';
+      
+      // Update title bar to show it's minimized
+      if (wrapper) {
+        wrapper.style.borderRadius = '8px';
+        const titleBar = wrapper.querySelector('#minimap-title-bar') as HTMLElement;
+        if (titleBar) {
+          titleBar.style.borderRadius = '8px';
+          titleBar.style.borderBottom = 'none';
+        }
+      }
+      
+      // Update button icon to restore
+      if (minimizeBtn) {
+        minimizeBtn.innerHTML = '<i class="fas fa-window-maximize"></i>';
+        minimizeBtn.title = 'Restore';
+      }
+      
+      console.log('🗺️ Minimap minimized');
+    } else {
+      // Restore - show the container
+      this.container.style.display = 'block';
+      
+      // Restore title bar styling
+      if (wrapper) {
+        wrapper.style.borderRadius = '8px';
+        const titleBar = wrapper.querySelector('#minimap-title-bar') as HTMLElement;
+        if (titleBar) {
+          titleBar.style.borderRadius = '8px 8px 0 0';
+          titleBar.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+        }
+      }
+      
+      // Update button icon to minimize
+      if (minimizeBtn) {
+        minimizeBtn.innerHTML = '<i class="fas fa-window-minimize"></i>';
+        minimizeBtn.title = 'Minimize';
+      }
+      
+      console.log('🗺️ Minimap restored');
+    }
   }
 
   /**
@@ -126,30 +497,34 @@ export class MinimapModule {
   private updateContainerPosition(): void {
     if (!this.container) return;
     
+    // Get the wrapper element
+    const wrapper = (this.container as any)._wrapper as HTMLElement;
+    if (!wrapper) return;
+    
     // Reset all positions
-    this.container.style.top = '';
-    this.container.style.bottom = '';
-    this.container.style.left = '';
-    this.container.style.right = '';
+    wrapper.style.top = '';
+    wrapper.style.bottom = '';
+    wrapper.style.left = '';
+    wrapper.style.right = '';
     
     const margin = '20px';
     
     switch (this.config.position) {
       case 'top-left':
-        this.container.style.top = margin;
-        this.container.style.left = margin;
+        wrapper.style.top = margin;
+        wrapper.style.left = margin;
         break;
       case 'top-right':
-        this.container.style.top = margin;
-        this.container.style.right = margin;
+        wrapper.style.top = margin;
+        wrapper.style.right = margin;
         break;
       case 'bottom-left':
-        this.container.style.bottom = margin;
-        this.container.style.left = margin;
+        wrapper.style.bottom = margin;
+        wrapper.style.left = margin;
         break;
       case 'bottom-right':
-        this.container.style.bottom = margin;
-        this.container.style.right = margin;
+        wrapper.style.bottom = margin;
+        wrapper.style.right = margin;
         break;
     }
   }
@@ -252,6 +627,12 @@ export class MinimapModule {
     
     console.log('🗺️ Enabling minimap...');
     
+    // Reset zoom, pan, and minimize state
+    this.currentZoomLevel = 1;
+    this.cameraOffsetX = 0;
+    this.cameraOffsetZ = 0;
+    this.isMinimized = false;
+    
     // Resolve storey information
     if (!storeyName) {
       const detectedStorey = await this.detectCurrentStorey();
@@ -276,9 +657,12 @@ export class MinimapModule {
       return;
     }
     
-    // Show container
+    // Show wrapper (which contains the container)
     if (this.container) {
-      this.container.style.display = 'block';
+      const wrapper = (this.container as any)._wrapper as HTMLElement;
+      if (wrapper) {
+        wrapper.style.display = 'block';
+      }
     }
     
     this.isEnabled = true;
@@ -298,8 +682,12 @@ export class MinimapModule {
     this.isEnabled = false;
     this.stopUpdateLoop();
     
+    // Hide wrapper (which contains the container)
     if (this.container) {
-      this.container.style.display = 'none';
+      const wrapper = (this.container as any)._wrapper as HTMLElement;
+      if (wrapper) {
+        wrapper.style.display = 'none';
+      }
     }
     
     // Clear floor plan geometry from minimap scene
@@ -670,8 +1058,12 @@ export class MinimapModule {
       this.renderer = null;
     }
     
-    if (this.container && this.container.parentNode) {
-      this.container.parentNode.removeChild(this.container);
+    // Remove wrapper (which contains the container)
+    if (this.container) {
+      const wrapper = (this.container as any)._wrapper as HTMLElement;
+      if (wrapper && wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
     }
     
     this.clearMinimapScene();
