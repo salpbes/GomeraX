@@ -29,6 +29,13 @@ export class UIManager {
   private minimapModule: MinimapModule | null = null;
   private clusterModule: ClusterModule | null = null;
   private colorSplashModule: ColorSplashModule | null = null;
+  
+  // Auto rotate state
+  private isAutoRotating: boolean = false;
+  private autoRotateAnimationId: number | null = null;
+  private autoRotateStartTime: number = 0;
+  private autoRotateDuration: number = 60000; // Default 1 minute in ms
+  private autoRotateClickHandler: ((e: MouseEvent) => void) | null = null;
 
   constructor(
     worldManager: WorldManager,
@@ -445,6 +452,9 @@ export class UIManager {
       case 'fit':
         this.toolbarHandlers.handleFitCamera();
         break;
+      case 'autoRotate':
+        this.handleAutoRotate();
+        break;
       case 'toggleSpaces':
         this.handleToggleSpaces();
         break;
@@ -603,6 +613,247 @@ export class UIManager {
     } catch (error) {
       console.error('❌ Error toggling grid:', error);
     }
+  }
+
+  /**
+   * Handles auto rotate - starts/stops gentle rotation of the 3D view
+   */
+  private handleAutoRotate(): void {
+    if (this.isAutoRotating) {
+      this.stopAutoRotate();
+      return;
+    }
+
+    // Show duration picker dialog
+    this.showAutoRotateDurationPicker();
+  }
+
+  /**
+   * Shows a simple duration picker for auto rotate
+   */
+  private showAutoRotateDurationPicker(): void {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'autoRotateModal';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    `;
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      background: rgba(40, 40, 70, 0.98);
+      border-radius: 12px;
+      padding: 24px;
+      min-width: 280px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 16px 0; color: white; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-sync-alt" style="color: #60a5fa;"></i>
+        Auto Rotate
+      </h3>
+      <p style="color: #aaa; font-size: 13px; margin: 0 0 16px 0;">
+        Set rotation duration (click anywhere to stop)
+      </p>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+        <input type="number" id="autoRotateMinutes" value="1" min="0.5" max="60" step="0.5"
+          style="width: 80px; padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+                 background: rgba(0,0,0,0.3); color: white; font-size: 14px; text-align: center;">
+        <span style="color: #aaa; font-size: 14px;">minutes</span>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button id="autoRotateCancel" style="padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+                background: transparent; color: #aaa; cursor: pointer; font-size: 13px;">
+          Cancel
+        </button>
+        <button id="autoRotateStart" style="padding: 8px 20px; border-radius: 6px; border: none;
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; cursor: pointer; font-size: 13px; font-weight: 600;">
+          Start
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    // Event listeners
+    const cancelBtn = document.getElementById('autoRotateCancel');
+    const startBtn = document.getElementById('autoRotateStart');
+    const minutesInput = document.getElementById('autoRotateMinutes') as HTMLInputElement;
+
+    cancelBtn?.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    startBtn?.addEventListener('click', () => {
+      const minutes = parseFloat(minutesInput?.value || '1');
+      this.autoRotateDuration = minutes * 60 * 1000; // Convert to ms
+      overlay.remove();
+      this.startAutoRotate();
+    });
+
+    // Focus on input
+    minutesInput?.focus();
+    minutesInput?.select();
+  }
+
+  /**
+   * Starts the auto rotate animation
+   */
+  private startAutoRotate(): void {
+    if (!this.viewer) {
+      console.warn('⚠️ Viewer not available for auto rotate');
+      return;
+    }
+
+    const world = this.worldManager.world;
+    if (!world?.camera) {
+      console.warn('⚠️ Camera not available');
+      return;
+    }
+
+    const camera = world.camera as any;
+    if (!camera.controls) {
+      console.warn('⚠️ Camera controls not available');
+      return;
+    }
+
+    // Get model center using BoundingBoxer
+    const components = this.worldManager.getComponents();
+    if (!components) {
+      console.warn('⚠️ Components not available');
+      return;
+    }
+    
+    const bbox = components.get(OBC.BoundingBoxer);
+    bbox.list.clear();
+    bbox.addFromModels();
+    const box = bbox.get();
+    const modelCenter = box.getCenter(new THREE.Vector3());
+
+    // Get current camera position
+    const cameraPos = world.camera.three.position.clone();
+    
+    // Calculate distance from camera to current target
+    const currentTarget = new THREE.Vector3();
+    camera.controls.getTarget(currentTarget);
+    const distance = cameraPos.distanceTo(currentTarget);
+
+    // Set camera to look at model center, maintaining same distance
+    const direction = cameraPos.clone().sub(currentTarget).normalize();
+    const newCameraPos = modelCenter.clone().add(direction.multiplyScalar(distance));
+    
+    // Smoothly transition to the new position looking at model center
+    camera.controls.setLookAt(
+      newCameraPos.x, newCameraPos.y, newCameraPos.z,
+      modelCenter.x, modelCenter.y, modelCenter.z,
+      true // Enable smooth transition
+    );
+
+    this.isAutoRotating = true;
+    this.autoRotateStartTime = Date.now();
+
+    // Update button state
+    const btn = document.getElementById('autoRotateBtn');
+    if (btn) {
+      btn.classList.add('active');
+      const label = btn.querySelector('.label');
+      if (label) label.textContent = 'Stop Rotate';
+      const icon = btn.querySelector('.icon i');
+      if (icon) icon.classList.add('fa-spin');
+    }
+
+    // Add click handler to stop rotation (with delay to avoid immediate stop)
+    setTimeout(() => {
+      this.autoRotateClickHandler = (e: MouseEvent) => {
+        // Ignore clicks on the auto rotate button itself
+        const target = e.target as HTMLElement;
+        if (target.closest('#autoRotateBtn')) return;
+        this.stopAutoRotate();
+      };
+      document.addEventListener('click', this.autoRotateClickHandler);
+      document.addEventListener('mousedown', this.autoRotateClickHandler);
+    }, 500);
+
+    // Show notification
+    const minutes = this.autoRotateDuration / 60000;
+    import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+      NotificationHelper.show({
+        title: '🔄 Auto Rotate Started',
+        message: `Rotating for ${minutes} minute${minutes !== 1 ? 's' : ''}. Click anywhere to stop.`,
+        type: 'info',
+        duration: 3000
+      });
+    });
+
+    console.log(`🔄 Auto rotate started for ${minutes} minutes`);
+
+    // Animation loop using CameraControls API
+    const controls = camera.controls;
+    const rotateSpeed = 0.02; // Radians per frame (gentle rotation)
+
+    const animate = () => {
+      if (!this.isAutoRotating) return;
+
+      // Check if duration exceeded
+      const elapsed = Date.now() - this.autoRotateStartTime;
+      if (elapsed >= this.autoRotateDuration) {
+        this.stopAutoRotate();
+        return;
+      }
+
+      // Rotate camera using azimuthAngle (CameraControls property)
+      if (typeof controls.azimuthAngle === 'number') {
+        controls.azimuthAngle += rotateSpeed;
+      }
+
+      this.autoRotateAnimationId = requestAnimationFrame(animate);
+    };
+
+    this.autoRotateAnimationId = requestAnimationFrame(animate);
+  }
+
+  /**
+   * Stops the auto rotate animation
+   */
+  private stopAutoRotate(): void {
+    this.isAutoRotating = false;
+
+    if (this.autoRotateAnimationId !== null) {
+      cancelAnimationFrame(this.autoRotateAnimationId);
+      this.autoRotateAnimationId = null;
+    }
+
+    // Remove click handler
+    if (this.autoRotateClickHandler) {
+      document.removeEventListener('click', this.autoRotateClickHandler);
+      document.removeEventListener('mousedown', this.autoRotateClickHandler);
+      this.autoRotateClickHandler = null;
+    }
+
+    // Update button state
+    const btn = document.getElementById('autoRotateBtn');
+    if (btn) {
+      btn.classList.remove('active');
+      const label = btn.querySelector('.label');
+      if (label) label.textContent = 'Auto Rotate';
+      const icon = btn.querySelector('.icon i');
+      if (icon) icon.classList.remove('fa-spin');
+    }
+
+    console.log('🛑 Auto rotate stopped');
   }
 
   /**

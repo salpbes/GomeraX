@@ -49,6 +49,10 @@ export function createToolbarHTML(): string {
             <span class="icon"><i class="fas fa-compress"></i></span>
             <span class="label">Fit View</span>
           </button>
+          <button class="submenu-btn" data-action="autoRotate" title="Auto Rotate View (Click to stop)" id="autoRotateBtn">
+            <span class="icon"><i class="fas fa-sync-alt"></i></span>
+            <span class="label">Auto Rotate</span>
+          </button>
           <button class="submenu-btn" data-action="toggleSpaces" title="Toggle Space Visibility" id="toggleSpacesBtn">
             <span class="icon"><i class="fas fa-cube"></i></span>
             <span class="label">Hide Spaces</span>
