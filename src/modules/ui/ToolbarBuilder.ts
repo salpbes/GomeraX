@@ -240,10 +240,6 @@ export function createToolbarHTML(): string {
           <input type="range" id="ambLightSlider" min="0" max="10" step="0.1" value="2">
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" id="ambientOcclusionToggle" checked>
-          <span>Ambient Occlusion (AO)</span>
-        </label>
-        <label class="checkbox-label">
           <input type="checkbox" id="adaptiveQualityToggle" checked>
           <span>Adaptive Quality (Auto FPS)</span>
         </label>
@@ -251,6 +247,21 @@ export function createToolbarHTML(): string {
           <input type="checkbox" id="doubleSidedRenderingToggle" checked>
           <span>Double-Sided Rendering</span>
         </label>
+        
+        <!-- Visual Style Selector -->
+        <div style="margin-top: 12px;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+            Visual Style:
+          </label>
+          <select id="visualStyleSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+            <option value="0">Basic (Fast)</option>
+            <option value="1">Pen (Edges)</option>
+            <option value="2">Pen + Shadows</option>
+            <option value="3">Color + Pen</option>
+            <option value="4" selected>Realistic (Shadows)</option>
+            <option value="5">Full (Color+Pen+Shadows)</option>
+          </select>
+        </div>
         
         <!-- Section Cut Settings Group -->
         <div class="settings-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">

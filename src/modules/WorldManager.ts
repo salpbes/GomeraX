@@ -169,15 +169,18 @@ export class WorldManager {
   }
 
   /**
-   * Toggles Ambient Occlusion effect
+   * Toggles Ambient Occlusion effect only (keeps other postproduction effects active)
    * @param enabled - True to enable AO, false to disable
    */
   public setAmbientOcclusion(enabled: boolean): void {
     if (!this.world?.renderer) return;
     const renderer = this.world.renderer as OBF.PostproductionRenderer;
     
-    // AO is controlled through the postproduction system
-    renderer.postproduction.enabled = enabled;
+    // Toggle only the AO pass, not all postproduction
+    const aoPass = (renderer.postproduction as any).aoPass;
+    if (aoPass) {
+      aoPass.enabled = enabled;
+    }
     
     console.log(`✅ Ambient Occlusion ${enabled ? 'enabled' : 'disabled'}`);
   }
@@ -189,7 +192,8 @@ export class WorldManager {
   public isAmbientOcclusionEnabled(): boolean {
     if (!this.world?.renderer) return false;
     const renderer = this.world.renderer as OBF.PostproductionRenderer;
-    return renderer.postproduction.enabled;
+    const aoPass = (renderer.postproduction as any).aoPass;
+    return aoPass ? aoPass.enabled : false;
   }
 
   /**

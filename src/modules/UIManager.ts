@@ -346,12 +346,6 @@ export class UIManager {
       this.worldManager.setLightingIntensity(dirLightIntensity, ambLightIntensity);
     });
 
-    // Ambient Occlusion toggle listener
-    document.getElementById('ambientOcclusionToggle')?.addEventListener('change', (e) => {
-      const enabled = (e.target as HTMLInputElement).checked;
-      this.worldManager.setAmbientOcclusion(enabled);
-    });
-
     // Adaptive Quality toggle listener
     document.getElementById('adaptiveQualityToggle')?.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
@@ -371,6 +365,13 @@ export class UIManager {
     document.getElementById('doubleSidedRenderingToggle')?.addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
       this.ifcLoader.setDoubleSidedRendering(enabled);
+    });
+
+    // Visual Style selector listener
+    document.getElementById('visualStyleSelect')?.addEventListener('change', (e) => {
+      const style = parseInt((e.target as HTMLSelectElement).value);
+      this.worldManager.setPostproductionStyle(style);
+      console.log(`🎨 Visual style changed to: ${style === 0 ? 'Basic' : 'Realistic'}`);
     });
 
     // Section Fills toggle listener (clean cuts without hatch lines)
@@ -1142,6 +1143,53 @@ export class UIManager {
   }
 
   /**
+   * Enforces safe visual style when sectioning is active
+   * Pen styles (1, 2, 3, 5) cause freezes with sectioning, so we force Realistic (4)
+   */
+  private setSafeVisualStyle(enabled: boolean): void {
+    const styleSelect = document.getElementById('visualStyleSelect') as HTMLSelectElement;
+    if (!styleSelect) return;
+
+    if (enabled) {
+      // Store current style if needed, but for now just force Realistic
+      // Check if current style is a Pen style (1, 2, 3, 5)
+      const currentStyle = parseInt(styleSelect.value);
+      const isPenStyle = [1, 2, 3, 5].includes(currentStyle);
+      
+      if (isPenStyle) {
+        // Force switch to Realistic
+        styleSelect.value = "4";
+        this.worldManager.setPostproductionStyle(4);
+        console.log('🛡️ Switched to Realistic style for safe sectioning');
+        
+        // Show notification
+        import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+          NotificationHelper.show({
+            title: 'Visual Style Adjusted',
+            message: 'Pen styles are disabled during sectioning to prevent performance issues.',
+            type: 'info',
+            duration: 4000
+          });
+        });
+      }
+      
+      // Disable the options in the dropdown that are unsafe
+      Array.from(styleSelect.options).forEach(option => {
+        const val = parseInt(option.value);
+        if ([1, 2, 3, 5].includes(val)) {
+          option.disabled = true;
+        }
+      });
+      
+    } else {
+      // Re-enable all options
+      Array.from(styleSelect.options).forEach(option => {
+        option.disabled = false;
+      });
+    }
+  }
+
+  /**
    * Handles clipper toggle - enables/disables sectioning mode
    */
   private handleToggleClipper(): void {
@@ -1159,6 +1207,9 @@ export class UIManager {
     try {
       clipper.toggle();
       const isEnabled = clipper.getEnabled();
+      
+      // Enforce safe visual style
+      this.setSafeVisualStyle(isEnabled);
       
       // Update button style to show active state
       this.updateClipperButtonState(isEnabled);
@@ -1192,6 +1243,7 @@ export class UIManager {
       if (!clipper.getEnabled()) {
         clipper.setEnabled(true);
         this.updateClipperButtonState(true);
+        this.setSafeVisualStyle(true);
       }
 
       // Create the preset plane
@@ -1231,6 +1283,7 @@ export class UIManager {
       // Enable clipper mode - this allows double-click to create planes on surfaces
       clipper.setEnabled(true);
       this.updateClipperButtonState(true);
+      this.setSafeVisualStyle(true);
       
       // Update the surface button to show active state
       const surfaceBtn = document.getElementById('clipperSurfaceBtn');
@@ -1304,6 +1357,7 @@ export class UIManager {
       
       // Then disable clipper
       clipper.setEnabled(false);
+      this.setSafeVisualStyle(false);
       
       // Update button states
       this.updateClipperButtonState(false);
