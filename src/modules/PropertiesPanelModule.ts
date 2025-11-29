@@ -37,6 +37,14 @@ export class PropertiesPanelModule {
   
   // Store storey data for dashboard
   public storeyData: { [storeyName: string]: { [category: string]: number } } = {};
+  
+  // Ghost mode state tracking - supports multiple models
+  private ghostModeActive: boolean = false;
+  private ghostPrimaryModelId: string | null = null; // The model where isolation was triggered
+  private ghostIdsToIsolate: number[] = []; // IDs to keep solid (in primary model)
+  private ghostAffectedModels: Map<string, { otherIds: number[] }> = new Map(); // Track all affected models
+  private cameraRestHandler: (() => void) | null = null;
+  private tileUpdateHandlers: Map<string, (data: any) => void> = new Map(); // Per-model tile handlers
 
   constructor(worldManager: WorldManager, private ifcLoader: IFCLoaderModule) {
     this.worldManager = worldManager;
@@ -95,17 +103,45 @@ export class PropertiesPanelModule {
       
       // Add translucent style for context
       this.highlighter.styles.set('translucent', {
-        color: new THREE.Color(0xcccccc),
+        color: new THREE.Color(0x888888), // Darker gray for better visibility
         transparent: true,
-        opacity: 0.2,
+        opacity: 0.5, // Higher opacity to ensure visibility
         depthTest: true,
-        renderedFaces: FRAGS.RenderedFaces.TWO
+        depthWrite: false,
+        renderedFaces: FRAGS.RenderedFaces.TWO // Ensure double-sided rendering
+      });
+      
+      // Listen for highlighter events to reapply ghost mode after selection changes
+      // The OBCF.Highlighter has built-in mouse selection that can interfere with model.highlight()
+      this.highlighter.events.select.onHighlight.add(async () => {
+        // Reapply ghost mode after a short delay to let highlighter finish
+        if (this.ghostModeActive) {
+          setTimeout(() => this.reapplyGhostMode(), 50);
+        }
+      });
+      
+      this.highlighter.events.select.onClear.add(async () => {
+        // Reapply ghost mode after selection is cleared
+        if (this.ghostModeActive) {
+          setTimeout(() => this.reapplyGhostMode(), 50);
+        }
       });
     } catch (error) {
       console.warn('Highlighter not available');
     }
 
     this.setupSelection();
+    
+    // Listen for camera rest events to reapply ghost mode
+    if (world.camera.controls) {
+      this.cameraRestHandler = async () => {
+        if (this.ghostModeActive && this.ghostPrimaryModelId) {
+          await this.reapplyGhostMode();
+        }
+      };
+      world.camera.controls.addEventListener('rest', this.cameraRestHandler);
+    }
+    
     console.log('✅ Properties panel initialized');
   }
 
@@ -1600,8 +1636,11 @@ export class PropertiesPanelModule {
             <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
               <i class="fas fa-eye"></i>
             </button>
-            <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
-              <i class="fas fa-crosshairs"></i>
+            <button class="tree-action-btn find-btn" title="Find" data-action="find">
+              <i class="fas fa-search"></i>
+            </button>
+            <button class="tree-action-btn ghost-btn" title="Isolate" data-action="isolate">
+              <i class="fas fa-cube"></i>
             </button>
           </div>
         </div>
@@ -1866,8 +1905,16 @@ export class PropertiesPanelModule {
                 <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
                   <i class="fas fa-eye"></i>
                 </button>
-                <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
-                  <i class="fas fa-crosshairs"></i>
+                <button class="tree-action-btn find-btn" title="Find" data-action="find">
+
+                  <i class="fas fa-search"></i>
+
+                </button>
+
+                <button class="tree-action-btn ghost-btn" title="Isolate" data-action="isolate">
+
+                  <i class="fas fa-cube"></i>
+
                 </button>
               </div>
             </div>
@@ -1907,8 +1954,16 @@ export class PropertiesPanelModule {
                     <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
                       <i class="fas fa-eye"></i>
                     </button>
-                    <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
-                      <i class="fas fa-crosshairs"></i>
+                    <button class="tree-action-btn find-btn" title="Find" data-action="find">
+
+                      <i class="fas fa-search"></i>
+
+                    </button>
+
+                    <button class="tree-action-btn ghost-btn" title="Isolate" data-action="isolate">
+
+                      <i class="fas fa-cube"></i>
+
                     </button>
                   </div>
                 </div>
@@ -1981,8 +2036,16 @@ export class PropertiesPanelModule {
                 <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
                   <i class="fas fa-eye"></i>
                 </button>
-                <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
-                  <i class="fas fa-crosshairs"></i>
+                <button class="tree-action-btn find-btn" title="Find" data-action="find">
+
+                  <i class="fas fa-search"></i>
+
+                </button>
+
+                <button class="tree-action-btn ghost-btn" title="Isolate" data-action="isolate">
+
+                  <i class="fas fa-cube"></i>
+
                 </button>
               </div>
             </div>
@@ -2021,8 +2084,16 @@ export class PropertiesPanelModule {
                     <button class="tree-action-btn visibility-btn" title="Toggle Visibility" data-action="visibility">
                       <i class="fas fa-eye"></i>
                     </button>
-                    <button class="tree-action-btn isolate-btn" title="Isolate" data-action="isolate">
-                      <i class="fas fa-crosshairs"></i>
+                    <button class="tree-action-btn find-btn" title="Find" data-action="find">
+
+                      <i class="fas fa-search"></i>
+
+                    </button>
+
+                    <button class="tree-action-btn ghost-btn" title="Isolate" data-action="isolate">
+
+                      <i class="fas fa-cube"></i>
+
                     </button>
                   </div>
                 </div>
@@ -2236,174 +2307,417 @@ export class PropertiesPanelModule {
       });
     });
 
-    // Isolate functionality
-    const isolateBtns = this.treeContainer.querySelectorAll('.isolate-btn');
-    isolateBtns.forEach(btn => {
+        // Find functionality (Hide others)
+    const findBtns = this.treeContainer.querySelectorAll('.find-btn');
+    console.log(`🔍 Found ${findBtns.length} find buttons`);
+    findBtns.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        console.log('🔍 Find button clicked!');
+        e.stopPropagation();
+        const button = e.currentTarget as HTMLElement;
+        const content = button.closest('.tree-node-content') as HTMLElement;
+        if (!content) {
+          console.warn('🔍 No content found');
+          return;
+        }
+
+        // Toggle find state
+        const isFound = button.classList.contains('active-find');
+        console.log(`🔍 isFound=${isFound}, modelId=${content.dataset.modelId}`);
+        
+        // Reset all isolation states
+        this.resetIsolationStates();
+
+        const modelId = content.dataset.modelId;
+        const model = modelId ? this.fragmentsManager?.list.get(modelId) : null;
+        const hider = this.worldManager.getComponents().get(OBC.Hider);
+        
+        console.log(`🔍 model=${!!model}, hider=${!!hider}`);
+
+        // If already found, we want to exit (Show All)
+        if (isFound) {
+          this.showAll(model, hider);
+          return;
+        }
+
+        // Otherwise, activate find
+        button.classList.add('active-find');
+        content.classList.add('node-found');
+        button.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
+
+        const idsToIsolate = this.getIdsFromContent(content);
+        console.log(`🔍 idsToIsolate=${idsToIsolate.length}`);
+
+        if (modelId && idsToIsolate.length > 0 && model && hider) {
+           hider.isolate({ [modelId]: new Set(idsToIsolate) });
+           this.zoomToElements(model, idsToIsolate);
+        }
+      });
+    });
+
+    // Ghost functionality (Isolate with transparency)
+    const ghostBtns = this.treeContainer.querySelectorAll('.ghost-btn');
+    ghostBtns.forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const button = e.currentTarget as HTMLElement;
         const content = button.closest('.tree-node-content') as HTMLElement;
         if (!content) return;
 
-        // Toggle isolation state
-        const isIsolated = button.classList.contains('active-isolation');
+        // Toggle ghost state
+        const isGhost = button.classList.contains('active-ghost');
         
-        // Reset all isolate buttons first
-        this.treeContainer?.querySelectorAll('.isolate-btn').forEach(b => {
-          b.classList.remove('active-isolation');
-          b.innerHTML = '<i class="fas fa-crosshairs"></i>';
-        });
-        
-        // Reset all node isolation styles
-        this.treeContainer?.querySelectorAll('.node-isolated').forEach(node => {
-          node.classList.remove('node-isolated');
-        });
+        // Reset all isolation states
+        this.resetIsolationStates();
 
         const modelId = content.dataset.modelId;
         const model = modelId ? this.fragmentsManager?.list.get(modelId) : null;
         const hider = this.worldManager.getComponents().get(OBC.Hider);
         const highlighter = this.highlighter;
 
-        // If already isolated, we want to exit isolation (Show All)
-        if (isIsolated) {
-          if (model && hider) {
-            // Show everything
-            hider.set(true); // true = visible
-            
-            // Clear highlights
-            if (highlighter) {
-              highlighter.clear('select');
-              highlighter.clear('translucent');
-            }
-            
-            // Reset camera to fit whole model
-            if (this.worldManager.world?.camera?.controls) {
-               const bbox = await (model as any).getMergedBox(); // Get full model box
-               if (bbox && !bbox.isEmpty()) {
-                 await this.worldManager.world.camera.controls.fitToBox(bbox, true);
-               }
-            }
-          }
-          return; // Exit
+        // If already ghosted, we want to exit (Show All)
+        if (isGhost) {
+          await this.showAllModels(hider);
+          return;
         }
 
-        // Otherwise, activate isolation
-        button.classList.add('active-isolation');
-        content.classList.add('node-isolated');
-        button.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>'; // Change icon to indicate "exit"
+        // Otherwise, activate ghost
+        button.classList.add('active-ghost');
+        content.classList.add('node-ghost');
 
-        // Get IDs to isolate
-        let idsToIsolate: number[] = [];
+        const idsToIsolate = this.getIdsFromContent(content);
 
-        // Case 1: Category group OR Spatial node (has data-ids) - PREFER THIS
-        if (content.dataset.ids) {
-          idsToIsolate = content.dataset.ids.split(',')
-            .map(id => parseInt(id, 10))
-            .filter(id => !isNaN(id));
-        }
-        // Case 2: Single element (fallback if no data-ids)
-        else if (content.dataset.localId) {
-          idsToIsolate.push(parseInt(content.dataset.localId, 10));
-        } 
-        // Case 3: Fallback for Spatial node without data-ids
-        else {
-          const childElements = content.parentElement?.querySelectorAll('.element-node .tree-node-content[data-local-id]');
-          childElements?.forEach(el => {
-            const localId = (el as HTMLElement).dataset.localId;
-            if (localId) idsToIsolate.push(parseInt(localId, 10));
-          });
-        }
-
-        if (modelId && idsToIsolate.length > 0 && model) {
-          if (hider && highlighter) {
+        if (modelId && idsToIsolate.length > 0 && model && hider && highlighter && this.fragmentsManager) {
             try {
-              // Get all items in the model
-              let allIds: number[] = [];
+              // Clear previous ghost state
+              this.ghostAffectedModels.clear();
+              this.ghostModeActive = true;
+              this.ghostPrimaryModelId = modelId;
+              this.ghostIdsToIsolate = idsToIsolate;
               
-              // Robust way to get all item IDs
-              // @ts-ignore
-              if (model.itemTypes && typeof model.itemTypes.keys === 'function') {
-                 // @ts-ignore
-                 allIds = Array.from(model.itemTypes.keys());
-              } else if ((model as any).ids instanceof Set) {
-                 allIds = Array.from((model as any).ids);
-              } else if ((model as any).items instanceof Map) {
-                 allIds = Array.from((model as any).items.keys());
-              } else {
-                 // Fallback: try getAllItemsWithGeometry
-                 try {
-                    const allItems = await (model as any).getAllItemsWithGeometry();
-                    if (Array.isArray(allItems)) {
-                        allIds = allItems;
-                    } else if (allItems instanceof Set) {
-                        allIds = Array.from(allItems);
-                    } else if (typeof allItems === 'object') {
-                        allIds = Object.values(allItems).flat() as number[];
+              // Define materials
+              const translucentMaterial: FRAGS.MaterialDefinition = {
+                color: new THREE.Color(0x888888),
+                opacity: 0.2,
+                transparent: true,
+                renderedFaces: FRAGS.RenderedFaces.TWO
+              };
+              
+              const solidMaterial: FRAGS.MaterialDefinition = {
+                color: new THREE.Color(0xb0e322),
+                opacity: 1,
+                transparent: false,
+                renderedFaces: FRAGS.RenderedFaces.TWO
+              };
+              
+              // Process ALL loaded models
+              for (const [currentModelId, currentModel] of this.fragmentsManager.list) {
+                try {
+                  // Get all item IDs for this model
+                  let allIds: number[] = [];
+                  
+                  if (typeof (currentModel as any).getItemsIds === 'function') {
+                    allIds = await (currentModel as any).getItemsIds();
+                  } else if (typeof (currentModel as any).getItemsIdsWithGeometry === 'function') {
+                    allIds = await (currentModel as any).getItemsIdsWithGeometry();
+                  } else {
+                    // Fallback for older versions
+                    // @ts-ignore
+                    if (currentModel.itemTypes && typeof currentModel.itemTypes.keys === 'function') {
+                      // @ts-ignore
+                      allIds = Array.from(currentModel.itemTypes.keys());
+                    } else if ((currentModel as any).ids instanceof Set) {
+                      allIds = Array.from((currentModel as any).ids);
                     }
-                 } catch (e) {
-                    console.warn('Could not get all items with geometry', e);
-                 }
+                  }
+                  
+                  if (allIds.length === 0) {
+                    console.warn(`👻 Ghost Mode: No IDs found for model ${currentModelId}`);
+                    continue;
+                  }
+                  
+                  if (currentModelId === modelId) {
+                    // This is the primary model where the selection was made
+                    const others = allIds.filter(id => !idsToIsolate.includes(id));
+                    console.log(`👻 Ghost Mode: Primary model ${currentModelId} - ${idsToIsolate.length} solid, ${others.length} translucent`);
+                    
+                    // Track affected IDs
+                    this.ghostAffectedModels.set(currentModelId, { otherIds: others });
+                    
+                    // Apply translucent material to "others"
+                    if (others.length > 0) {
+                      await (currentModel as any).highlight(others, translucentMaterial);
+                    }
+                    
+                    // Apply solid highlight to selected items
+                    await (currentModel as any).highlight(idsToIsolate, solidMaterial);
+                  } else {
+                    // This is a secondary model - make ALL its items translucent
+                    console.log(`👻 Ghost Mode: Secondary model ${currentModelId} - all ${allIds.length} items translucent`);
+                    
+                    // Track affected IDs
+                    this.ghostAffectedModels.set(currentModelId, { otherIds: allIds });
+                    
+                    // Apply translucent material to all items
+                    await (currentModel as any).highlight(allIds, translucentMaterial);
+                  }
+                } catch (modelErr) {
+                  console.warn(`👻 Ghost Mode: Error processing model ${currentModelId}:`, modelErr);
+                }
               }
               
-              if (allIds.length > 0) {
-                console.log(`👻 Ghost Mode: Found ${allIds.length} total items, isolating ${idsToIsolate.length} items`);
-                const others = allIds.filter(id => !idsToIsolate.includes(id));
-                
-                // 1. Hide "others" (original meshes)
-                hider.set(false, { [modelId]: new Set(others) });
-                
-                // 2. Ensure "selection" is visible (original meshes)
-                hider.set(true, { [modelId]: new Set(idsToIsolate) });
-                
-                // 3. Highlight "others" with translucent style
-                highlighter.clear('translucent');
-                highlighter.highlightByID('translucent', { [modelId]: new Set(others) });
-                
-                // 4. Highlight "selection" with select style (optional, maybe just outline?)
-                // If we want to keep original look, we might not want to overlay 'select' color on the whole face.
-                // But the user probably expects the selection highlight.
-                highlighter.clear('select');
-                highlighter.highlightByID('select', { [modelId]: new Set(idsToIsolate) });
-              } else {
-                // Fallback if we can't get all IDs
-                hider.isolate({ [modelId]: new Set(idsToIsolate) });
+              console.log(`👻 Ghost Mode: Applied to ${this.ghostAffectedModels.size} model(s)`);
+              
+              // Set up tile update listeners for ALL affected models
+              // This ensures transparency is reapplied when tiles are streamed in
+              for (const [affectedModelId, _] of this.ghostAffectedModels) {
+                const affectedModel = this.fragmentsManager.list.get(affectedModelId);
+                if (affectedModel && (affectedModel as any).tiles?.onItemSet) {
+                  // Create a handler specific to this model
+                  const handler = async () => {
+                    if (!this.ghostModeActive) return;
+                    
+                    const modelData = this.ghostAffectedModels.get(affectedModelId);
+                    if (!modelData) return;
+                    
+                    try {
+                      // Reapply translucent material
+                      if (modelData.otherIds.length > 0) {
+                        await (affectedModel as any).highlight(modelData.otherIds, translucentMaterial);
+                      }
+                      
+                      // If primary model, also reapply solid to isolated items
+                      if (affectedModelId === this.ghostPrimaryModelId && this.ghostIdsToIsolate.length > 0) {
+                        await (affectedModel as any).highlight(this.ghostIdsToIsolate, solidMaterial);
+                      }
+                    } catch (e) {
+                      // Silently ignore reapply errors
+                    }
+                  };
+                  
+                  // Store and register the handler
+                  this.tileUpdateHandlers.set(affectedModelId, handler);
+                  (affectedModel as any).tiles.onItemSet.add(handler);
+                  console.log(`👻 Ghost Mode: Added tile listener for model ${affectedModelId}`);
+                }
               }
             } catch (err) {
               console.warn('Error in ghost isolation:', err);
               hider.isolate({ [modelId]: new Set(idsToIsolate) });
             }
-          } else if (hider) {
-             hider.isolate({ [modelId]: new Set(idsToIsolate) });
-          }
-          
-          // 2. Zoom to elements with Isometric View
-          if (this.worldManager.world?.camera?.controls) {
-             // Use getMergedBox
-             const bbox = await (model as any).getMergedBox(idsToIsolate);
-             if (bbox && !bbox.isEmpty()) {
-               // Calculate isometric position
-               const center = new THREE.Vector3();
-               bbox.getCenter(center);
-               const size = new THREE.Vector3();
-               bbox.getSize(size);
-               const maxDim = Math.max(size.x, size.y, size.z);
-               const dist = maxDim * 1.5;
-               
-               // Isometric vector (1, 1, 1)
-               const isoVector = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(dist);
-               const cameraPos = center.clone().add(isoVector);
-               
-               // Set camera position and target
-               await this.worldManager.world.camera.controls.setLookAt(
-                 cameraPos.x, cameraPos.y, cameraPos.z,
-                 center.x, center.y, center.z,
-                 true
-               );
-             }
-          }
+            
+            this.zoomToElements(model, idsToIsolate);
         }
       });
     });
+  }
+
+  
+
+  /**
+   * Helper to reset all isolation states
+   */
+  private resetIsolationStates(): void {
+    if (!this.treeContainer) return;
+    
+    // Reset find buttons
+    this.treeContainer.querySelectorAll('.find-btn').forEach(b => {
+      b.classList.remove('active-find');
+      b.innerHTML = '<i class="fas fa-search"></i>';
+    });
+    
+    // Reset ghost buttons
+    this.treeContainer.querySelectorAll('.ghost-btn').forEach(b => {
+      b.classList.remove('active-ghost');
+      // b.innerHTML = '<i class="fas fa-cube"></i>';
+    });
+    
+    // Reset node styles
+    this.treeContainer.querySelectorAll('.node-found').forEach(node => {
+      node.classList.remove('node-found');
+    });
+    this.treeContainer.querySelectorAll('.node-ghost').forEach(node => {
+      node.classList.remove('node-ghost');
+    });
+  }
+
+  /**
+   * Helper to show all elements (single model - legacy)
+   */
+  private async showAll(model: any, hider: any): Promise<void> {
+    await this.showAllModels(hider);
+  }
+
+  /**
+   * Helper to show all elements across ALL models
+   */
+  private async showAllModels(hider: any): Promise<void> {
+    // Clear ghost mode state
+    this.ghostModeActive = false;
+    this.ghostPrimaryModelId = null;
+    this.ghostIdsToIsolate = [];
+    
+    if (!this.fragmentsManager) {
+      this.ghostAffectedModels.clear();
+      this.tileUpdateHandlers.clear();
+      return;
+    }
+    
+    console.log(`👻 Exiting Ghost Mode: Resetting ${this.ghostAffectedModels.size} model(s)`);
+    
+    // Remove tile update listeners and reset highlights on ALL affected models
+    for (const [modelId, _] of this.ghostAffectedModels) {
+      const model = this.fragmentsManager.list.get(modelId);
+      if (model) {
+        try {
+          // Remove tile update listener for this specific model
+          const handler = this.tileUpdateHandlers.get(modelId);
+          if (handler && (model as any).tiles?.onItemSet) {
+            (model as any).tiles.onItemSet.remove(handler);
+            console.log(`👻 Removed tile listener for model ${modelId}`);
+          }
+          
+          // Reset model highlight (removes all custom materials applied via model.highlight())
+          if (typeof (model as any).resetHighlight === 'function') {
+            await (model as any).resetHighlight();
+          }
+        } catch (err) {
+          console.warn(`👻 Error resetting model ${modelId}:`, err);
+        }
+      }
+    }
+    
+    this.tileUpdateHandlers.clear();
+    this.ghostAffectedModels.clear();
+    
+    // Show everything via hider
+    if (hider) {
+      hider.set(true); // true = visible
+    }
+    
+    // Clear OBCF highlighter as well
+    if (this.highlighter) {
+      this.highlighter.clear('select');
+      this.highlighter.clear('translucent');
+    }
+    
+    // Reset camera to fit all models
+    if (this.worldManager.world?.camera?.controls && this.fragmentsManager) {
+      try {
+        // Compute bounding box of ALL models
+        const overallBox = new THREE.Box3();
+        for (const model of this.fragmentsManager.list.values()) {
+          const bbox = await (model as any).getMergedBox();
+          if (bbox && !bbox.isEmpty()) {
+            overallBox.union(bbox);
+          }
+        }
+        if (!overallBox.isEmpty()) {
+          await this.worldManager.world.camera.controls.fitToBox(overallBox, true);
+        }
+      } catch (err) {
+        console.warn('👻 Error fitting camera to all models:', err);
+      }
+    }
+  }
+
+  /**
+   * Helper to get IDs from tree node content
+   */
+  private getIdsFromContent(content: HTMLElement): number[] {
+    let ids: number[] = [];
+
+    // Case 1: Category group OR Spatial node (has data-ids) - PREFER THIS
+    if (content.dataset.ids) {
+      ids = content.dataset.ids.split(',')
+        .map(id => parseInt(id, 10))
+        .filter(id => !isNaN(id));
+    }
+    // Case 2: Single element (fallback if no data-ids)
+    else if (content.dataset.localId) {
+      ids.push(parseInt(content.dataset.localId, 10));
+    } 
+    // Case 3: Fallback for Spatial node without data-ids
+    else {
+      const childElements = content.parentElement?.querySelectorAll('.element-node .tree-node-content[data-local-id]');
+      childElements?.forEach(el => {
+        const localId = (el as HTMLElement).dataset.localId;
+        if (localId) ids.push(parseInt(localId, 10));
+      });
+    }
+    return ids;
+  }
+
+  /**
+   * Helper to zoom to elements
+   */
+  private async zoomToElements(model: any, ids: number[]): Promise<void> {
+    if (this.worldManager.world?.camera?.controls) {
+       // Use getMergedBox
+       const bbox = await (model as any).getMergedBox(ids);
+       if (bbox && !bbox.isEmpty()) {
+         // Calculate isometric position
+         const center = new THREE.Vector3();
+         bbox.getCenter(center);
+         const size = new THREE.Vector3();
+         bbox.getSize(size);
+         const maxDim = Math.max(size.x, size.y, size.z);
+         const dist = maxDim * 1.5;
+         
+         // Isometric vector (1, 1, 1)
+         const isoVector = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(dist);
+         const cameraPos = center.clone().add(isoVector);
+         
+         // Set camera position and target
+         await this.worldManager.world.camera.controls.setLookAt(
+           cameraPos.x, cameraPos.y, cameraPos.z,
+           center.x, center.y, center.z,
+           true
+         );
+       }
+    }
+  }
+
+
+  /**
+   * Reapply ghost mode highlights after camera movement (works with multiple models)
+   */
+  private async reapplyGhostMode(): Promise<void> {
+    if (!this.ghostModeActive || !this.ghostPrimaryModelId || !this.fragmentsManager) return;
+    
+    try {
+      const translucentMaterial: FRAGS.MaterialDefinition = {
+        color: new THREE.Color(0x888888),
+        opacity: 0.3,
+        transparent: true,
+        renderedFaces: FRAGS.RenderedFaces.TWO
+      };
+      
+      const solidMaterial: FRAGS.MaterialDefinition = {
+        color: new THREE.Color(0xb0e322),
+        opacity: 1,
+        transparent: false,
+        renderedFaces: FRAGS.RenderedFaces.TWO
+      };
+      
+      // Reapply materials to all affected models
+      for (const [modelId, data] of this.ghostAffectedModels) {
+        const model = this.fragmentsManager.list.get(modelId);
+        if (!model) continue;
+        
+        // Apply translucent to "others"
+        if (data.otherIds.length > 0) {
+          await (model as any).highlight(data.otherIds, translucentMaterial);
+        }
+        
+        // If this is the primary model, also apply solid to isolated items
+        if (modelId === this.ghostPrimaryModelId && this.ghostIdsToIsolate.length > 0) {
+          await (model as any).highlight(this.ghostIdsToIsolate, solidMaterial);
+        }
+      }
+    } catch (e) {
+      console.warn('Error reapplying ghost mode:', e);
+    }
   }
 
   /**

@@ -867,8 +867,14 @@ canvas {
   color: #667eea;
 }
 
-.tree-action-btn.isolate-btn:hover {
+.tree-action-btn.find-btn:hover,
+.tree-action-btn.active-find {
   color: #e74c3c;
+}
+
+.tree-action-btn.ghost-btn:hover,
+.tree-action-btn.active-ghost {
+  color: #9b59b6;
 }
 
 /* Hidden state for visibility button */
@@ -890,14 +896,24 @@ canvas {
   color: #999;
 }
 
-.tree-node-content.node-isolated {
+.tree-node-content.node-found {
   background: rgba(231, 76, 60, 0.1);
   border-radius: 4px;
 }
 
-.tree-node-content.node-isolated .tree-label {
+.tree-node-content.node-found .tree-label {
   font-weight: 600;
   color: #c0392b;
+}
+
+.tree-node-content.node-ghost {
+  background: rgba(155, 89, 182, 0.1);
+  border-radius: 4px;
+}
+
+.tree-node-content.node-ghost .tree-label {
+  font-weight: 600;
+  color: #8e44ad;
 }
 
 /* Ensure text doesn't overlap buttons */
