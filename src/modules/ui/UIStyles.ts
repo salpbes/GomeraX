@@ -1134,6 +1134,92 @@ export function getPropertiesPanelStyles(): string {
       background: rgba(255, 255, 255, 0.3);
     }
     
+    /* Tree Search Box */
+    .tree-search-container {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .tree-search-wrapper {
+      display: flex;
+      align-items: center;
+      background: #ffffff;
+      border-radius: 6px;
+      padding: 6px 10px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      transition: all 0.2s ease;
+    }
+    
+    .tree-search-wrapper:focus-within {
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+    
+    .tree-search-icon {
+      color: rgba(0, 0, 0, 0.4);
+      font-size: 12px;
+      margin-right: 8px;
+    }
+    
+    .tree-search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #000000;
+      font-size: 12px;
+      padding: 0;
+    }
+    
+    .tree-search-input::placeholder {
+      color: rgba(0, 0, 0, 0.4);
+    }
+    
+    .tree-search-clear {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 4px;
+      font-size: 10px;
+      transition: all 0.2s ease;
+    }
+    
+    .tree-search-clear:hover {
+      color: #000;
+      background: rgba(0, 0, 0, 0.1);
+    }
+    
+    .tree-search-results {
+      display: none;
+      padding: 6px 0 0 0;
+      font-size: 11px;
+    }
+    
+    .search-result-count {
+      color: #667eea;
+    }
+    
+    .search-no-results {
+      color: #888888;
+      font-style: italic;
+    }
+    
+    /* Search highlight */
+    .tree-node-content.tree-search-match {
+      background: rgba(102, 126, 234, 0.2) !important;
+      border-left: 2px solid #667eea;
+    }
+    
+    .tree-node-content.tree-search-match .tree-label {
+      color: #667eea;
+      font-weight: 600;
+    }
+    
     /* Tree Container */
     .ifc-tree-panel .tree-container {
       flex: 1;

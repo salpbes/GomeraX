@@ -50,7 +50,7 @@ export class WorldManager {
     
     // Make background transparent (optional - can be customized)
     const sceneThree = simpleScene.three as THREE.Scene;
-    sceneThree.background = new THREE.Color(0x202932);
+    sceneThree.background = new THREE.Color(0xd1dee9);
 
     // Setup the PostproductionRenderer for advanced graphics
     this.world.renderer = new OBF.PostproductionRenderer(this.components, container);
