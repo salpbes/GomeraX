@@ -27,6 +27,9 @@ export class ColorSplashModule {
   // Store category info for UI
   private categoryInfo: Map<string, { category: string; modelId: string; color: THREE.Color; count: number }> = new Map();
   
+  // Cache for category items to avoid re-querying the model
+  private _categoryCache: Map<string, Array<{ category: string, itemIds: number[] }>> = new Map();
+
   // Callback for when colors are applied
   public onColorsApplied: ((
     categories: Array<{ name: string; color: string; selectionName: string; count: number }>,
@@ -38,6 +41,10 @@ export class ColorSplashModule {
   
   // Callback for when cluster view is exited (to hide property table)
   public onClusterViewExited: (() => void) | null = null;
+
+  // Callbacks for loading state
+  public onLoadingStart: (() => void) | null = null;
+  public onLoadingEnd: (() => void) | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
@@ -67,6 +74,9 @@ export class ColorSplashModule {
    * Refresh/update color splash when models change (new model loaded, etc.)
    */
   async refreshColorSplash(): Promise<void> {
+    // Clear cache since models have changed
+    this._categoryCache.clear();
+    
     if (this.isActive) {
       console.log('🔄 Refreshing color splash with updated models...');
       await this.applyColorByType();
@@ -77,6 +87,11 @@ export class ColorSplashModule {
    * Apply colors to elements based on their IFC types
    */
   private async applyColorByType(): Promise<void> {
+    if (this.onLoadingStart) this.onLoadingStart();
+    
+    // Small delay to allow UI to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     console.log('🎨 Applying color splash by IFC type...');
 
     // Clear previous selections
@@ -101,26 +116,46 @@ export class ColorSplashModule {
       try {
         console.log(`  Processing model: ${modelId}`);
 
-        // Get all categories in the model
-        const categories = await (model as any).getCategories();
-        console.log(`  Found ${categories.length} categories`);
+        let modelCategories: Array<{ category: string, itemIds: number[] }> = [];
 
-        // Filter to geometry categories only
-        const geometryCategories = categories.filter((cat: string) => {
-          return cat.match(/^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|FURNISH|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|JUNCTION|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|AIRTERM|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|CONTROLLER|ACTUATOR|ALARM|LIGHT|FIXTURE|EQUIPMENT|FLOWMETER|ENERGYCONVERSION|DISTRIB|HEATER|CHILLER|BOILER|COIL|HUMIDIFIER|EVAPORATOR|CONDENSER|TANK|FILTER|TRANSFORMER|MOTOR|SWITCH|PROTECTIVEDEVICE|JUNCTION|CABLE|TRAY|RACEWAY)/);
-        });
+        // Check cache first
+        if (this._categoryCache.has(modelId)) {
+          console.log(`  ⚡ Using cached category data for ${modelId}`);
+          modelCategories = this._categoryCache.get(modelId)!;
+        } else {
+          // Not in cache, query the model
+          // Get all categories in the model
+          const categories = await (model as any).getCategories();
+          console.log(`  Found ${categories.length} categories`);
+
+          // Filter to geometry categories only
+          const geometryCategories = categories.filter((cat: string) => {
+            return cat.match(/^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|FURNISH|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|JUNCTION|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|AIRTERM|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|CONTROLLER|ACTUATOR|ALARM|LIGHT|FIXTURE|EQUIPMENT|FLOWMETER|ENERGYCONVERSION|DISTRIB|HEATER|CHILLER|BOILER|COIL|HUMIDIFIER|EVAPORATOR|CONDENSER|TANK|FILTER|TRANSFORMER|MOTOR|SWITCH|PROTECTIVEDEVICE|JUNCTION|CABLE|TRAY|RACEWAY)/);
+          });
+
+          // Query items for each category
+          for (const category of geometryCategories) {
+            const categoryRegex = new RegExp(`^${category}$`);
+            const items = await (model as any).getItemsOfCategories([categoryRegex]);
+            const categoryKey = Object.keys(items).find(key => key.includes(category));
+            
+            if (!categoryKey || !items[categoryKey] || items[categoryKey].length === 0) {
+              continue;
+            }
+
+            modelCategories.push({
+              category,
+              itemIds: items[categoryKey]
+            });
+          }
+          
+          // Store in cache
+          this._categoryCache.set(modelId, modelCategories);
+        }
 
         // Apply color to each category using Highlighter
-        for (const category of geometryCategories) {
-          const categoryRegex = new RegExp(`^${category}$`);
-          const items = await (model as any).getItemsOfCategories([categoryRegex]);
-          const categoryKey = Object.keys(items).find(key => key.includes(category));
-          
-          if (!categoryKey || !items[categoryKey] || items[categoryKey].length === 0) {
-            continue;
-          }
-
-          const localIds = items[categoryKey];
+        for (const { category, itemIds } of modelCategories) {
+          const localIds = itemIds;
           const color = this.getCategoryColor(category);
 
           // Create selection name unique to this model and category
@@ -166,9 +201,9 @@ export class ColorSplashModule {
             modelGroups.set(modelId, []);
           }
           modelGroups.get(modelId)!.push(categoryData);
-
-          console.log(`  ✅ Colored ${localIds.length} ${category} items`);
         }
+        
+        console.log(`  ✅ Colored ${modelCategories.length} categories for model ${modelId}`);
 
       } catch (error) {
         console.error(`❌ Error processing model ${modelId}:`, error);
@@ -181,6 +216,8 @@ export class ColorSplashModule {
     if (this.onColorsApplied) {
       this.onColorsApplied(categoryList, modelGroups);
     }
+
+    if (this.onLoadingEnd) this.onLoadingEnd();
   }
 
   /**

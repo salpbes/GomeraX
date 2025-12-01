@@ -168,6 +168,13 @@ class ClusterVisualizer {
   }
 
   /**
+   * Toggle visibility of the cluster group
+   */
+  toggleVisibility(visible: boolean): void {
+    this.clusterGroup.visible = visible;
+  }
+
+  /**
    * Remove all cluster visualizations from the scene
    */
   clearVisuals(): void {
@@ -1180,6 +1187,7 @@ class ClusterManager {
     }
 
     // Animate clusters entering
+    this.visualizer.toggleVisibility(true); // Ensure visible
     this.visualizer.animateEntry();
 
     console.log('✅ Cluster visualization complete');
@@ -1207,11 +1215,79 @@ class ClusterManager {
             cluster.clusterPosition = null;
           }
         }
+        this.clusters.clear(); // Actually clear the map
 
         console.log('✅ Clusters cleared');
         resolve();
       });
     });
+  }
+
+  /**
+   * Clear clusters instantly without animation (for switching contexts)
+   */
+  async clearClustersInstant(): Promise<void> {
+    console.log('🧹 Clearing clusters instantly...');
+    
+    // Restore original positions
+    await this.restoreOriginalPositions();
+
+    // Clear visuals
+    this.visualizer.clearVisuals();
+
+    // Clear cluster data
+    for (const clusters of this.clusters.values()) {
+      for (const cluster of clusters) {
+        cluster.visualHelper = null;
+        cluster.clusterPosition = null;
+      }
+    }
+    this.clusters.clear();
+    
+    console.log('✅ Clusters cleared instantly');
+  }
+
+  /**
+   * Check if clusters have been generated
+   */
+  areClustersGenerated(): boolean {
+    return this.clusters.size > 0;
+  }
+
+  /**
+   * Hide clusters without destroying them (fast toggle)
+   */
+  hideClusters(): void {
+    console.log('🙈 Hiding clusters...');
+    this.visualizer.animateExit(400, () => {
+      this.visualizer.toggleVisibility(false);
+      this.visualizer.restoreAllModels();
+    });
+  }
+
+  /**
+   * Show existing clusters (fast toggle)
+   * @param hideAllModels If true, hides ALL loaded models
+   */
+  showClusters(hideAllModels: boolean = false): void {
+    console.log('👁️ Showing existing clusters...');
+    
+    // Hide models
+    if (hideAllModels) {
+      for (const [, model] of this.fragmentsManager.list) {
+        this.visualizer.hideModel(model);
+      }
+    } else {
+      for (const [modelId, clusters] of this.clusters) {
+        const model = this.fragmentsManager.list.get(modelId);
+        if (model) {
+          this.visualizer.hideModel(model);
+        }
+      }
+    }
+
+    this.visualizer.toggleVisibility(true);
+    this.visualizer.animateEntry();
   }
 
   /**
@@ -1279,6 +1355,10 @@ export class ClusterModule {
   private clusterManager: ClusterManager | null = null;
   private isActive: boolean = false;
   private modelTransform: ModelTransformModule | null = null;
+
+  // Callbacks for loading state
+  public onLoadingStart: (() => void) | null = null;
+  public onLoadingEnd: (() => void) | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
@@ -1363,10 +1443,10 @@ export class ClusterModule {
     }
 
     if (this.isActive) {
-      // Turn off clustering - restore original view
-      await this.clusterManager.clearClusters();
+      // Turn off clustering - hide instead of clear for performance
+      this.clusterManager.hideClusters();
       this.isActive = false;
-      console.log('✅ Cluster view disabled');
+      console.log('✅ Cluster view disabled (hidden)');
       
       // Fit camera to view all models after exiting cluster view
       if (this.modelTransform) {
@@ -1374,21 +1454,36 @@ export class ClusterModule {
         await this.modelTransform.fitCameraToModels();
       }
     } else {
-      // Turn on clustering - generate and visualize
-      await this.clusterManager.generateClusters();
+      if (this.onLoadingStart) this.onLoadingStart();
       
-      if (this.clusterManager.getTotalClusterCount() === 0) {
-        console.warn('⚠️ No clusters generated. Make sure models are loaded.');
-        return;
-      }
+      // Small delay to allow UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      await this.clusterManager.visualizeClusters();
+      // Turn on clustering
+      if (this.clusterManager.areClustersGenerated()) {
+        // Fast path: just show existing clusters
+        this.clusterManager.showClusters(false);
+      } else {
+        // Slow path: generate for the first time
+        await this.clusterManager.generateClusters();
+        
+        if (this.clusterManager.getTotalClusterCount() === 0) {
+          console.warn('⚠️ No clusters generated. Make sure models are loaded.');
+          if (this.onLoadingEnd) this.onLoadingEnd();
+          return;
+        }
+
+        await this.clusterManager.visualizeClusters();
+      }
+      
       this.isActive = true;
       
       // Fit camera to clusters
       await this.fitToClusters();
       
       console.log('✅ Cluster view enabled');
+      
+      if (this.onLoadingEnd) this.onLoadingEnd();
     }
   }
 
@@ -1403,9 +1498,17 @@ export class ClusterModule {
       return;
     }
 
-    // First clear any existing clusters
+    if (this.onLoadingStart) this.onLoadingStart();
+    
+    // Small delay to allow UI to update
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Always clear existing clusters when showing a specific filtered view
+    // If we are active, we animate out. If not (hidden), we clear instantly.
     if (this.isActive) {
       await this.clusterManager.clearClusters();
+    } else if (this.clusterManager.areClustersGenerated()) {
+      await this.clusterManager.clearClustersInstant();
     }
 
     console.log(`🎯 Showing clusters for ${categoryName}...`);
@@ -1417,6 +1520,7 @@ export class ClusterModule {
     if (totalClusters === 0) {
       console.warn(`⚠️ No clusters generated for ${categoryName}.`);
       alert(`Cannot visualize ${categoryName}\n\nThe ${categoryName} elements in this model cannot be visualized in cluster view due to geometry data limitations in the IFC file.\n\nYou can still view the property table for these ${filteredElementsByCategory.get(categoryName)?.expressIDs?.size || 0} elements.`);
+      if (this.onLoadingEnd) this.onLoadingEnd();
       return;
     }
 
@@ -1428,6 +1532,8 @@ export class ClusterModule {
     await this.fitToClusters();
     
     console.log(`✅ Cluster view enabled for ${categoryName}`);
+    
+    if (this.onLoadingEnd) this.onLoadingEnd();
   }
 
   /**
@@ -1440,8 +1546,8 @@ export class ClusterModule {
     }
 
     if (this.isActive) {
-      // Clear clusters and restore all models
-      await this.clusterManager.clearClusters();
+      // Hide clusters instead of clearing to allow fast re-entry
+      this.clusterManager.hideClusters();
       this.isActive = false;
       
       // Fit camera to view all models
