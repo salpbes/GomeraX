@@ -136,6 +136,16 @@ export class UIManager {
   public setClusterModule(cluster: ClusterModule): void {
     this.clusterModule = cluster;
     this.toolbarHandlers.setClusterModule(cluster);
+    
+    // Set up loading callbacks
+    cluster.onLoadingStart = () => {
+      this.showLoading('Processing clusters...', 50);
+    };
+    
+    cluster.onLoadingEnd = () => {
+      this.hideLoading();
+    };
+    
     console.log('✅ Cluster module set in UI');
   }
 
@@ -149,6 +159,15 @@ export class UIManager {
     // Set up callback to show color picker when colors are applied
     colorSplash.onColorsApplied = (categories, modelGroups) => {
       this.toolbarHandlers.showColorPickerPanel(categories, modelGroups);
+    };
+    
+    // Set up loading callbacks
+    colorSplash.onLoadingStart = () => {
+      this.showLoading('Applying colors...', 50);
+    };
+    
+    colorSplash.onLoadingEnd = () => {
+      this.hideLoading();
     };
     
     console.log('✅ Color splash module set in UI');
@@ -1523,7 +1542,7 @@ export class UIManager {
   /**
    * Shows the loading indicator
    */
-  private showLoading(): Promise<void> {
+  private showLoading(initialMessage: string = 'Initializing...', initialProgress: number = 0): Promise<void> {
     return new Promise((resolve) => {
       const indicator = document.getElementById('loadingIndicator');
       if (indicator) {
@@ -1533,7 +1552,7 @@ export class UIManager {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             // Reset progress after layout is complete
-            this.updateLoadingProgress(0, 'Initializing...');
+            this.updateLoadingProgress(initialProgress, initialMessage);
             
             // Start rotating tips and jokes
             this.startLoadingRotation();

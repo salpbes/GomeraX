@@ -1258,6 +1258,10 @@ export class PropertiesPanelModule {
   // Search state
   private searchQuery: string = '';
   private searchInput: HTMLInputElement | null = null;
+  private currentSearchId: number = 0;
+  private currentMatches: HTMLElement[] = [];
+  private currentMatchIndex: number = -1;
+  private searchResultsElement: HTMLElement | null = null;
 
   /**
    * Creates the IFC tree view panel (left side)
@@ -1316,6 +1320,7 @@ export class PropertiesPanelModule {
     this.searchInput = searchContainer.querySelector('#tree-search-input');
     const searchClearBtn = searchContainer.querySelector('#tree-search-clear') as HTMLElement;
     const searchResultsDiv = searchContainer.querySelector('#tree-search-results') as HTMLElement;
+    this.searchResultsElement = searchResultsDiv;
 
     // Search input event listener with debounce
     let searchTimeout: number | null = null;
@@ -1330,7 +1335,13 @@ export class PropertiesPanelModule {
       // Debounce search
       if (searchTimeout) clearTimeout(searchTimeout);
       searchTimeout = window.setTimeout(() => {
-        this.performTreeSearch(query, searchResultsDiv);
+        if (query.length > 0 && query.length < 3) {
+          this.clearTreeSearch(searchResultsDiv);
+          resultsDiv.innerHTML = '<span class="search-no-results" style="color: #888;">Type at least 3 characters</span>';
+          resultsDiv.style.display = 'block';
+        } else {
+          this.performTreeSearch(query, searchResultsDiv);
+        }
       }, 300);
     });
 
@@ -2726,7 +2737,7 @@ export class PropertiesPanelModule {
          const size = new THREE.Vector3();
          bbox.getSize(size);
          const maxDim = Math.max(size.x, size.y, size.z);
-         const dist = maxDim * 1.5;
+         const dist = maxDim * 2.5; // Increased from 1.5 to zoom out more
          
          // Isometric vector (1, 1, 1)
          const isoVector = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(dist);
@@ -2857,17 +2868,30 @@ export class PropertiesPanelModule {
   /**
    * Performs search within the tree view
    */
-  private performTreeSearch(query: string, resultsDiv: HTMLElement): void {
+  private async performTreeSearch(query: string, resultsDiv: HTMLElement): Promise<void> {
     this.searchQuery = query.toLowerCase().trim();
+    const searchId = ++this.currentSearchId;
     
     if (!this.treeContainer) return;
     
-    // Clear previous highlights
-    this.treeContainer.querySelectorAll('.tree-search-match').forEach(el => {
-      el.classList.remove('tree-search-match');
-    });
-    this.treeContainer.querySelectorAll('.tree-search-parent').forEach(el => {
+    // Clear previous highlights and collapse search-expanded nodes
+    const prevMatches = this.treeContainer.querySelectorAll('.tree-search-match');
+    prevMatches.forEach(el => el.classList.remove('tree-search-match'));
+    
+    // Reset state
+    this.currentMatches = [];
+    this.currentMatchIndex = -1;
+    
+    // Collapse previously expanded nodes
+    const prevParents = this.treeContainer.querySelectorAll('.tree-search-parent');
+    prevParents.forEach(el => {
       el.classList.remove('tree-search-parent');
+      el.classList.remove('expanded');
+      const icon = el.querySelector(':scope > .tree-node-content .tree-toggle i');
+      if (icon) {
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-right');
+      }
     });
     
     if (this.searchQuery.length === 0) {
@@ -2880,54 +2904,139 @@ export class PropertiesPanelModule {
       return;
     }
     
+    resultsDiv.innerHTML = '<span class="search-result-count"><i class="fas fa-spinner fa-spin"></i> Searching...</span>';
+    resultsDiv.style.display = 'block';
+    
+    // Yield to UI
+    await new Promise(resolve => setTimeout(resolve, 10));
+    if (searchId !== this.currentSearchId) return;
+    
     // Find matching nodes
-    const allNodes = this.treeContainer.querySelectorAll('.tree-node-content');
-    let matchCount = 0;
-    const matchedNodes: HTMLElement[] = [];
+    const allNodes = Array.from(this.treeContainer.querySelectorAll('.tree-node-content'));
     
-    allNodes.forEach(nodeContent => {
-      const labelEl = nodeContent.querySelector('.tree-label');
-      if (!labelEl) return;
+    // Process in chunks to avoid freezing UI
+    const CHUNK_SIZE = 1000; // Increased chunk size since we do less work per item
+    
+    for (let i = 0; i < allNodes.length; i += CHUNK_SIZE) {
+      if (searchId !== this.currentSearchId) return;
       
-      const label = labelEl.textContent?.toLowerCase() || '';
-      const node = nodeContent.closest('.tree-node') as HTMLElement;
+      const chunk = allNodes.slice(i, i + CHUNK_SIZE);
       
-      if (label.includes(this.searchQuery)) {
-        matchCount++;
-        matchedNodes.push(node);
-        nodeContent.classList.add('tree-search-match');
+      for (const nodeContent of chunk) {
+        const labelEl = nodeContent.querySelector('.tree-label');
+        if (!labelEl) continue;
         
-        // Expand parent nodes to show match
-        let parent = node.parentElement?.closest('.tree-node') as HTMLElement | null;
-        while (parent) {
-          parent.classList.add('expanded', 'tree-search-parent');
-          const icon = parent.querySelector(':scope > .tree-node-content .tree-toggle i');
-          if (icon) {
-            icon.classList.remove('fa-chevron-right');
-            icon.classList.add('fa-chevron-down');
-          }
-          parent = parent.parentElement?.closest('.tree-node') as HTMLElement | null;
+        const label = labelEl.textContent?.toLowerCase() || '';
+        
+        if (label.includes(this.searchQuery)) {
+          this.currentMatches.push(nodeContent as HTMLElement);
+          (nodeContent as HTMLElement).classList.add('tree-search-match');
+          
+          // Ensure node is visible (display: none check)
+          const node = nodeContent.closest('.tree-node') as HTMLElement;
+          if (node) node.style.display = '';
         }
-        
-        node.style.display = '';
       }
-    });
-    
-    // Update results display
-    if (matchCount > 0) {
-      resultsDiv.innerHTML = `<span class="search-result-count">${matchCount} result${matchCount !== 1 ? 's' : ''} found</span>`;
-      resultsDiv.style.display = 'block';
       
-      // Scroll to first match
-      if (matchedNodes.length > 0) {
-        matchedNodes[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      // Yield to main thread
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
+    if (searchId !== this.currentSearchId) return;
+    
+    // Update results display with navigation
+    if (this.currentMatches.length > 0) {
+      this.updateSearchNavigationUI(resultsDiv);
+      
+      // Navigate to first match
+      this.navigateToMatch(0);
     } else {
       resultsDiv.innerHTML = `<span class="search-no-results">No results found</span>`;
       resultsDiv.style.display = 'block';
     }
     
-    console.log(`🔍 Search "${query}": ${matchCount} matches`);
+    console.log(`🔍 Search "${query}": ${this.currentMatches.length} matches`);
+  }
+
+  /**
+   * Updates the search navigation UI
+   */
+  private updateSearchNavigationUI(resultsDiv: HTMLElement): void {
+    const count = this.currentMatches.length;
+    const index = this.currentMatchIndex + 1;
+    
+    resultsDiv.innerHTML = `
+      <div class="search-nav-container" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <span class="search-result-count">${count} match${count !== 1 ? 'es' : ''}</span>
+        <div class="search-nav-controls" style="display: flex; align-items: center; gap: 5px;">
+          <button id="search-prev-btn" class="icon-btn small" title="Previous match" style="padding: 2px 6px;">
+            <i class="fas fa-chevron-up"></i>
+          </button>
+          <span id="search-counter" style="font-size: 12px; min-width: 40px; text-align: center;">${index > 0 ? index : '-'}/${count}</span>
+          <button id="search-next-btn" class="icon-btn small" title="Next match" style="padding: 2px 6px;">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    resultsDiv.style.display = 'block';
+    
+    // Add event listeners
+    const prevBtn = resultsDiv.querySelector('#search-prev-btn');
+    const nextBtn = resultsDiv.querySelector('#search-next-btn');
+    
+    prevBtn?.addEventListener('click', () => {
+      let newIndex = this.currentMatchIndex - 1;
+      if (newIndex < 0) newIndex = this.currentMatches.length - 1;
+      this.navigateToMatch(newIndex);
+    });
+    
+    nextBtn?.addEventListener('click', () => {
+      let newIndex = this.currentMatchIndex + 1;
+      if (newIndex >= this.currentMatches.length) newIndex = 0;
+      this.navigateToMatch(newIndex);
+    });
+  }
+
+  /**
+   * Navigates to a specific search match
+   */
+  private navigateToMatch(index: number): void {
+    if (index < 0 || index >= this.currentMatches.length) return;
+    
+    // Remove active class from previous
+    if (this.currentMatchIndex >= 0 && this.currentMatchIndex < this.currentMatches.length) {
+      this.currentMatches[this.currentMatchIndex].classList.remove('tree-search-active');
+    }
+    
+    this.currentMatchIndex = index;
+    const match = this.currentMatches[index];
+    
+    // Add active class
+    match.classList.add('tree-search-active');
+    
+    // Expand parents for THIS match only
+    let parent = match.closest('.tree-node')?.parentElement?.closest('.tree-node') as HTMLElement | null;
+    while (parent) {
+      if (!parent.classList.contains('expanded')) {
+        parent.classList.add('expanded', 'tree-search-parent');
+        const icon = parent.querySelector(':scope > .tree-node-content .tree-toggle i');
+        if (icon) {
+          icon.classList.remove('fa-chevron-right');
+          icon.classList.add('fa-chevron-down');
+        }
+      }
+      parent = parent.parentElement?.closest('.tree-node') as HTMLElement | null;
+    }
+    
+    // Scroll into view
+    match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Update counter
+    const counter = this.searchResultsElement?.querySelector('#search-counter');
+    if (counter) {
+      counter.textContent = `${index + 1}/${this.currentMatches.length}`;
+    }
   }
 
   /**
@@ -2935,6 +3044,9 @@ export class PropertiesPanelModule {
    */
   private clearTreeSearch(resultsDiv: HTMLElement): void {
     this.searchQuery = '';
+    this.currentSearchId++; // Invalidate any running search
+    this.currentMatches = [];
+    this.currentMatchIndex = -1;
     
     if (!this.treeContainer) return;
     
@@ -2942,8 +3054,19 @@ export class PropertiesPanelModule {
     this.treeContainer.querySelectorAll('.tree-search-match').forEach(el => {
       el.classList.remove('tree-search-match');
     });
+    this.treeContainer.querySelectorAll('.tree-search-active').forEach(el => {
+      el.classList.remove('tree-search-active');
+    });
+    
+    // Collapse search-expanded nodes
     this.treeContainer.querySelectorAll('.tree-search-parent').forEach(el => {
       el.classList.remove('tree-search-parent');
+      el.classList.remove('expanded');
+      const icon = el.querySelector(':scope > .tree-node-content .tree-toggle i');
+      if (icon) {
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-right');
+      }
     });
     
     // Show all nodes

@@ -1219,6 +1219,19 @@ export function getPropertiesPanelStyles(): string {
       color: #667eea;
       font-weight: 600;
     }
+
+    /* Active search match (currently selected) */
+    .tree-node-content.tree-search-active {
+      background: rgba(102, 126, 234, 0.4) !important;
+      border-left: 4px solid #764ba2 !important;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+
+    .tree-node-content.tree-search-active .tree-label {
+      color: #764ba2 !important;
+      font-weight: 800 !important;
+      font-size: 1.1em;
+    }
     
     /* Tree Container */
     .ifc-tree-panel .tree-container {
@@ -1609,6 +1622,19 @@ export function getPropertiesPanelStyles(): string {
     .coordinate-warning-close:hover {
       background: rgba(255, 255, 255, 0.3);
       transform: scale(1.1);
+    }
+
+    /* Search Navigation Buttons */
+    .search-nav-controls .icon-btn {
+      background: rgba(102, 126, 234, 0.1) !important; /* Override default white */
+      color: #667eea !important; /* Override default white */
+      border: 1px solid rgba(102, 126, 234, 0.2) !important;
+    }
+    
+    .search-nav-controls .icon-btn:hover {
+      background: rgba(102, 126, 234, 0.2) !important;
+      color: #764ba2 !important;
+      transform: translateY(-1px);
     }
   `;
 }
