@@ -46,6 +46,7 @@ import * as OBC from '@thatopen/components';
 import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
 import { ModelTransformModule } from './ModelTransformModule';
+import type { ClipperModule } from './ClipperModule';
 
 // ==================================================================================
 // 1. CLUSTER DATA CLASS
@@ -1355,6 +1356,8 @@ export class ClusterModule {
   private clusterManager: ClusterManager | null = null;
   private isActive: boolean = false;
   private modelTransform: ModelTransformModule | null = null;
+  private clipperModule: ClipperModule | null = null;
+  private clipperWasEnabled: boolean = false; // Track if clipper was enabled before cluster mode
 
   // Callbacks for loading state
   public onLoadingStart: (() => void) | null = null;
@@ -1371,6 +1374,13 @@ export class ClusterModule {
    */
   public setModelTransform(modelTransform: ModelTransformModule): void {
     this.modelTransform = modelTransform;
+  }
+
+  /**
+   * Set the clipper module reference (to disable sectioning in cluster mode)
+   */
+  public setClipperModule(clipperModule: ClipperModule): void {
+    this.clipperModule = clipperModule;
   }
 
   /**
@@ -1448,12 +1458,27 @@ export class ClusterModule {
       this.isActive = false;
       console.log('✅ Cluster view disabled (hidden)');
       
+      // Re-enable sectioning if it was enabled before cluster mode
+      if (this.clipperModule && this.clipperWasEnabled) {
+        this.clipperModule.setEnabled(true);
+        console.log('✂️ Sectioning re-enabled after cluster mode');
+      }
+      
       // Fit camera to view all models after exiting cluster view
       if (this.modelTransform) {
         console.log('📷 Fitting camera to models...');
         await this.modelTransform.fitCameraToModels();
       }
     } else {
+      // Disable sectioning while in cluster mode (it doesn't work properly with clusters)
+      if (this.clipperModule) {
+        this.clipperWasEnabled = this.clipperModule.getEnabled();
+        if (this.clipperWasEnabled) {
+          this.clipperModule.setEnabled(false);
+          console.log('✂️ Sectioning temporarily disabled for cluster mode');
+        }
+      }
+      
       if (this.onLoadingStart) this.onLoadingStart();
       
       // Small delay to allow UI to update
@@ -1496,6 +1521,15 @@ export class ClusterModule {
     if (!this.clusterManager) {
       console.error('❌ ClusterManager not initialized');
       return;
+    }
+
+    // Disable sectioning while in cluster mode (if not already in cluster mode)
+    if (!this.isActive && this.clipperModule) {
+      this.clipperWasEnabled = this.clipperModule.getEnabled();
+      if (this.clipperWasEnabled) {
+        this.clipperModule.setEnabled(false);
+        console.log('✂️ Sectioning temporarily disabled for cluster mode');
+      }
     }
 
     if (this.onLoadingStart) this.onLoadingStart();
@@ -1549,6 +1583,12 @@ export class ClusterModule {
       // Hide clusters instead of clearing to allow fast re-entry
       this.clusterManager.hideClusters();
       this.isActive = false;
+      
+      // Re-enable sectioning if it was enabled before cluster mode
+      if (this.clipperModule && this.clipperWasEnabled) {
+        this.clipperModule.setEnabled(true);
+        console.log('✂️ Sectioning re-enabled after cluster mode');
+      }
       
       // Fit camera to view all models
       if (this.modelTransform) {

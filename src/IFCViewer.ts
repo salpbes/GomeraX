@@ -187,6 +187,10 @@ export class IFCViewer {
       if (this.modelTransform) {
         this.cluster.setModelTransform(this.modelTransform);
       }
+      // Pass clipper module to cluster so it can disable sectioning in cluster mode
+      if (this.clipper) {
+        this.cluster.setClipperModule(this.clipper);
+      }
 
       // Step 4.12: Initialize color splash module
       console.log('🎨 Initializing color splash module...');

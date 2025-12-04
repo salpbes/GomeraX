@@ -1217,6 +1217,21 @@ export class UIManager {
       return;
     }
 
+    // Prevent enabling sectioning while in cluster mode
+    if (this.clusterModule?.isClusteringActive()) {
+      console.warn('⚠️ Sectioning is disabled while in cluster mode');
+      // Show a notification to the user
+      import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+        NotificationHelper.show({
+          title: 'Sectioning Unavailable',
+          message: 'Sectioning is disabled in cluster mode. Exit cluster mode first.',
+          type: 'warning',
+          duration: 4000
+        });
+      });
+      return;
+    }
+
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');
@@ -1248,6 +1263,20 @@ export class UIManager {
   private handleClipperPreset(axis: 'x' | 'y' | 'z'): void {
     if (!this.viewer) {
       console.warn('⚠️ Viewer reference not available');
+      return;
+    }
+
+    // Prevent enabling sectioning while in cluster mode
+    if (this.clusterModule?.isClusteringActive()) {
+      console.warn('⚠️ Sectioning is disabled while in cluster mode');
+      import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+        NotificationHelper.show({
+          title: 'Sectioning Unavailable',
+          message: 'Sectioning is disabled in cluster mode. Exit cluster mode first.',
+          type: 'warning',
+          duration: 4000
+        });
+      });
       return;
     }
 

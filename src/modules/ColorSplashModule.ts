@@ -461,10 +461,18 @@ export class ColorSplashModule {
   /**
    * Show property table with visible elements in cluster view
    */
-  public async showPropertyTable(elementsByCategory: Map<string, { [key: string]: Set<number> }>, clusterScene?: THREE.Group | null): Promise<void> {
+  public async showPropertyTable(
+    elementsByCategory: Map<string, { [key: string]: Set<number> }>, 
+    clusterScene?: THREE.Group | null,
+    onExitCluster?: () => void
+  ): Promise<void> {
     // Set cluster scene for filtering if provided
     if (clusterScene) {
       this.propertyTable.setClusterScene(clusterScene);
+    }
+    // Set exit callback if provided
+    if (onExitCluster) {
+      this.propertyTable.setExitClusterCallback(onExitCluster);
     }
     await this.propertyTable.showTable(elementsByCategory);
   }

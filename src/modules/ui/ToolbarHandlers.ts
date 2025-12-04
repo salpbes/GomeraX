@@ -1071,28 +1071,26 @@ export class ToolbarHandlers {
       exitClusterBtn.style.boxShadow = 'none';
     });
 
-    exitClusterBtn.addEventListener('click', async () => {
+    // Exit cluster handler - reusable function for both button and property table
+    const handleExitCluster = async () => {
       try {
         if (this.cluster) {
-          await this.cluster.exitToColorView(); // Exit to color view (not toggle)
-          exitClusterBtn.style.display = 'none'; // Hide the button
-          updateClusterBtn.style.display = 'none'; // Hide update button too
-          this.isInClusterMode = false; // Reset cluster mode flag
-          this.selectedCategories.clear(); // Clear selections
+          await this.cluster.exitToColorView();
+          exitClusterBtn.style.display = 'none';
+          updateClusterBtn.style.display = 'none';
+          this.isInClusterMode = false;
+          this.selectedCategories.clear();
           
-          // Hide property table when exiting cluster mode
           if (this.colorSplash) {
             this.colorSplash.hidePropertyTable();
           }
           
-          // Update UI
           const countSpan = document.getElementById('selectedCount');
           if (countSpan) {
             countSpan.textContent = '0';
           }
           viewSelectedBtn.style.display = 'none';
           
-          // Uncheck all checkboxes
           const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
           checkboxes.forEach(cb => {
             (cb as HTMLInputElement).checked = false;
@@ -1105,7 +1103,9 @@ export class ToolbarHandlers {
       } catch (error) {
         console.error('Error exiting cluster view:', error);
       }
-    });
+    };
+
+    exitClusterBtn.addEventListener('click', handleExitCluster);
 
     headerContainer.appendChild(exitClusterBtn);
 
@@ -1178,7 +1178,7 @@ export class ToolbarHandlers {
             // Update property table with visible elements
             if (this.colorSplash) {
               const clusterScene = this.cluster?.getClusterScene();
-              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene, handleExitCluster);
             }
             
             console.log(`✅ Updated cluster view with ${categoryNames.length} categories`);
@@ -1260,7 +1260,7 @@ export class ToolbarHandlers {
             // Show property table with visible elements
             if (this.colorSplash) {
               const clusterScene = this.cluster?.getClusterScene();
-              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+              await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene, handleExitCluster);
             }
             
             // Show the exit cluster button and mark as in cluster mode
@@ -1567,7 +1567,7 @@ export class ToolbarHandlers {
                   if (this.colorSplash) {
                     const clusterScene = this.cluster?.getClusterScene();
                     console.log('📊 ToolbarHandlers: Passing cluster scene:', !!clusterScene);
-                    await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene);
+                    await this.colorSplash.showPropertyTable(elementsByCategory, clusterScene, handleExitCluster);
                   }
                   
                   // Show the exit cluster button and mark as in cluster mode
