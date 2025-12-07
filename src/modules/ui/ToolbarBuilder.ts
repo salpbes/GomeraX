@@ -211,6 +211,10 @@ export function createToolbarHTML(): string {
             <span class="icon"><i class="fas fa-cube"></i></span>
             <span class="label">Model Info</span>
           </button>
+          <button class="submenu-btn" data-action="openSlicer" title="Interactive Slicer Dashboard" id="slicerBtn">
+            <span class="icon"><i class="fas fa-sliders-h"></i></span>
+            <span class="label">Slicer Dashboard</span>
+          </button>
         </div>
       </div>
       

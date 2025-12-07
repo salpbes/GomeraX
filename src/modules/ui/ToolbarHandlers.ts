@@ -13,8 +13,10 @@ import { ColorSplashModule } from '../ColorSplashModule';
 import { PropertiesPanelModule } from '../PropertiesPanelModule';
 import { NotificationHelper } from './NotificationHelper';
 import { ModelDashboard } from './ModelDashboard';
+import { SlicerDashboard } from './SlicerDashboard';
 import { UIManager } from '../UIManager';
 import * as OBC from '@thatopen/components';
+import * as THREE from 'three';
 
 export class ToolbarHandlers {
   private ifcLoader: IFCLoaderModule;
@@ -29,6 +31,7 @@ export class ToolbarHandlers {
   private hideLoadingCallback: () => void;
   private updateLoadingProgressCallback: (progress: number, message: string) => void;
   private modelDashboard: ModelDashboard;
+  private slicerDashboard: SlicerDashboard;
   private components: OBC.Components;
   private uiManager: UIManager;
   
@@ -54,6 +57,7 @@ export class ToolbarHandlers {
     this.updateLoadingProgressCallback = updateLoadingProgressCallback;
     this.measurement = measurement || null;
     this.modelDashboard = new ModelDashboard();
+    this.slicerDashboard = new SlicerDashboard();
     this.components = components!;
     this.propertiesPanel = propertiesPanel || null;
     this.uiManager = uiManager!;
@@ -452,6 +456,607 @@ export class ToolbarHandlers {
         duration: 5000
       });
     }
+  }
+
+  /**
+   * Shows the interactive slicer dashboard for Power BI-style filtering
+   */
+  async handleShowSlicerDashboard(): Promise<void> {
+    try {
+      const models = this.ifcLoader.getLoadedModels();
+      
+      if (models.size === 0) {
+        NotificationHelper.show({
+          title: '📦 No Models Loaded',
+          message: 'Please load an IFC model first to use slicers',
+          type: 'info',
+          duration: 3000
+        });
+        return;
+      }
+
+      await this.showLoadingCallback();
+
+      // Get fragments manager and highlighter
+      const fragmentsManager = this.components.get(OBC.FragmentsManager);
+      
+      // Collect property data from all models
+      const slicerData = await this.collectSlicerData(fragmentsManager);
+      
+      // Get the first model ID for highlighting (most models only have one)
+      let primaryModelId = 'default';
+      for (const [modelId] of fragmentsManager.list) {
+        primaryModelId = modelId;
+        break;
+      }
+      
+      // Show the slicer dashboard with model ID for highlighting
+      this.slicerDashboard.show(slicerData, this.components, primaryModelId);
+      
+      console.log('🎛️ Slicer dashboard opened');
+    } catch (error) {
+      console.error('❌ Error showing slicer dashboard:', error);
+      NotificationHelper.show({
+        title: '❌ Error',
+        message: `Failed to load slicer dashboard: ${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    } finally {
+      this.hideLoadingCallback();
+    }
+  }
+
+  /**
+   * Collects data from loaded models for the slicer dashboard
+   * Now supports multiple models with unique element tracking
+   */
+  private async collectSlicerData(fragmentsManager: OBC.FragmentsManager): Promise<{
+    categories: Map<string, Set<string>>; // Changed to Set<string> for "modelId:expressID" composite keys
+    properties: Map<string, Map<string, Set<string>>>;
+    numericProperties: Map<string, { min: number; max: number; values: Map<number, Set<string>> }>;
+    modelElementMap: Map<string, { modelId: string, expressID: number }>; // Lookup table
+  }> {
+    const categories = new Map<string, Set<string>>();
+    const properties = new Map<string, Map<string, Set<string>>>();
+    const numericProperties = new Map<string, { min: number; max: number; values: Map<number, Set<string>> }>();
+    const modelElementMap = new Map<string, { modelId: string, expressID: number }>();
+    
+    // Helper to create composite key
+    const makeKey = (modelId: string, expressID: number): string => `${modelId}:${expressID}`;
+    
+    // Geometry categories filter - only include actual 3D elements
+    const geometryPattern = /^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|LIGHT|FIXTURE|EQUIPMENT|FURNISH|MEMBER|PILE|BUILDING.*ELEMENT|OPENING|SPACE|SITE|PROXY|ANNOTATION|GRID|REINFORC)/i;
+    
+    // Use fragmentsManager.list to iterate over models
+    for (const [modelId, model] of fragmentsManager.list) {
+      console.log(`📊 Processing model for slicers: ${modelId}`);
+      
+      try {
+        // Get all categories in the model
+        const modelCategories = await (model as any).getCategories();
+        console.log(`  Found ${modelCategories.length} total categories`);
+        
+        // Filter to only geometry categories
+        const geometryCategories = modelCategories.filter((cat: string) => geometryPattern.test(cat));
+        console.log(`  Filtered to ${geometryCategories.length} geometry categories`);
+        
+        // Track element count per category for synthetic properties
+        const categoryElementCounts: { [category: string]: number[] } = {};
+        
+        // Collect IDs for space containment check
+        const spaceIds: number[] = [];
+        const elementIdsForContainment: number[] = [];
+
+        for (const category of geometryCategories) {
+          // Get items for this category
+          const categoryRegex = new RegExp(`^${category}$`);
+          const items = await (model as any).getItemsOfCategories([categoryRegex]);
+          const categoryKey = Object.keys(items).find((key: string) => key.includes(category));
+          
+          if (!categoryKey || !items[categoryKey] || items[categoryKey].length === 0) {
+            continue;
+          }
+          
+          const itemIds: number[] = items[categoryKey];
+          
+          // Collect IDs for containment check
+          if (category === 'IFCSPACE') {
+            spaceIds.push(...itemIds);
+          } else {
+            elementIdsForContainment.push(...itemIds);
+          }
+
+          // Add to categories map with a cleaner display name
+          const displayName = category.replace('IFC', '');
+          if (!categories.has(displayName)) {
+            categories.set(displayName, new Set());
+          }
+          for (const id of itemIds) {
+            const key = makeKey(modelId, id);
+            categories.get(displayName)!.add(key);
+            modelElementMap.set(key, { modelId, expressID: id });
+          }
+          
+          // Store for generating synthetic properties
+          categoryElementCounts[displayName] = itemIds;
+          
+          // Try to get actual properties from a sample of elements
+          // Increased sample size to improve chances of finding properties
+          const sampleIds = itemIds.slice(0, Math.min(50, itemIds.length));
+          
+          for (const id of sampleIds) {
+            const key = makeKey(modelId, id);
+            try {
+              // Try getting properties directly from model
+              const allProps = await (model as any).getProperties(id);
+              
+              if (allProps) {
+                // Log properties for the first element of the first category to debug
+                if (id === sampleIds[0] && categories.size === 1) {
+                  console.log(`🔍 Sample properties for element ${id}:`, Object.keys(allProps));
+                }
+
+                // Extract Name if available
+                if (allProps.Name?.value) {
+                  const propName = 'Name';
+                  const value = String(allProps.Name.value);
+                  if (!properties.has(propName)) {
+                    properties.set(propName, new Map());
+                  }
+                  const propMap = properties.get(propName)!;
+                  if (!propMap.has(value)) {
+                    propMap.set(value, new Set());
+                  }
+                  propMap.get(value)!.add(key);
+                }
+                
+                // Extract ObjectType if available
+                if (allProps.ObjectType?.value) {
+                  const propName = 'ObjectType';
+                  const value = String(allProps.ObjectType.value);
+                  if (!properties.has(propName)) {
+                    properties.set(propName, new Map());
+                  }
+                  const propMap = properties.get(propName)!;
+                  if (!propMap.has(value)) {
+                    propMap.set(value, new Set());
+                  }
+                  propMap.get(value)!.add(key);
+                }
+                
+                // Extract Description if available
+                if (allProps.Description?.value) {
+                  const propName = 'Description';
+                  const value = String(allProps.Description.value);
+                  if (!properties.has(propName)) {
+                    properties.set(propName, new Map());
+                  }
+                  const propMap = properties.get(propName)!;
+                  if (!propMap.has(value)) {
+                    propMap.set(value, new Set());
+                  }
+                  propMap.get(value)!.add(key);
+                }
+                
+                // Extract PredefinedType if available
+                if (allProps.PredefinedType?.value) {
+                  const propName = 'PredefinedType';
+                  const value = String(allProps.PredefinedType.value);
+                  if (!properties.has(propName)) {
+                    properties.set(propName, new Map());
+                  }
+                  const propMap = properties.get(propName)!;
+                  if (!propMap.has(value)) {
+                    propMap.set(value, new Set());
+                  }
+                  propMap.get(value)!.add(key);
+                }
+                
+                // Extract Material if available (via HasAssociations)
+                // This is complex as it requires traversing relationships, skipping for now to keep it fast
+              }
+            } catch (err) {
+              // Skip elements that can't be processed
+              continue;
+            }
+          }
+        }
+        
+        // Get IFC Building Storey information from spatial structure
+        try {
+          const spatialStructure = await (model as any).getSpatialStructure();
+          if (spatialStructure) {
+            console.log('📊 Spatial structure found, collecting storeys...');
+            // Collect storey-to-element mappings
+            const storeyElementMap = await this.collectStoreyElements(model, spatialStructure);
+            console.log(`📊 Collected storeys:`, Array.from(storeyElementMap.keys()));
+            
+            if (storeyElementMap.size > 0) {
+              if (!properties.has('Building Level')) {
+                properties.set('Building Level', new Map());
+              }
+              const levelMap = properties.get('Building Level')!;
+              
+              for (const [storeyName, elementIds] of storeyElementMap) {
+                // Prefix storey name with model name if multiple models
+                const storeyKey = fragmentsManager.list.size > 1 ? `${modelId} - ${storeyName}` : storeyName;
+                if (!levelMap.has(storeyKey)) {
+                  levelMap.set(storeyKey, new Set());
+                }
+                for (const id of elementIds) {
+                  const key = makeKey(modelId, id);
+                  levelMap.get(storeyKey)!.add(key);
+                  modelElementMap.set(key, { modelId, expressID: id });
+                }
+              }
+              
+              console.log(`📊 Collected ${storeyElementMap.size} building storeys with elements`);
+            } else {
+              console.warn('⚠️ No elements found in spatial structure storeys');
+            }
+
+            // Collect space-to-element mappings
+            let spaceElementMap = await this.collectSpaceElements(model, spatialStructure);
+            
+            // If tree traversal failed to find elements in spaces, try geometric containment
+            if (spaceElementMap.size === 0 && spaceIds.length > 0 && elementIdsForContainment.length > 0) {
+              console.log('⚠️ No elements found in spaces via tree, trying geometric containment...');
+              spaceElementMap = await this.computeSpaceContainment(model, spaceIds, elementIdsForContainment);
+            }
+
+            console.log(`📊 Collected spaces:`, Array.from(spaceElementMap.keys()));
+            
+            if (spaceElementMap.size > 0) {
+              if (!properties.has('Space')) {
+                properties.set('Space', new Map());
+              }
+              const spaceMap = properties.get('Space')!;
+              
+              for (const [spaceName, elementIds] of spaceElementMap) {
+                // Prefix space name with model name if multiple models
+                const spaceKey = fragmentsManager.list.size > 1 ? `${modelId} - ${spaceName}` : spaceName;
+                if (!spaceMap.has(spaceKey)) {
+                  spaceMap.set(spaceKey, new Set());
+                }
+                for (const id of elementIds) {
+                  const key = makeKey(modelId, id);
+                  spaceMap.get(spaceKey)!.add(key);
+                  modelElementMap.set(key, { modelId, expressID: id });
+                }
+              }
+              
+              console.log(`📊 Collected ${spaceElementMap.size} spaces with elements`);
+            }
+          } else {
+            console.warn('⚠️ No spatial structure returned from model');
+          }
+        } catch (err) {
+          console.warn(`⚠️ Could not get spatial structure for model ${modelId}:`, err);
+        }
+        
+      } catch (err) {
+        console.warn(`⚠️ Error processing model ${modelId}:`, err);
+      }
+    }
+    
+    console.log(`📊 Collected ${categories.size} categories, ${properties.size} property types`);
+    console.log(`📊 Properties found:`, Array.from(properties.keys()));
+    console.log(`📊 Numeric properties found:`, Array.from(numericProperties.keys()));
+    console.log(`📊 Total unique elements across all models: ${modelElementMap.size}`);
+    return { categories, properties, numericProperties, modelElementMap };
+  }
+
+  /**
+   * Recursively collects elements contained in each building storey from spatial structure
+   */
+  private async collectStoreyElements(model: any, node: any, currentStorey?: string): Promise<Map<string, number[]>> {
+    const result = new Map<string, number[]>();
+    
+    if (!node) return result;
+    
+    const category = node.category || node._category?.value || '';
+    const localId = node.localId || node._localId?.value;
+    
+    // Case A: Building Storey Wrapper (Category Group for Storeys - no localId)
+    if (category === 'IFCBUILDINGSTOREY' && !localId && node.children) {
+      for (const child of node.children) {
+        // Each child is a Storey. Resolve its name.
+        const childId = child.localId || child._localId?.value;
+        let childStoreyName = child.name || child.Name?.value;
+        
+        if (childId && !childStoreyName) {
+          try {
+            const [itemData] = await model.getItemsData([childId], {
+              attributesDefault: false,
+              attributes: ['Name', 'LongName'],
+            });
+            childStoreyName = itemData?.Name?.value || itemData?.LongName?.value;
+          } catch {}
+        }
+        
+        const storeyName = childStoreyName || `Storey ${childId}`;
+        
+        // Recurse with the resolved storey name
+        const childResult = await this.collectStoreyElements(model, child, storeyName);
+        for (const [s, ids] of childResult) {
+          if (!result.has(s)) result.set(s, []);
+          result.get(s)!.push(...ids);
+        }
+      }
+      return result; // Done for this branch (wrapper)
+    }
+    
+    // Case B: Actual Building Storey Node (encountered directly or via recursion)
+    if (category === 'IFCBUILDINGSTOREY' && localId) {
+      // Resolve name if not already passed (or override it)
+      let storeyName = node.name || node.Name?.value;
+      if (!storeyName) {
+        try {
+          const [itemData] = await model.getItemsData([localId], {
+            attributesDefault: false,
+            attributes: ['Name', 'LongName'],
+          });
+          storeyName = itemData?.Name?.value || itemData?.LongName?.value;
+        } catch {}
+      }
+      currentStorey = storeyName || `Storey ${localId}`;
+    }
+    
+    const geometryPattern = /^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|LIGHT|FIXTURE|EQUIPMENT|FURNISH|MEMBER|PILE|OPENING|SPACE|PROXY|REINFORC)/i;
+
+    // Case C: We have a current storey, look for elements
+    if (currentStorey) {
+      // 1. Is this node itself an element?
+      if (localId && geometryPattern.test(category)) {
+        if (!result.has(currentStorey)) {
+          result.set(currentStorey, []);
+        }
+        result.get(currentStorey)!.push(localId);
+      }
+      
+      // 2. Is this a Category Group? (e.g. "Walls")
+      // The children might be elements that don't have the category property set
+      if (geometryPattern.test(category) && node.children && Array.isArray(node.children)) {
+        for (const child of node.children) {
+          const childCategory = child.category || child._category?.value;
+          const childId = child.localId || child._localId?.value;
+          
+          // If child has ID but no category, assume it belongs to this group
+          if (childId && !childCategory) {
+            if (!result.has(currentStorey)) {
+              result.set(currentStorey, []);
+            }
+            result.get(currentStorey)!.push(childId);
+          }
+        }
+      }
+    }
+    
+    // Process children recursively
+    if (node.children && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const childResult = await this.collectStoreyElements(model, child, currentStorey);
+        for (const [storey, ids] of childResult) {
+          if (!result.has(storey)) {
+            result.set(storey, []);
+          }
+          result.get(storey)!.push(...ids);
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Computes space containment using geometric bounding boxes
+   */
+  private async computeSpaceContainment(model: any, spaceIds: number[], elementIds: number[]): Promise<Map<string, number[]>> {
+    const result = new Map<string, number[]>();
+    
+    console.log(`📐 Computing containment for ${spaceIds.length} spaces and ${elementIds.length} elements`);
+    
+    // Helper to get center of an element using OBC model API
+    const getCenter = async (id: number): Promise<THREE.Vector3 | null> => {
+      try {
+        // Use OBC's getMergedBox method
+        if (typeof model.getMergedBox === 'function') {
+          const bbox = await model.getMergedBox([id]);
+          if (bbox && !bbox.isEmpty()) {
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            return center;
+          }
+        }
+        
+        // Fallback to getBoxes
+        if (typeof model.getBoxes === 'function') {
+          const boxes = await model.getBoxes([id]);
+          if (boxes && boxes.length > 0 && boxes[0] && !boxes[0].isEmpty()) {
+            const center = new THREE.Vector3();
+            boxes[0].getCenter(center);
+            return center;
+          }
+        }
+      } catch (e) {}
+      return null;
+    };
+
+    // Helper to get bbox of a space using OBC model API
+    const getSpaceBox = async (id: number): Promise<THREE.Box3 | null> => {
+      try {
+        // Use OBC's getMergedBox method
+        if (typeof model.getMergedBox === 'function') {
+          const bbox = await model.getMergedBox([id]);
+          if (bbox && !bbox.isEmpty()) {
+            return bbox;
+          }
+        }
+        
+        // Fallback to getBoxes
+        if (typeof model.getBoxes === 'function') {
+          const boxes = await model.getBoxes([id]);
+          if (boxes && boxes.length > 0 && boxes[0] && !boxes[0].isEmpty()) {
+            return boxes[0];
+          }
+        }
+        
+        if (id === spaceIds[0]) {
+          console.warn(`⚠️ Space ${id} has no geometry via getMergedBox or getBoxes`);
+        }
+      } catch (e) {
+        if (id === spaceIds[0]) {
+          console.error(`Error getting space box:`, e);
+        }
+      }
+      return null;
+    };
+
+    // Pre-calculate space boxes
+    const spaces: { id: number, name: string, box: THREE.Box3 }[] = [];
+    
+    for (const spaceId of spaceIds) {
+      const box = await getSpaceBox(spaceId);
+      if (box) {
+        // Get space name
+        let spaceName = `Space ${spaceId}`;
+        try {
+          const [itemData] = await model.getItemsData([spaceId], {
+            attributesDefault: false,
+            attributes: ['Name', 'LongName'],
+          });
+          spaceName = itemData?.Name?.value || itemData?.LongName?.value || spaceName;
+        } catch {}
+        
+        spaces.push({ id: spaceId, name: spaceName, box });
+      }
+    }
+    
+    console.log(`📐 Found geometry for ${spaces.length} spaces`);
+
+    // Debug: Log first space box info
+    if (spaces.length > 0) {
+      const firstSpace = spaces[0];
+      const size = new THREE.Vector3();
+      firstSpace.box.getSize(size);
+      console.log(`📐 Sample space "${firstSpace.name}" box:`, {
+        min: firstSpace.box.min.toArray(),
+        max: firstSpace.box.max.toArray(),
+        size: size.toArray()
+      });
+    }
+
+    // If no spaces have geometry, bail early
+    if (spaces.length === 0) {
+      console.warn('⚠️ No spaces have geometry. Cannot compute containment.');
+      return result;
+    }
+
+    // Check elements - process in batches for performance
+    let matchCount = 0;
+    let debuggedFirstElement = false;
+    const batchSize = 100;
+    
+    for (let i = 0; i < elementIds.length; i += batchSize) {
+      const batch = elementIds.slice(i, i + batchSize);
+      
+      for (const elementId of batch) {
+        const center = await getCenter(elementId);
+        if (!center) continue;
+        
+        // Debug first element
+        if (!debuggedFirstElement) {
+          console.log(`📐 Sample element ${elementId} center:`, center.toArray());
+          debuggedFirstElement = true;
+        }
+        
+        for (const space of spaces) {
+          if (space.box.containsPoint(center)) {
+            if (!result.has(space.name)) {
+              result.set(space.name, []);
+            }
+            result.get(space.name)!.push(elementId);
+            matchCount++;
+            break; // Element can only be in one space
+          }
+        }
+      }
+    }
+    
+    console.log(`📐 Geometric containment found ${matchCount} element-space relationships`);
+    return result;
+  }
+
+  /**
+   * Recursively collects elements contained in each space from spatial structure
+   */
+  private async collectSpaceElements(model: any, node: any, currentSpace?: string): Promise<Map<string, number[]>> {
+    const result = new Map<string, number[]>();
+    
+    if (!node) return result;
+    
+    const category = node.category || node._category?.value || '';
+    const localId = node.localId || node._localId?.value;
+    
+    // Case: Space Node
+    if (category === 'IFCSPACE' && localId) {
+      // Resolve name
+      let spaceName = node.name || node.Name?.value;
+      if (!spaceName) {
+        try {
+          const [itemData] = await model.getItemsData([localId], {
+            attributesDefault: false,
+            attributes: ['Name', 'LongName'],
+          });
+          spaceName = itemData?.Name?.value || itemData?.LongName?.value;
+        } catch {}
+      }
+      currentSpace = spaceName || `Space ${localId}`;
+    }
+    
+    const geometryPattern = /^IFC(WALL|BEAM|COLUMN|SLAB|DOOR|WINDOW|ROOF|STAIR|RAMP|RAILING|FOOTING|CURTAINWALL|PLATE|COVERING|DUCT|PIPE|CABLE|FITTING|SEGMENT|FLOWSEGMENT|FLOWTERMINAL|FLOWCONTROLLER|FLOWFITTING|OUTLET|VALVE|PUMP|FAN|DAMPER|SENSOR|LIGHT|FIXTURE|EQUIPMENT|FURNISH|MEMBER|PILE|OPENING|PROXY|REINFORC)/i;
+
+    // If we are inside a space, collect elements
+    if (currentSpace) {
+      // 1. Is this node itself an element?
+      if (localId && geometryPattern.test(category)) {
+        if (!result.has(currentSpace)) {
+          result.set(currentSpace, []);
+        }
+        result.get(currentSpace)!.push(localId);
+      }
+      
+      // 2. Is this a Category Group?
+      if (geometryPattern.test(category) && node.children && Array.isArray(node.children)) {
+        for (const child of node.children) {
+          const childCategory = child.category || child._category?.value;
+          const childId = child.localId || child._localId?.value;
+          
+          if (childId && !childCategory) {
+            if (!result.has(currentSpace)) {
+              result.set(currentSpace, []);
+            }
+            result.get(currentSpace)!.push(childId);
+          }
+        }
+      }
+    }
+    
+    // Process children recursively
+    if (node.children && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const childResult = await this.collectSpaceElements(model, child, currentSpace);
+        for (const [space, ids] of childResult) {
+          if (!result.has(space)) {
+            result.set(space, []);
+          }
+          result.get(space)!.push(...ids);
+        }
+      }
+    }
+    
+    return result;
   }
 
   /**

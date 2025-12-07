@@ -1093,4 +1093,62 @@ export class IFCLoaderModule {
   public getLoadedModelsCount(): number {
     return this.loadedModelsCount;
   }
+
+  /**
+   * Get element properties for a specific element ID
+   * @param model - The fragments model
+   * @param expressID - The express ID of the element
+   * @returns Object with element properties or null if not found
+   */
+  public async getElementProperties(model: any, expressID: number): Promise<Record<string, any> | null> {
+    try {
+      // Get properties using the model's getProperties method
+      const props = await model.getProperties(expressID);
+      if (!props) return null;
+      
+      // Extract useful properties into a flat object
+      const result: Record<string, any> = {
+        expressID: expressID,
+        type: props.type?.value || props.constructor?.name || 'Unknown'
+      };
+      
+      // Common property names to extract
+      const propNames = ['Name', 'Description', 'ObjectType', 'PredefinedType', 'Tag', 'GlobalId'];
+      
+      for (const propName of propNames) {
+        if (props[propName]?.value !== undefined) {
+          result[propName] = props[propName].value;
+        }
+      }
+      
+      // Try to get property sets
+      if (props.IsDefinedBy) {
+        for (const rel of props.IsDefinedBy) {
+          if (rel.value) {
+            const relProps = await model.getProperties(rel.value);
+            if (relProps?.RelatingPropertyDefinition?.value) {
+              const psetId = relProps.RelatingPropertyDefinition.value;
+              const pset = await model.getProperties(psetId);
+              
+              if (pset?.HasProperties) {
+                for (const propRef of pset.HasProperties) {
+                  if (propRef.value) {
+                    const propData = await model.getProperties(propRef.value);
+                    if (propData?.Name?.value && propData?.NominalValue?.value !== undefined) {
+                      result[propData.Name.value] = propData.NominalValue.value;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      // Return basic info if detailed props fail
+      return { expressID, type: 'Unknown' };
+    }
+  }
 }

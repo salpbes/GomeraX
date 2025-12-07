@@ -559,6 +559,9 @@ export class UIManager {
       case 'modelinfo':
         this.toolbarHandlers.handleShowModelInfo();
         break;
+      case 'openSlicer':
+        this.toolbarHandlers.handleShowSlicerDashboard();
+        break;
       case 'clear':
         this.toolbarHandlers.handleClearModels(() => this.updateModelCount());
         break;
