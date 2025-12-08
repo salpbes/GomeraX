@@ -407,16 +407,25 @@ export class SlicerDashboard {
       this.restoreFullScreenLayout();
     }
     
-    // Clear highlighter
+    // Clear all active highlight styles (including transparent and type-colored)
     if (this.highlighter) {
       try {
+        // Clear all active styles we created
+        this.activeHighlightStyles.forEach(styleName => {
+          this.highlighter?.clear(styleName);
+        });
+        this.activeHighlightStyles.clear();
+        
+        // Also clear the generic ones just in case
         this.highlighter.clear('slicer-filter');
+        this.highlighter.clear('slicer-transparent');
       } catch (e) {
         // Ignore
       }
     }
     
     this.slicerStates.clear();
+    console.log('📊 Slicer dashboard closed, all highlights cleared');
   }
 
   /**
@@ -1511,11 +1520,86 @@ export class SlicerDashboard {
           this.highlighter.highlightByID(styleName, modelIdMap, false);
           this.activeHighlightStyles.add(styleName);
         }
+        
+        // Smooth zoom to filtered elements
+        this.zoomToFilteredElements();
       } else if (this.filteredData.length === 0) {
         console.log('⚠️ No elements match the current filter');
       }
     } catch (error) {
       console.error('❌ Error highlighting filtered elements:', error);
+    }
+  }
+
+  /**
+   * Smoothly zoom camera to fit the filtered elements in view
+   */
+  private async zoomToFilteredElements(): Promise<void> {
+    if (!this.components || !this.fragmentsManager || this.filteredData.length === 0) {
+      return;
+    }
+
+    try {
+      // Get the world and camera
+      const worlds = this.components.get(OBC.Worlds);
+      const world = worlds.list.values().next().value;
+      if (!world || !world.camera || !world.camera.controls) {
+        console.warn('⚠️ Camera controls not available for zoom');
+        return;
+      }
+
+      // Compute merged bounding box for all filtered elements
+      const mergedBox = new THREE.Box3();
+      let hasValidBox = false;
+
+      // Group elements by model for efficient bounding box calculation
+      const modelElements: Map<string, number[]> = new Map();
+      this.filteredData.forEach(row => {
+        const modelId = row.modelId || this.primaryModelId;
+        if (!modelElements.has(modelId)) {
+          modelElements.set(modelId, []);
+        }
+        modelElements.get(modelId)!.push(row.expressID);
+      });
+
+      // Get bounding boxes from each model
+      for (const [modelId, expressIds] of modelElements) {
+        const model = this.fragmentsManager?.list.get(modelId);
+        if (model && typeof (model as any).getMergedBox === 'function') {
+          try {
+            const bbox = await (model as any).getMergedBox(expressIds);
+            if (bbox && !bbox.isEmpty()) {
+              mergedBox.union(bbox);
+              hasValidBox = true;
+            }
+          } catch (err) {
+            console.warn(`⚠️ Could not get bounding box for model ${modelId}:`, err);
+          }
+        }
+      }
+
+      if (!hasValidBox) {
+        console.warn('⚠️ No valid bounding boxes found for filtered elements');
+        return;
+      }
+
+      // Create a sphere from the bounding box for fitToSphere
+      const center = new THREE.Vector3();
+      mergedBox.getCenter(center);
+      const size = new THREE.Vector3();
+      mergedBox.getSize(size);
+      const radius = size.length() / 2;
+
+      // Add some padding to the radius
+      const paddedRadius = radius * 1.2;
+      const sphere = new THREE.Sphere(center, paddedRadius);
+
+      // Smoothly fit camera to the sphere (true = enable animation)
+      await world.camera.controls.fitToSphere(sphere, true);
+      
+      console.log(`🔍 Zoomed to ${this.filteredData.length} filtered elements`);
+    } catch (error) {
+      console.error('❌ Error zooming to filtered elements:', error);
     }
   }
 
