@@ -252,22 +252,864 @@ export class ToolbarHandlers {
   }
 
   /**
+   * Helper to save file with user-selected filename and location
+   * Uses File System Access API when available, falls back to download link
+   */
+  private async saveFileWithDialog(
+    blob: Blob,
+    defaultName: string,
+    description: string,
+    extension: string,
+    mimeType: string
+  ): Promise<boolean> {
+    try {
+      // Try using File System Access API (Chrome, Edge)
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: defaultName,
+          types: [{
+            description: description,
+            accept: { [mimeType]: [`.${extension}`] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return true;
+      }
+    } catch (e: any) {
+      // User cancelled or API not supported
+      if (e.name === 'AbortError') {
+        return false; // User cancelled
+      }
+      console.warn('File System Access API not available, using fallback');
+    }
+    
+    // Fallback: prompt for filename and use download link
+    const userFilename = prompt('Enter filename:', defaultName);
+    if (!userFilename) return false; // User cancelled
+    
+    const finalName = userFilename.endsWith(`.${extension}`) 
+      ? userFilename 
+      : `${userFilename}.${extension}`;
+    
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = finalName;
+    link.click();
+    URL.revokeObjectURL(url);
+    return true;
+  }
+
+  /**
    * Handles export functionality - exports loaded models as fragments
    */
   async handleExport(): Promise<void> {
+    // This is now just a fallback - the submenu handles individual exports
+    await this.handleExportFragments();
+  }
+
+  /**
+   * Export as Fragments (.frag) - fast loading format
+   */
+  async handleExportFragments(): Promise<void> {
     try {
       const models = this.ifcLoader.getLoadedModels();
       if (models.size === 0) {
-        alert('No models loaded to export');
+        NotificationHelper.show({
+          title: '📦 No Models',
+          message: 'Please load an IFC model first',
+          type: 'info',
+          duration: 3000
+        });
         return;
       }
 
       console.log('🔄 Exporting fragments...');
-      await this.ifcLoader.exportFragments();
-      console.log('✅ Fragments exported successfully');
+      const blob = await this.ifcLoader.exportFragments();
+      
+      if (!blob) {
+        NotificationHelper.show({
+          title: '⚠️ Export Failed',
+          message: 'No fragments data available',
+          type: 'warning',
+          duration: 3000
+        });
+        return;
+      }
+      
+      const saved = await this.saveFileWithDialog(
+        blob,
+        'model.frag',
+        'Fragments File',
+        'frag',
+        'application/octet-stream'
+      );
+      
+      if (saved) {
+        NotificationHelper.show({
+          title: '✅ Export Complete',
+          message: 'Fragments (.frag) exported successfully',
+          type: 'success',
+          duration: 3000
+        });
+      }
     } catch (error) {
       console.error('❌ Error exporting fragments:', error);
-      alert(`Error exporting: ${error}`);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+
+  /**
+   * Helper to create exportable geometry from IFC mesh (handles instanced/interleaved buffers)
+   */
+  private createExportableGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
+    try {
+      const srcGeom = mesh.geometry;
+      if (!srcGeom) return null;
+
+      // Try to get position attribute - use attributes directly first (Fragment style)
+      let posAttr = srcGeom.attributes?.position as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+      if (!posAttr) {
+        posAttr = srcGeom.getAttribute('position') as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+      }
+      
+      if (!posAttr || posAttr.count === 0) return null;
+      
+      // For InterleavedBufferAttribute, the array is on the data property
+      let posArray: Float32Array;
+      const isInterleaved = !!(posAttr as any).isInterleavedBufferAttribute;
+      
+      if (isInterleaved) {
+        // Interleaved buffer - check if data.array exists
+        const interleavedAttr = posAttr as THREE.InterleavedBufferAttribute;
+        if (!interleavedAttr.data || !interleavedAttr.data.array) {
+          // Try using getX/Y/Z which may work even without direct array access
+          try {
+            posArray = new Float32Array(posAttr.count * 3);
+            for (let i = 0; i < posAttr.count; i++) {
+              posArray[i * 3] = posAttr.getX(i);
+              posArray[i * 3 + 1] = posAttr.getY(i);
+              posArray[i * 3 + 2] = posAttr.getZ(i);
+            }
+          } catch {
+            return null;
+          }
+        } else {
+          posArray = new Float32Array(posAttr.count * 3);
+          for (let i = 0; i < posAttr.count; i++) {
+            posArray[i * 3] = posAttr.getX(i);
+            posArray[i * 3 + 1] = posAttr.getY(i);
+            posArray[i * 3 + 2] = posAttr.getZ(i);
+          }
+        }
+      } else {
+        // Standard BufferAttribute - check for array
+        const bufferAttr = posAttr as THREE.BufferAttribute;
+        const directArray = bufferAttr.array;
+        if (!directArray || directArray.length === 0) {
+          return null;
+        }
+        posArray = new Float32Array(directArray.length);
+        for (let i = 0; i < directArray.length; i++) {
+          posArray[i] = directArray[i] ?? 0;
+        }
+      }
+
+      // Validate position data - check for NaN values and replace with 0
+      let hasValidData = false;
+      for (let i = 0; i < posArray.length; i++) {
+        if (isNaN(posArray[i]) || !isFinite(posArray[i])) {
+          posArray[i] = 0;
+        } else {
+          hasValidData = true;
+        }
+      }
+      
+      // Skip geometry if all values are invalid
+      if (!hasValidData) {
+        return null;
+      }
+
+      // Create new geometry with plain BufferAttributes
+      const newGeom = new THREE.BufferGeometry();
+      newGeom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+      // Copy normal data if exists
+      let normAttr = srcGeom.attributes?.normal as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+      if (!normAttr) {
+        normAttr = srcGeom.getAttribute('normal') as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+      }
+      
+      if (normAttr && normAttr.count > 0) {
+        const normIsInterleaved = !!(normAttr as any).isInterleavedBufferAttribute;
+        let normArray: Float32Array;
+        
+        if (normIsInterleaved) {
+          normArray = new Float32Array(normAttr.count * 3);
+          for (let i = 0; i < normAttr.count; i++) {
+            normArray[i * 3] = normAttr.getX(i);
+            normArray[i * 3 + 1] = normAttr.getY(i);
+            normArray[i * 3 + 2] = normAttr.getZ(i);
+          }
+        } else {
+          const directArray = (normAttr as THREE.BufferAttribute).array;
+          if (directArray && directArray.length > 0) {
+            normArray = new Float32Array(directArray.length);
+            for (let i = 0; i < directArray.length; i++) {
+              normArray[i] = directArray[i] ?? 0;
+            }
+          } else {
+            newGeom.computeVertexNormals();
+            normArray = null!;
+          }
+        }
+        
+        if (normArray) {
+          // Validate normal data
+          for (let i = 0; i < normArray.length; i++) {
+            if (isNaN(normArray[i]) || !isFinite(normArray[i])) {
+              normArray[i] = 0;
+            }
+          }
+          newGeom.setAttribute('normal', new THREE.BufferAttribute(normArray, 3));
+        }
+      } else {
+        newGeom.computeVertexNormals();
+      }
+
+      // Copy index if exists
+      const indexAttr = srcGeom.getIndex();
+      if (indexAttr && indexAttr.count > 0) {
+        const indexArray = (indexAttr as THREE.BufferAttribute).array;
+        if (indexArray && indexArray.length > 0) {
+          const newIndexArray = new Uint32Array(indexArray.length);
+          for (let i = 0; i < indexArray.length; i++) {
+            newIndexArray[i] = indexArray[i] ?? 0;
+          }
+          newGeom.setIndex(new THREE.BufferAttribute(newIndexArray, 1));
+        }
+      }
+
+      // Apply world matrix to vertices
+      newGeom.applyMatrix4(mesh.matrixWorld);
+
+      return newGeom;
+    } catch (e) {
+      console.warn('Failed to create exportable geometry:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Export as glTF (.gltf) - 3D interchange format
+   */
+  async handleExportGLTF(): Promise<void> {
+    try {
+      const models = this.ifcLoader.getLoadedModels();
+      if (models.size === 0) {
+        NotificationHelper.show({
+          title: '📦 No Models',
+          message: 'Please load an IFC model first',
+          type: 'info',
+          duration: 3000
+        });
+        return;
+      }
+
+      NotificationHelper.show({
+        title: '⏳ Exporting GLTF',
+        message: 'Preparing geometry data...',
+        type: 'info',
+        duration: 3000
+      });
+
+      const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
+      const exporter = new GLTFExporter();
+
+      // Create a group with exportable meshes using Fragment's getItemsGeometry API
+      const exportGroup = new THREE.Group();
+      let meshCount = 0;
+      
+      for (const [modelId, model] of models) {
+        console.log(`📦 Processing model for GLTF export: ${modelId}`);
+        
+        try {
+          // Get all item IDs that have geometry
+          const itemIds = await model.getItemsIdsWithGeometry();
+          console.log(`  📊 Found ${itemIds.length} items with geometry`);
+          
+          if (itemIds.length === 0) continue;
+          
+          // Get geometry data for all items (in batches to avoid memory issues)
+          const batchSize = 100;
+          for (let i = 0; i < itemIds.length; i += batchSize) {
+            const batch = itemIds.slice(i, i + batchSize);
+            const geometriesArray = await model.getItemsGeometry(batch);
+            
+            // geometriesArray is array of arrays (one array of MeshData per item)
+            for (const itemGeometries of geometriesArray) {
+              if (!itemGeometries) continue;
+              
+              for (const meshData of itemGeometries) {
+                if (!meshData || !meshData.positions || !meshData.indices) continue;
+                
+                // Create BufferGeometry from MeshData
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+                
+                if (meshData.normals) {
+                  // Normals are Int16Array, need to convert to Float32Array and normalize
+                  const normalArray = new Float32Array(meshData.normals.length);
+                  for (let j = 0; j < meshData.normals.length; j++) {
+                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
+                  }
+                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
+                } else {
+                  geometry.computeVertexNormals();
+                }
+                
+                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+                
+                // Create mesh with standard material
+                const material = new THREE.MeshStandardMaterial({
+                  color: 0xcccccc,
+                  side: THREE.DoubleSide
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // Apply transform from IFC
+                if (meshData.transform) {
+                  mesh.applyMatrix4(meshData.transform);
+                }
+                
+                exportGroup.add(mesh);
+                meshCount++;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
+        }
+      }
+      
+      console.log(`📊 Export stats: ${meshCount} meshes prepared`);
+
+      if (meshCount === 0) {
+        NotificationHelper.show({
+          title: '⚠️ Export Failed',
+          message: 'No geometry data available for export',
+          type: 'warning',
+          duration: 3000
+        });
+        return;
+      }
+
+      console.log(`Exporting ${meshCount} meshes to GLTF...`);
+
+      exporter.parse(
+        exportGroup,
+        async (gltf) => {
+          const output = JSON.stringify(gltf, null, 2);
+          const blob = new Blob([output], { type: 'application/json' });
+          
+          const saved = await this.saveFileWithDialog(
+            blob,
+            'model.gltf',
+            'glTF 3D Model',
+            'gltf',
+            'model/gltf+json'
+          );
+
+          // Clean up cloned objects
+          exportGroup.traverse((obj) => {
+            const m = obj as THREE.Mesh;
+            if (m.geometry) m.geometry.dispose();
+            if (m.material) {
+              if (Array.isArray(m.material)) {
+                m.material.forEach(mat => mat.dispose());
+              } else {
+                m.material.dispose();
+              }
+            }
+          });
+
+          if (saved) {
+            NotificationHelper.show({
+              title: '✅ Export Complete',
+              message: `glTF exported (${meshCount} meshes)`,
+              type: 'success',
+              duration: 3000
+            });
+          }
+        },
+        (error) => {
+          throw error;
+        },
+        { binary: false }
+      );
+    } catch (error) {
+      console.error('❌ Error exporting glTF:', error);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+
+  /**
+   * Export as GLB (.glb) - Binary glTF format
+   */
+  async handleExportGLB(): Promise<void> {
+    try {
+      const models = this.ifcLoader.getLoadedModels();
+      if (models.size === 0) {
+        NotificationHelper.show({
+          title: '📦 No Models',
+          message: 'Please load an IFC model first',
+          type: 'info',
+          duration: 3000
+        });
+        return;
+      }
+
+      NotificationHelper.show({
+        title: '⏳ Exporting GLB',
+        message: 'Preparing geometry data...',
+        type: 'info',
+        duration: 3000
+      });
+
+      const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
+      const exporter = new GLTFExporter();
+
+      // Create a group with exportable meshes only
+      // Create a group with exportable meshes using Fragment's getItemsGeometry API
+      const exportGroup = new THREE.Group();
+      let meshCount = 0;
+      
+      for (const [modelId, model] of models) {
+        console.log(`📦 Processing model for GLB export: ${modelId}`);
+        
+        try {
+          // Get all item IDs that have geometry
+          const itemIds = await model.getItemsIdsWithGeometry();
+          console.log(`  📊 Found ${itemIds.length} items with geometry`);
+          
+          if (itemIds.length === 0) continue;
+          
+          // Get geometry data for all items (in batches to avoid memory issues)
+          const batchSize = 100;
+          for (let i = 0; i < itemIds.length; i += batchSize) {
+            const batch = itemIds.slice(i, i + batchSize);
+            const geometriesArray = await model.getItemsGeometry(batch);
+            
+            // geometriesArray is array of arrays (one array of MeshData per item)
+            for (const itemGeometries of geometriesArray) {
+              if (!itemGeometries) continue;
+              
+              for (const meshData of itemGeometries) {
+                if (!meshData || !meshData.positions || !meshData.indices) continue;
+                
+                // Create BufferGeometry from MeshData
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+                
+                if (meshData.normals) {
+                  // Normals are Int16Array, need to convert to Float32Array and normalize
+                  const normalArray = new Float32Array(meshData.normals.length);
+                  for (let j = 0; j < meshData.normals.length; j++) {
+                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
+                  }
+                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
+                } else {
+                  geometry.computeVertexNormals();
+                }
+                
+                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+                
+                // Create mesh with standard material
+                const material = new THREE.MeshStandardMaterial({
+                  color: 0xcccccc,
+                  side: THREE.DoubleSide
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // Apply transform from IFC
+                if (meshData.transform) {
+                  mesh.applyMatrix4(meshData.transform);
+                }
+                
+                exportGroup.add(mesh);
+                meshCount++;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
+        }
+      }
+      
+      console.log(`📊 Export stats: ${meshCount} meshes prepared`);
+
+      if (meshCount === 0) {
+        NotificationHelper.show({
+          title: '⚠️ Export Failed',
+          message: 'No geometry data available for export',
+          type: 'warning',
+          duration: 3000
+        });
+        return;
+      }
+
+      console.log(`Exporting ${meshCount} meshes to GLB...`);
+
+      exporter.parse(
+        exportGroup,
+        async (gltf) => {
+          const blob = new Blob([gltf as ArrayBuffer], { type: 'application/octet-stream' });
+          
+          const saved = await this.saveFileWithDialog(
+            blob,
+            'model.glb',
+            'GLB 3D Model',
+            'glb',
+            'model/gltf-binary'
+          );
+
+          // Clean up cloned objects
+          exportGroup.traverse((obj) => {
+            const m = obj as THREE.Mesh;
+            if (m.geometry) m.geometry.dispose();
+            if (m.material) {
+              if (Array.isArray(m.material)) {
+                m.material.forEach(mat => mat.dispose());
+              } else {
+                m.material.dispose();
+              }
+            }
+          });
+
+          if (saved) {
+            NotificationHelper.show({
+              title: '✅ Export Complete',
+              message: `GLB exported (${meshCount} meshes)`,
+              type: 'success',
+              duration: 3000
+            });
+          }
+        },
+        (error) => {
+          throw error;
+        },
+        { binary: true }
+      );
+    } catch (error) {
+      console.error('❌ Error exporting GLB:', error);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+
+  /**
+   * Export as USDZ (.usdz) - Universal Scene Description (Apple format)
+   */
+  async handleExportUSDZ(): Promise<void> {
+    try {
+      const models = this.ifcLoader.getLoadedModels();
+      if (models.size === 0) {
+        NotificationHelper.show({
+          title: '📦 No Models',
+          message: 'Please load an IFC model first',
+          type: 'info',
+          duration: 3000
+        });
+        return;
+      }
+
+      NotificationHelper.show({
+        title: '⏳ Exporting USDZ',
+        message: 'Preparing geometry data...',
+        type: 'info',
+        duration: 3000
+      });
+
+      const { USDZExporter } = await import('three/examples/jsm/exporters/USDZExporter.js');
+      const exporter = new USDZExporter();
+
+      // Create a group with exportable meshes using Fragment's getItemsGeometry API
+      const exportGroup = new THREE.Group();
+      let meshCount = 0;
+      
+      for (const [modelId, model] of models) {
+        console.log(`📦 Processing model for USDZ export: ${modelId}`);
+        
+        try {
+          // Get all item IDs that have geometry
+          const itemIds = await model.getItemsIdsWithGeometry();
+          console.log(`  📊 Found ${itemIds.length} items with geometry`);
+          
+          if (itemIds.length === 0) continue;
+          
+          // Get geometry data for all items (in batches to avoid memory issues)
+          const batchSize = 100;
+          for (let i = 0; i < itemIds.length; i += batchSize) {
+            const batch = itemIds.slice(i, i + batchSize);
+            const geometriesArray = await model.getItemsGeometry(batch);
+            
+            // geometriesArray is array of arrays (one array of MeshData per item)
+            for (const itemGeometries of geometriesArray) {
+              if (!itemGeometries) continue;
+              
+              for (const meshData of itemGeometries) {
+                if (!meshData || !meshData.positions || !meshData.indices) continue;
+                
+                // Create BufferGeometry from MeshData
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+                
+                if (meshData.normals) {
+                  // Normals are Int16Array, need to convert to Float32Array and normalize
+                  const normalArray = new Float32Array(meshData.normals.length);
+                  for (let j = 0; j < meshData.normals.length; j++) {
+                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
+                  }
+                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
+                } else {
+                  geometry.computeVertexNormals();
+                }
+                
+                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+                
+                // Create mesh with standard material (USDZ requires PBR materials)
+                const material = new THREE.MeshStandardMaterial({
+                  color: 0xcccccc,
+                  roughness: 0.5,
+                  metalness: 0.0,
+                  side: THREE.DoubleSide
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.name = `mesh_${meshCount}`;
+                
+                // Apply transform from IFC - bake into geometry for USDZ
+                if (meshData.transform) {
+                  // Apply the transform to the geometry vertices directly
+                  geometry.applyMatrix4(meshData.transform);
+                }
+                
+                // Update bounding box after transform
+                geometry.computeBoundingBox();
+                
+                exportGroup.add(mesh);
+                meshCount++;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
+        }
+      }
+
+      console.log(`📊 Export stats: ${meshCount} meshes prepared`);
+
+      if (meshCount === 0) {
+        NotificationHelper.show({
+          title: '⚠️ Export Failed',
+          message: 'No geometry data available for export',
+          type: 'warning',
+          duration: 3000
+        });
+        return;
+      }
+
+      // USDZ exporter requires proper scene hierarchy and matrix updates
+      // USD uses Y-up coordinate system, IFC uses Z-up, so we need to rotate
+      const rotationGroup = new THREE.Group();
+      rotationGroup.rotation.x = Math.PI / 2; // Rotate +90° around X to convert Z-up to Y-up
+      rotationGroup.add(exportGroup);
+      
+      // Update world matrices for all meshes
+      rotationGroup.updateMatrixWorld(true);
+
+      console.log(`Exporting ${meshCount} meshes to USDZ...`);
+
+      const result = await exporter.parseAsync(rotationGroup);
+      
+      // Clean up cloned objects
+      exportGroup.traverse((obj) => {
+        const m = obj as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) {
+          if (Array.isArray(m.material)) {
+            m.material.forEach(mat => mat.dispose());
+          } else {
+            m.material.dispose();
+          }
+        }
+      });
+
+      const blob = new Blob([result], { type: 'application/octet-stream' });
+      
+      const saved = await this.saveFileWithDialog(
+        blob,
+        'model.usdz',
+        'USDZ 3D Model',
+        'usdz',
+        'model/vnd.usdz+zip'
+      );
+
+      if (saved) {
+        NotificationHelper.show({
+          title: '✅ Export Complete',
+          message: `USDZ exported (${meshCount} meshes)`,
+          type: 'success',
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error exporting USDZ:', error);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+
+  /**
+   * Export Screenshot (PNG)
+   */
+  async handleExportScreenshot(): Promise<void> {
+    try {
+      const worlds = this.components.get(OBC.Worlds);
+      const world = worlds.list.values().next().value;
+      if (!world || !world.renderer) {
+        throw new Error('Renderer not available');
+      }
+
+      // Get the canvas and convert to image
+      const canvas = document.querySelector('canvas');
+      if (!canvas) {
+        throw new Error('Canvas not found');
+      }
+
+      // Force a render
+      if (world.renderer.three) {
+        world.renderer.three.render(world.scene.three, world.camera.three);
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      
+      // Convert data URL to Blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      
+      const saved = await this.saveFileWithDialog(
+        blob,
+        `screenshot_${Date.now()}.png`,
+        'PNG Image',
+        'png',
+        'image/png'
+      );
+
+      if (saved) {
+        NotificationHelper.show({
+          title: '✅ Screenshot Saved',
+          message: 'PNG screenshot exported successfully',
+          type: 'success',
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error exporting screenshot:', error);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+
+  /**
+   * Export Properties as JSON
+   */
+  async handleExportJSON(): Promise<void> {
+    try {
+      const models = this.ifcLoader.getLoadedModels();
+      if (models.size === 0) {
+        NotificationHelper.show({
+          title: '📦 No Models',
+          message: 'Please load an IFC model first',
+          type: 'info',
+          duration: 3000
+        });
+        return;
+      }
+
+      const allProperties: { [modelId: string]: any } = {};
+
+      for (const [modelId, model] of models) {
+        try {
+          // Get spatial structure
+          const spatialStructure = await (model as any).getSpatialStructure();
+          
+          // Get categories
+          const categories = await (model as any).getCategories();
+          
+          allProperties[modelId] = {
+            spatialStructure,
+            categories,
+            exportedAt: new Date().toISOString()
+          };
+        } catch (e) {
+          allProperties[modelId] = { error: String(e) };
+        }
+      }
+
+      const jsonString = JSON.stringify(allProperties, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      
+      const saved = await this.saveFileWithDialog(
+        blob,
+        'model_properties.json',
+        'JSON Properties File',
+        'json',
+        'application/json'
+      );
+
+      if (saved) {
+        NotificationHelper.show({
+          title: '✅ Export Complete',
+          message: 'Properties (JSON) exported successfully',
+          type: 'success',
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error exporting JSON:', error);
+      NotificationHelper.show({
+        title: '❌ Export Failed',
+        message: `${error}`,
+        type: 'error',
+        duration: 5000
+      });
     }
   }
 

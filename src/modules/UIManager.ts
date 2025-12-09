@@ -291,7 +291,7 @@ export class UIManager {
         const action = (e.currentTarget as HTMLElement).dataset.action;
         
         // Handle expandable groups (show submenu without triggering action)
-        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash') {
+        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleExport') {
           const group = (e.currentTarget as HTMLElement).closest('.toolbar-group');
           if (group) {
             this.toggleSubmenu(group);
@@ -465,6 +465,24 @@ export class UIManager {
         break;
       case 'export':
         this.toolbarHandlers.handleExport();
+        break;
+      case 'exportFragments':
+        this.toolbarHandlers.handleExportFragments();
+        break;
+      case 'exportGLTF':
+        this.toolbarHandlers.handleExportGLTF();
+        break;
+      case 'exportGLB':
+        this.toolbarHandlers.handleExportGLB();
+        break;
+      case 'exportUSDZ':
+        this.toolbarHandlers.handleExportUSDZ();
+        break;
+      case 'exportScreenshot':
+        this.toolbarHandlers.handleExportScreenshot();
+        break;
+      case 'exportJSON':
+        this.toolbarHandlers.handleExportJSON();
         break;
       case 'center':
         this.toolbarHandlers.handleCenterModels();

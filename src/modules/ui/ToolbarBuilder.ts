@@ -31,9 +31,38 @@ export function createToolbarHTML(): string {
         </div>
       </div>
       
-      <button class="toolbar-btn" data-action="export" title="Export as Fragments">
-        <span class="icon"><i class="fas fa-download"></i></span>
-      </button>
+      <!-- Export Group (expandable) -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleExport" title="Export Options">
+          <span class="icon"><i class="fas fa-download"></i></span>
+        </button>
+        <div class="toolbar-submenu" id="exportSubmenu">
+          <button class="submenu-btn" data-action="exportFragments" title="Export as Fragments (.frag) - Fast loading format">
+            <span class="icon"><i class="fas fa-puzzle-piece"></i></span>
+            <span class="label">Fragments (.frag)</span>
+          </button>
+          <button class="submenu-btn" data-action="exportGLTF" title="Export as glTF (.gltf) - 3D interchange format">
+            <span class="icon"><i class="fas fa-cube"></i></span>
+            <span class="label">glTF (.gltf)</span>
+          </button>
+          <button class="submenu-btn" data-action="exportGLB" title="Export as GLB (.glb) - Binary glTF format">
+            <span class="icon"><i class="fas fa-box"></i></span>
+            <span class="label">GLB (.glb)</span>
+          </button>
+          <button class="submenu-btn" data-action="exportUSDZ" title="Export as USDZ (.usdz) - Universal Scene Description">
+            <span class="icon"><i class="fas fa-gem"></i></span>
+            <span class="label">USDZ (.usdz)</span>
+          </button>
+          <button class="submenu-btn" data-action="exportScreenshot" title="Export Screenshot (PNG)">
+            <span class="icon"><i class="fas fa-camera"></i></span>
+            <span class="label">Screenshot (PNG)</span>
+          </button>
+          <button class="submenu-btn" data-action="exportJSON" title="Export Properties as JSON">
+            <span class="icon"><i class="fas fa-file-code"></i></span>
+            <span class="label">Properties (JSON)</span>
+          </button>
+        </div>
+      </div>
       
       <!-- View Controls Group (expandable) -->
       <div class="toolbar-group">

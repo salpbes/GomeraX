@@ -801,12 +801,13 @@ export class IFCLoaderModule {
   /**
    * Exports the loaded model as Fragments file
    * This allows saving the converted model for faster loading next time
-   * @param filename - Name for the downloaded file
+   * @param filename - Name for the downloaded file (optional, used for fallback)
+   * @returns The fragments buffer as Blob, or null if no models loaded
    */
-  public async exportFragments(filename: string = 'model.frag'): Promise<void> {
+  public async exportFragments(filename: string = 'model.frag'): Promise<Blob | null> {
     if (!this.fragments || this.fragments.list.size === 0) {
       console.warn('⚠️ No models loaded to export');
-      return;
+      return null;
     }
 
     try {
@@ -816,15 +817,10 @@ export class IFCLoaderModule {
       // Convert model to binary buffer
       const fragsBuffer = await model.getBuffer(false);
       
-      // Create and download the file
-      const file = new File([fragsBuffer], filename);
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(file);
-      link.download = file.name;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      
-      console.log(`✅ Fragments exported: ${filename}`);
+      // Return as Blob for caller to handle saving
+      const blob = new Blob([fragsBuffer], { type: 'application/octet-stream' });
+      console.log(`✅ Fragments buffer ready for export`);
+      return blob;
     } catch (error) {
       console.error('❌ Error exporting Fragments:', error);
       throw error;
