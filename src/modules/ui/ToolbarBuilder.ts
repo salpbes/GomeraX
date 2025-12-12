@@ -296,6 +296,27 @@ export function createToolbarHTML(): string {
           </select>
         </div>
         
+        <!-- WebGPU Experimental Settings -->
+        <div class="settings-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">
+          <h4 style="margin: 0 0 12px 0; font-size: 13px; color: rgba(255,255,255,0.9); display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-microchip" style="color: #69db7c;"></i>
+            Renderer (Experimental)
+          </h4>
+          
+          <label class="checkbox-label">
+            <input type="checkbox" id="webgpuToggle">
+            <span>Enable WebGPU</span>
+          </label>
+          
+          <div id="webgpuStatus" style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
+            <span id="webgpuStatusIcon">⏳</span> <span id="webgpuStatusText">Checking...</span>
+          </div>
+          
+          <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 6px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
+            ⚠️ Disables post-processing (AO, outlines)
+          </div>
+        </div>
+        
         <!-- Section Cut Settings Group -->
         <div class="settings-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">
           <h4 style="margin: 0 0 12px 0; font-size: 13px; color: rgba(255,255,255,0.9); display: flex; align-items: center; gap: 8px;">

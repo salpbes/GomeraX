@@ -450,6 +450,99 @@ export class UIManager {
         console.log(`🚶 Walk speed set to: ${speed.toFixed(1)}`);
       }
     });
+
+    // WebGPU toggle listener
+    this.setupWebGPUToggle();
+  }
+
+  /**
+   * Sets up WebGPU toggle with support detection
+   */
+  private setupWebGPUToggle(): void {
+    const toggle = document.getElementById('webgpuToggle') as HTMLInputElement;
+    const statusIcon = document.getElementById('webgpuStatusIcon');
+    const statusText = document.getElementById('webgpuStatusText');
+    
+    if (!toggle || !statusIcon || !statusText) return;
+    
+    // Check WebGPU support
+    const isSupported = this.viewer?.checkWebGPUSupport() ?? false;
+    
+    if (isSupported) {
+      statusIcon.textContent = '✅';
+      statusText.textContent = 'Available';
+      statusText.style.color = '#4ade80';
+      toggle.disabled = false;
+    } else {
+      statusIcon.textContent = '❌';
+      statusText.textContent = 'Not Supported';
+      statusText.style.color = '#f87171';
+      toggle.disabled = true;
+      toggle.checked = false;
+    }
+    
+    // Store reference to notificationHelper for use in async callback
+    const notificationHelper = this.notificationHelper;
+    const viewer = this.viewer;
+    
+    // Handle toggle change
+    toggle.addEventListener('change', async (e) => {
+      const enabled = (e.target as HTMLInputElement).checked;
+      
+      if (!viewer) return;
+      
+      // Show loading state
+      toggle.disabled = true;
+      statusIcon.textContent = '⏳';
+      statusText.textContent = enabled ? 'Loading...' : 'Switching...';
+      statusText.style.color = '#fbbf24';
+      
+      try {
+        const success = await viewer.toggleWebGPU(enabled);
+        
+        if (success) {
+          if (enabled) {
+            statusIcon.textContent = '🚀';
+            statusText.textContent = 'Active';
+            statusText.style.color = '#4ade80';
+            console.log('🚀 WebGPU renderer enabled');
+            notificationHelper?.showNotification(
+              '🚀 WebGPU Mode Active',
+              'Experimental WebGPU. Some materials may not render correctly.',
+              'info'
+            );
+          } else {
+            statusIcon.textContent = '✅';
+            statusText.textContent = 'Available';
+            statusText.style.color = '#4ade80';
+            console.log('🔄 Switched back to WebGL');
+            notificationHelper?.showNotification(
+              '🔄 WebGL Mode Active',
+              'Switched back to WebGL renderer with full effects.',
+              'success'
+            );
+          }
+        } else {
+          toggle.checked = false;
+          statusIcon.textContent = '❌';
+          statusText.textContent = 'Failed';
+          statusText.style.color = '#f87171';
+          notificationHelper?.showNotification(
+            '❌ WebGPU Failed',
+            'Could not initialize WebGPU. Your browser may not support it.',
+            'error'
+          );
+        }
+      } catch (error) {
+        console.error('WebGPU toggle error:', error);
+        toggle.checked = false;
+        statusIcon.textContent = '❌';
+        statusText.textContent = 'Error';
+        statusText.style.color = '#f87171';
+      }
+      
+      toggle.disabled = false;
+    });
   }
 
   /**

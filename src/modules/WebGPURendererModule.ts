@@ -1,0 +1,1580 @@
+/**
+ * WebGPU Renderer Module (Experimental)
+ * 
+ * This module provides experimental WebGPU rendering support for the IFC Viewer.
+ * WebGPU offers significant performance improvements over WebGL but:
+ * - Requires modern browser support (Chrome 113+, Edge 113+, Firefox Nightly)
+ * - PostProduction effects (AO, outlines) are NOT available in WebGPU mode
+ * - This is experimental and may have visual differences
+ * 
+ * @see https://threejs.org/docs/#api/en/renderers/WebGPURenderer
+ */
+
+import * as THREE from 'three';
+import * as OBC from '@thatopen/components';
+
+export type RendererMode = 'webgl' | 'webgpu';
+
+export interface WebGPUStatus {
+  available: boolean;
+  reason?: string;
+  browserInfo?: string;
+}
+
+/**
+ * WebGPU Renderer Module
+ * Provides experimental WebGPU rendering with fallback to WebGL
+ */
+export class WebGPURendererModule {
+  private container: HTMLElement | null = null;
+  private webgpuRenderer: any = null;
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.Camera | null = null;
+  private animationFrameId: number | null = null;
+  private isActive: boolean = false;
+  private world: OBC.World | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private proxyScene: THREE.Scene | null = null;
+  private components: OBC.Components | null = null;
+  private proxySceneKind: 'in-place' | 'fragments' = 'in-place';
+
+  // WebGPU mode swaps materials in-place to avoid cloning custom fragment geometries.
+  // These maps allow restoring the original scene when WebGPU is disabled.
+  private materialBackup = new Map<string, THREE.Material | THREE.Material[]>();
+  private visibilityBackup = new Map<string, boolean>();
+  private geometryBackup = new Map<string, THREE.BufferGeometry>();
+  private createdGeometries: THREE.BufferGeometry[] = [];
+  private onBeforeRenderBackup = new Map<string, THREE.Object3D['onBeforeRender']>();
+  private onAfterRenderBackup = new Map<string, THREE.Object3D['onAfterRender']>();
+
+  constructor() {}
+
+  /**
+   * Check if WebGPU is available in the current browser
+   */
+  public static async checkWebGPUSupport(): Promise<WebGPUStatus> {
+    // Get browser info safely
+    const getBrowserInfo = (): string => {
+      try {
+        return (navigator as Navigator).userAgent || 'Unknown';
+      } catch {
+        return 'Unknown';
+      }
+    };
+
+    // Check if running in browser
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return {
+        available: false,
+        reason: 'Not running in a browser environment.',
+        browserInfo: 'Unknown'
+      };
+    }
+
+    // Check if navigator.gpu exists
+    const nav = navigator as any;
+    if (!nav.gpu) {
+      return {
+        available: false,
+        reason: 'WebGPU is not supported in this browser. Try Chrome 113+, Edge 113+, or Firefox Nightly.',
+        browserInfo: getBrowserInfo()
+      };
+    }
+
+    try {
+      // Try to request an adapter
+      const adapter = await nav.gpu.requestAdapter();
+      if (!adapter) {
+        return {
+          available: false,
+          reason: 'No WebGPU adapter found. Your GPU may not support WebGPU.',
+          browserInfo: getBrowserInfo()
+        };
+      }
+
+      // Try to request a device
+      const device = await adapter.requestDevice();
+      if (!device) {
+        return {
+          available: false,
+          reason: 'Could not acquire WebGPU device.',
+          browserInfo: getBrowserInfo()
+        };
+      }
+
+      // Get adapter info for logging (if available)
+      let gpuInfo = 'WebGPU Ready';
+      try {
+        if (adapter.requestAdapterInfo) {
+          const info = await adapter.requestAdapterInfo();
+          gpuInfo = `${info.vendor || 'Unknown'} - ${info.architecture || 'Unknown'}`;
+        }
+      } catch {
+        // Adapter info not available in all browsers
+      }
+      
+      return {
+        available: true,
+        browserInfo: gpuInfo,
+      };
+    } catch (error) {
+      return {
+        available: false,
+        reason: `WebGPU initialization failed: ${error}`,
+        browserInfo: getBrowserInfo()
+      };
+    }
+  }
+
+  // Store original console methods for restoration
+  private originalConsoleWarn: typeof console.warn | null = null;
+
+  /**
+   * Suppress known WebGPU material compatibility warnings
+   */
+  private suppressMaterialWarnings(): void {
+    if (this.originalConsoleWarn) return; // Already suppressed
+    
+    this.originalConsoleWarn = console.warn;
+    const suppressedPatterns = ['NodeMaterial:', 'is not compatible', 'Material "ShaderMaterial"'];
+    
+    console.warn = (...args: any[]) => {
+      const message = args.join(' ');
+      if (suppressedPatterns.some(p => message.includes(p))) {
+        return; // Suppress expected WebGPU warnings
+      }
+      this.originalConsoleWarn?.apply(console, args);
+    };
+  }
+
+  /**
+   * Restore console.warn to original
+   */
+  private restoreConsoleWarn(): void {
+    if (this.originalConsoleWarn) {
+      console.warn = this.originalConsoleWarn;
+      this.originalConsoleWarn = null;
+    }
+  }
+
+  /**
+   * Create a proxy scene for WebGPU rendering
+   * This ensures only compatible objects are rendered
+   */
+  private async createProxyScene(originalScene: THREE.Scene): Promise<void> {
+    // Preferred path: rebuild IFC geometry from OBC typed arrays (WebGPU-safe)
+    // instead of touching fragment meshes whose attributes may not expose TypedArray storage.
+    const built = await this.tryBuildProxySceneFromFragments(originalScene);
+    if (built) return;
+
+    console.log('🔄 Preparing WebGPU scene (in-place material swap)...');
+
+    // IMPORTANT: do not clone geometries (Fragments can use custom/interleaved layouts).
+    // We keep the original scene/camera and only swap materials to WebGPU-safe ones.
+    this.proxyScene = originalScene;
+    this.proxySceneKind = 'in-place';
+
+    // Clear any previous backups (in case enable() is called twice without disable())
+    this.materialBackup.clear();
+    this.visibilityBackup.clear();
+    this.geometryBackup.clear();
+    this.createdGeometries = [];
+    this.onBeforeRenderBackup.clear();
+    this.onAfterRenderBackup.clear();
+
+    const isTypedArrayView = (value: any): boolean => {
+      return !!value && ArrayBuffer.isView(value) && !(value instanceof DataView);
+    };
+
+    const toFloat32Array = (value: any): Float32Array | null => {
+      if (value === undefined || value === null) return null;
+      if (isTypedArrayView(value)) return new Float32Array(value as any);
+      if (value instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer)) {
+        return new Float32Array(value as any);
+      }
+      if (Array.isArray(value)) return new Float32Array(value);
+      return null;
+    };
+
+    const toUint32Array = (value: any): Uint32Array | null => {
+      if (value === undefined || value === null) return null;
+      if (isTypedArrayView(value)) return new Uint32Array(value as any);
+      if (value instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer)) {
+        return new Uint32Array(value as any);
+      }
+      if (Array.isArray(value)) return new Uint32Array(value);
+      return null;
+    };
+
+    const copyAttributeAsFloat32 = (attr: any): THREE.BufferAttribute | null => {
+      if (!attr) return null;
+
+      const itemSize: number = attr.itemSize;
+      const count: number = attr.count;
+      if (!itemSize || !count) return null;
+
+      // InterleavedBufferAttribute (or interleaved-like): de-interleave from underlying data array.
+      // This avoids calling BufferAttribute.getComponent(), which can throw if `.array` is missing.
+      if ((attr.isInterleavedBufferAttribute || attr.data?.stride !== undefined) && attr.data) {
+        const raw = attr.data.array;
+        const src = toFloat32Array(raw);
+        const stride: number = attr.data.stride;
+        const offset: number = attr.offset;
+
+        if (src === null) return null;
+        if (!stride && stride !== 0) return null;
+        if (offset === undefined || offset === null) return null;
+
+        const out = new Float32Array(count * itemSize);
+        for (let i = 0; i < count; i++) {
+          const base = i * stride + offset;
+          for (let k = 0; k < itemSize; k++) {
+            out[i * itemSize + k] = (src as any)[base + k] ?? 0;
+          }
+        }
+        return new THREE.BufferAttribute(out, itemSize, !!attr.normalized);
+      }
+
+      // Fast path: attribute has array-like storage
+      {
+        const direct = toFloat32Array(attr.array);
+        if (direct) {
+          return new THREE.BufferAttribute(direct, itemSize, !!attr.normalized);
+        }
+      }
+
+      // If array is missing, don't attempt getComponent() (it can crash inside Three.js)
+      if (attr.array === undefined || attr.array === null) {
+        return null;
+      }
+
+      // Fallback: sample via getComponent (works for some custom attrs)
+      if (typeof attr.getComponent === 'function') {
+        try {
+          const out = new Float32Array(count * itemSize);
+          for (let i = 0; i < count; i++) {
+            for (let k = 0; k < itemSize; k++) {
+              out[i * itemSize + k] = attr.getComponent(i, k);
+            }
+          }
+          return new THREE.BufferAttribute(out, itemSize, !!attr.normalized);
+        } catch {
+          return null;
+        }
+      }
+
+      return null;
+    };
+
+    const sanitizeGeometryForWebGPU = (src: THREE.BufferGeometry): THREE.BufferGeometry | null => {
+      const position = copyAttributeAsFloat32(src.getAttribute('position'));
+      if (!position || position.count === 0) return null;
+
+      const next = new THREE.BufferGeometry();
+      next.setAttribute('position', position);
+
+      const normal = copyAttributeAsFloat32(src.getAttribute('normal'));
+      if (normal && normal.count === position.count) {
+        next.setAttribute('normal', normal);
+      }
+
+      const uv = copyAttributeAsFloat32(src.getAttribute('uv'));
+      if (uv && uv.count === position.count) {
+        next.setAttribute('uv', uv);
+      }
+
+      // Copy index if valid and typed
+      const idx: any = src.getIndex();
+      if (idx && idx.count > 0) {
+        const idxArray = toUint32Array(idx.array);
+        if (idxArray) {
+          next.setIndex(new THREE.BufferAttribute(idxArray, 1));
+        } else if (typeof idx.getX === 'function') {
+          try {
+            const out = new Uint32Array(idx.count);
+            for (let i = 0; i < idx.count; i++) out[i] = idx.getX(i);
+            next.setIndex(new THREE.BufferAttribute(out, 1));
+          } catch {
+            // Skip index if it's not readable; WebGPU can still draw non-indexed.
+          }
+        }
+      }
+
+      next.computeBoundingBox();
+      next.computeBoundingSphere();
+      return next;
+    };
+
+    const createCompatibleMaterial = (original: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] => {
+      const base = Array.isArray(original) ? original[0] : original;
+
+      // Extract a best-effort color
+      let color: any = 0x888888;
+      if (base && (base as any).color) color = (base as any).color;
+      else if (base && (base as any).uniforms?.diffuse?.value) color = (base as any).uniforms.diffuse.value;
+
+      return new THREE.MeshBasicMaterial({
+        color,
+        side: THREE.DoubleSide,
+        transparent: !!(base && (base as any).transparent),
+        opacity: (base && typeof (base as any).opacity === 'number') ? (base as any).opacity : 1.0,
+        wireframe: !!(base && (base as any).wireframe)
+      });
+    };
+
+    let swapped = 0;
+    let hiddenUnsupported = 0;
+
+    // Ensure matrices are up-to-date
+    originalScene.updateMatrixWorld(true);
+
+    originalScene.traverse((obj) => {
+      // Some OBC/scene objects attach renderer-specific callbacks (LOD, postprocessing hooks, etc.)
+      // that assume WebGL internals and can crash WebGPURenderer. Disable them in WebGPU mode.
+      if (typeof (obj as any).onBeforeRender === 'function') {
+        if (!this.onBeforeRenderBackup.has(obj.uuid)) {
+          this.onBeforeRenderBackup.set(obj.uuid, (obj as any).onBeforeRender);
+        }
+        (obj as any).onBeforeRender = () => {};
+      }
+      if (typeof (obj as any).onAfterRender === 'function') {
+        if (!this.onAfterRenderBackup.has(obj.uuid)) {
+          this.onAfterRenderBackup.set(obj.uuid, (obj as any).onAfterRender);
+        }
+        (obj as any).onAfterRender = () => {};
+      }
+
+      // Hide unsupported primitive types for now (Lines/Points can be handled later)
+      if (obj instanceof THREE.Line || obj instanceof THREE.Points || obj instanceof THREE.Sprite) {
+        if (!this.visibilityBackup.has(obj.uuid)) {
+          this.visibilityBackup.set(obj.uuid, obj.visible);
+        }
+        obj.visible = false;
+        hiddenUnsupported++;
+        return;
+      }
+
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+        const mesh = obj as THREE.Mesh;
+
+        // Sanitize geometry attributes: WebGPU node builder requires typed arrays.
+        // Some fragment geometries expose attributes without a proper `.array`.
+        if (mesh.geometry && mesh.geometry instanceof THREE.BufferGeometry) {
+          try {
+            if (!this.geometryBackup.has(mesh.uuid)) {
+              this.geometryBackup.set(mesh.uuid, mesh.geometry);
+            }
+
+            const sanitized = sanitizeGeometryForWebGPU(mesh.geometry);
+            if (!sanitized) {
+              if (!this.visibilityBackup.has(mesh.uuid)) {
+                this.visibilityBackup.set(mesh.uuid, mesh.visible);
+              }
+              mesh.visible = false;
+              hiddenUnsupported++;
+              const srcPos = (mesh.geometry as any).getAttribute?.('position');
+              console.warn(
+                '⚠️ Hiding mesh due to incompatible geometry:',
+                mesh.name || mesh.uuid,
+                {
+                  geometryType: (mesh.geometry as any)?.type,
+                  positionAttrType: srcPos?.constructor?.name,
+                  hasArray: srcPos ? srcPos.array !== undefined && srcPos.array !== null : false,
+                  isInterleaved: !!srcPos?.isInterleavedBufferAttribute,
+                  hasDataArray: !!srcPos?.data?.array,
+                }
+              );
+              return;
+            }
+
+            mesh.geometry = sanitized;
+            this.createdGeometries.push(sanitized);
+          } catch (e) {
+            if (!this.visibilityBackup.has(mesh.uuid)) {
+              this.visibilityBackup.set(mesh.uuid, mesh.visible);
+            }
+            mesh.visible = false;
+            hiddenUnsupported++;
+            console.warn('⚠️ Geometry sanitization failed, hiding mesh:', mesh.name || mesh.uuid, e);
+            return;
+          }
+        }
+
+        if (!this.materialBackup.has(mesh.uuid)) {
+          this.materialBackup.set(mesh.uuid, mesh.material);
+        }
+        try {
+          mesh.material = createCompatibleMaterial(mesh.material as any) as any;
+          swapped++;
+        } catch (e) {
+          // If material swap fails, hide the mesh to avoid crashing WebGPU
+          if (!this.visibilityBackup.has(mesh.uuid)) {
+            this.visibilityBackup.set(mesh.uuid, mesh.visible);
+          }
+          mesh.visible = false;
+          hiddenUnsupported++;
+          console.warn('⚠️ Failed to swap material for mesh, hiding it:', mesh.name || mesh.uuid, e);
+        }
+
+        // Avoid culling surprises in WebGPU mode
+        mesh.frustumCulled = false;
+      }
+    });
+
+    console.log(`✅ WebGPU scene prepared: swappedMaterials=${swapped}, hiddenUnsupported=${hiddenUnsupported}`);
+  }
+
+  /**
+   * Try to clone fragment meshes directly from the original scene, preserving
+   * the actual rendered materials/colors. This produces exact visual parity with WebGL.
+   */
+  private async tryCloneFragmentMeshes(
+    originalScene: THREE.Scene,
+    fragments: any
+  ): Promise<boolean> {
+    const proxy = new THREE.Scene();
+    const bg = originalScene.background as any;
+    proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
+
+    // Copy lights
+    let copiedLights = 0;
+    originalScene.traverse((obj) => {
+      if ((obj as any).isLight) {
+        try {
+          const light = obj.clone(true) as THREE.Light;
+          proxy.add(light);
+          if ((light as any).isDirectionalLight && (light as any).target) {
+            proxy.add((light as any).target);
+          }
+          copiedLights++;
+        } catch { /* ignore */ }
+      }
+    });
+
+    if (copiedLights === 0) {
+      proxy.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+      dir.position.set(1, 1, 1);
+      proxy.add(dir);
+    }
+
+    const root = new THREE.Group();
+    root.name = 'webgpu-fragments-cloned';
+    proxy.add(root);
+
+    let clonedMeshes = 0;
+    let skippedMeshes = 0;
+    const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+
+    // Helper to convert any material to WebGPU-compatible MeshStandardMaterial
+    const toStandardMaterial = (mat: THREE.Material): THREE.MeshStandardMaterial => {
+      const c = (mat as any).color as THREE.Color | undefined;
+      const r = c ? Math.round(c.r * 255) : 200;
+      const g = c ? Math.round(c.g * 255) : 200;
+      const b = c ? Math.round(c.b * 255) : 200;
+      const opacity = typeof (mat as any).opacity === 'number' ? (mat as any).opacity : 1;
+      const transparent = !!(mat as any).transparent || opacity < 1;
+      const side = (mat as any).side ?? THREE.DoubleSide;
+
+      const key = `${r},${g},${b},${opacity.toFixed(3)},${transparent ? 1 : 0},${side}`;
+      const cached = materialCache.get(key);
+      if (cached) return cached;
+
+      const newMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(r / 255, g / 255, b / 255),
+        roughness: 1,
+        metalness: 0,
+        opacity,
+        transparent,
+        side,
+      });
+      materialCache.set(key, newMat);
+      return newMat;
+    };
+
+    // Iterate over fragment models
+    for (const [modelId, model] of fragments.list as Map<string, any>) {
+      const modelObj = model?.object as THREE.Object3D | undefined;
+      if (!modelObj) continue;
+
+      const modelGroup = new THREE.Group();
+      modelGroup.name = `webgpu-clone-${modelId}`;
+      modelObj.updateMatrixWorld(true);
+      modelGroup.position.copy(modelObj.position);
+      modelGroup.quaternion.copy(modelObj.quaternion);
+      modelGroup.scale.copy(modelObj.scale);
+      root.add(modelGroup);
+
+      // Traverse the model's scene graph and clone meshes
+      modelObj.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+
+        const srcGeo = child.geometry as THREE.BufferGeometry;
+        if (!srcGeo) {
+          skippedMeshes++;
+          return;
+        }
+
+        const srcPos = srcGeo.getAttribute('position');
+        if (!srcPos) {
+          skippedMeshes++;
+          return;
+        }
+
+        // We need the raw array. If it's an InterleavedBufferAttribute or lacks .array, skip.
+        let posArray: Float32Array | null = null;
+        if (srcPos.array instanceof Float32Array) {
+          posArray = srcPos.array;
+        } else if (srcPos.array instanceof Float64Array) {
+          posArray = new Float32Array(srcPos.array);
+        } else if ((srcPos as any).data?.array) {
+          // Interleaved: extract into flat array
+          const data = (srcPos as any).data.array;
+          const itemSize = srcPos.itemSize;
+          const offset = (srcPos as any).offset ?? 0;
+          const stride = (srcPos as any).data.stride ?? itemSize;
+          const count = srcPos.count;
+          posArray = new Float32Array(count * 3);
+          for (let i = 0; i < count; i++) {
+            posArray[i * 3] = data[i * stride + offset];
+            posArray[i * 3 + 1] = data[i * stride + offset + 1];
+            posArray[i * 3 + 2] = data[i * stride + offset + 2];
+          }
+        }
+
+        if (!posArray || posArray.length === 0) {
+          skippedMeshes++;
+          return;
+        }
+
+        // Build a new geometry
+        const newGeo = new THREE.BufferGeometry();
+        newGeo.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
+
+        // Normals
+        const srcNorm = srcGeo.getAttribute('normal');
+        if (srcNorm) {
+          let normArray: Float32Array | null = null;
+          if (srcNorm.array instanceof Float32Array) {
+            normArray = srcNorm.array;
+          } else if (srcNorm.array instanceof Float64Array) {
+            normArray = new Float32Array(srcNorm.array);
+          } else if (srcNorm.array instanceof Int16Array) {
+            // Packed normals
+            const n = srcNorm.array;
+            normArray = new Float32Array(n.length);
+            const scale = 1 / 32767;
+            for (let i = 0; i < n.length; i++) normArray[i] = n[i] * scale;
+          } else if ((srcNorm as any).data?.array) {
+            const data = (srcNorm as any).data.array;
+            const itemSize = srcNorm.itemSize;
+            const offset = (srcNorm as any).offset ?? 0;
+            const stride = (srcNorm as any).data.stride ?? itemSize;
+            const count = srcNorm.count;
+            normArray = new Float32Array(count * 3);
+            for (let i = 0; i < count; i++) {
+              normArray[i * 3] = data[i * stride + offset];
+              normArray[i * 3 + 1] = data[i * stride + offset + 1];
+              normArray[i * 3 + 2] = data[i * stride + offset + 2];
+            }
+          }
+          if (normArray && normArray.length > 0) {
+            newGeo.setAttribute('normal', new THREE.Float32BufferAttribute(normArray, 3));
+          } else {
+            newGeo.computeVertexNormals();
+          }
+        } else {
+          newGeo.computeVertexNormals();
+        }
+
+        // Index
+        const srcIdx = srcGeo.getIndex();
+        if (srcIdx && srcIdx.array) {
+          newGeo.setIndex(new THREE.Uint32BufferAttribute(new Uint32Array(srcIdx.array), 1));
+        }
+
+        // Material
+        const srcMat = Array.isArray(child.material) ? child.material[0] : child.material;
+        const newMat = toStandardMaterial(srcMat);
+
+        const newMesh = new THREE.Mesh(newGeo, newMat);
+
+        // Apply world transform relative to model
+        child.updateMatrixWorld(true);
+        const localMatrix = new THREE.Matrix4().copy(modelObj.matrixWorld).invert().multiply(child.matrixWorld);
+        newMesh.applyMatrix4(localMatrix);
+
+        newMesh.frustumCulled = false;
+        modelGroup.add(newMesh);
+        this.createdGeometries.push(newGeo);
+        clonedMeshes++;
+      });
+    }
+
+    if (clonedMeshes === 0) {
+      console.log('⚠️ tryCloneFragmentMeshes: no meshes cloned');
+      return false;
+    }
+
+    console.log(`✅ WebGPU cloned fragment meshes: cloned=${clonedMeshes}, skipped=${skippedMeshes}, lights=${copiedLights}`);
+
+    this.proxyScene = proxy;
+    this.proxySceneKind = 'fragments';
+    return true;
+  }
+
+  private async tryBuildProxySceneFromFragments(originalScene: THREE.Scene): Promise<boolean> {
+    if (!this.components) return false;
+
+    let fragments: any = null;
+    try {
+      fragments = this.components.get(OBC.FragmentsManager);
+    } catch {
+      return false;
+    }
+
+    if (!fragments?.list || fragments.list.size === 0) {
+      return false;
+    }
+
+    // =====================================================================
+    // Build a WebGPU proxy scene from FragmentsModel typed geometry arrays.
+    // OBC's fragment meshes use a special LOD/tiled structure that doesn't
+    // expose standard BufferGeometry, so we rebuild from getItemsGeometry().
+    // =====================================================================
+
+    // Build a WebGPU-only proxy scene from typed geometry arrays.
+
+    const proxy = new THREE.Scene();
+    const bg = originalScene.background as any;
+    proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
+
+    // MeshStandardMaterial requires lights. Since we're rendering a separate proxy scene,
+    // we must also provide lights (the original scene lights/camera-headlight won't be traversed).
+    let copiedLights = 0;
+    originalScene.traverse((obj) => {
+      if ((obj as any).isLight) {
+        try {
+          const light = obj.clone(true) as THREE.Light;
+          proxy.add(light);
+
+          // DirectionalLight has a target object that must be in the scene.
+          if ((light as any).isDirectionalLight && (light as any).target) {
+            proxy.add((light as any).target);
+          }
+
+          copiedLights++;
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    if (copiedLights === 0) {
+      // Minimal, safe fallback lighting.
+      proxy.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+      dir.position.set(1, 1, 1);
+      proxy.add(dir);
+    }
+
+    const root = new THREE.Group();
+    root.name = 'webgpu-fragments-proxy';
+    proxy.add(root);
+
+    const sharedMaterial = new THREE.MeshStandardMaterial({
+      // Neutral light-gray (avoid fully-white washout)
+      color: 0xbfc8d4,
+      roughness: 1,
+      metalness: 0,
+      side: THREE.DoubleSide,
+    });
+
+    const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+    const getOrCreateMaterialFromDefinition = (definition: any): THREE.MeshStandardMaterial => {
+      const rawColor = definition?.color;
+      const color = (() => {
+        if (!rawColor) return null;
+        // THREE.Color or THREE-like
+        if (typeof rawColor === 'object' && typeof rawColor.r === 'number' && typeof rawColor.g === 'number' && typeof rawColor.b === 'number') {
+          const r = rawColor.r;
+          const g = rawColor.g;
+          const b = rawColor.b;
+          // r/g/b are typically 0..1
+          if (r <= 1 && g <= 1 && b <= 1) return new THREE.Color(r, g, b);
+          // sometimes serialized as 0..255
+          return new THREE.Color(r / 255, g / 255, b / 255);
+        }
+        if (Array.isArray(rawColor) && rawColor.length >= 3) {
+          const [r, g, b] = rawColor;
+          if (typeof r === 'number' && typeof g === 'number' && typeof b === 'number') {
+            if (r <= 1 && g <= 1 && b <= 1) return new THREE.Color(r, g, b);
+            return new THREE.Color(r / 255, g / 255, b / 255);
+          }
+        }
+        if (typeof rawColor === 'number') {
+          return new THREE.Color(rawColor);
+        }
+        return null;
+      })();
+
+      const opacity = typeof definition?.opacity === 'number' ? definition.opacity : 1;
+      const transparent = !!definition?.transparent || opacity < 1;
+      const renderedFaces = definition?.renderedFaces;
+      const side = renderedFaces === 0 ? THREE.FrontSide : THREE.DoubleSide; // RenderedFaces.ONE=0, TWO=1
+
+      const r = color ? Math.round(color.r * 255) : 191;
+      const g = color ? Math.round(color.g * 255) : 200;
+      const b = color ? Math.round(color.b * 255) : 212;
+      const key = `${r},${g},${b},${opacity.toFixed(3)},${transparent ? 1 : 0},${side}`;
+
+      const cached = materialCache.get(key);
+      if (cached) return cached;
+
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(r / 255, g / 255, b / 255),
+        roughness: 1,
+        metalness: 0,
+        opacity,
+        transparent,
+        side,
+      });
+      materialCache.set(key, mat);
+      return mat;
+    };
+
+    let modelCount = 0;
+    let itemCount = 0;
+    let meshCount = 0;
+    let itemsWithNoGeometry = 0;
+
+    const getItemIdsWithGeometry = async (model: any): Promise<number[]> => {
+      // Current API (FragmentsModel)
+      if (typeof model?.getItemsIdsWithGeometry === 'function') {
+        const ids = await model.getItemsIdsWithGeometry();
+        return Array.isArray(ids) ? ids : [];
+      }
+
+      // Older/alternative API variants (defensive)
+      if (typeof model?.getItemsWithGeometry === 'function') {
+        const result = await model.getItemsWithGeometry();
+        if (Array.isArray(result)) {
+          // Some versions return Item[] objects, others return localId numbers.
+          if (result.length === 0) return [];
+          if (typeof result[0] === 'number') return result as number[];
+          return (result as any[])
+            .map((it) => (typeof it === 'number' ? it : it?.localId ?? it?.id ?? null))
+            .filter((v) => typeof v === 'number') as number[];
+        }
+      }
+
+      // Legacy name used in some code/comments
+      if (typeof model?.getAllItemsWithGeometry === 'function') {
+        const ids = await model.getAllItemsWithGeometry();
+        return Array.isArray(ids) ? ids : [];
+      }
+
+      return [];
+    };
+
+    for (const [modelId, model] of fragments.list as Map<string, any>) {
+      modelCount++;
+
+      const modelGroup = new THREE.Group();
+      modelGroup.name = `webgpu-model-${modelId}`;
+      root.add(modelGroup);
+
+      const modelObj = model?.object as THREE.Object3D | undefined;
+      if (modelObj) {
+        modelObj.updateMatrixWorld(true);
+        modelGroup.position.copy(modelObj.position);
+        modelGroup.quaternion.copy(modelObj.quaternion);
+        modelGroup.scale.copy(modelObj.scale);
+      }
+
+      let itemIds: number[] = [];
+      try {
+        itemIds = await getItemIdsWithGeometry(model);
+      } catch (e) {
+        console.warn(`⚠️ WebGPU: failed to get item IDs with geometry for model ${modelId}`, e);
+        continue;
+      }
+
+      // Fetch per-item material definitions (colors/opacity/sidedness) in bulk.
+      const localIdToMaterialDef = new Map<number, any>();
+      const forEachNumericId = (ids: any, cb: (id: number) => void): void => {
+        if (!ids) return;
+        if (Array.isArray(ids)) {
+          for (const v of ids) if (typeof v === 'number') cb(v);
+          return;
+        }
+        if (ids instanceof Set) {
+          for (const v of ids) if (typeof v === 'number') cb(v);
+          return;
+        }
+        // TypedArrays
+        if (ArrayBuffer.isView(ids) && !(ids instanceof DataView)) {
+          const view = ids as unknown as ArrayLike<number>;
+          for (let i = 0; i < view.length; i++) {
+            const v = (view as any)[i];
+            if (typeof v === 'number') cb(v);
+          }
+          return;
+        }
+        // Generic iterable
+        if (typeof ids[Symbol.iterator] === 'function') {
+          for (const v of ids as Iterable<any>) if (typeof v === 'number') cb(v);
+        }
+      };
+
+      const addMaterialDefsForIds = async (ids: number[]): Promise<void> => {
+        if (typeof model?.getItemsMaterialDefinition !== 'function') return;
+        const pending = ids.filter((id) => typeof id === 'number' && !localIdToMaterialDef.has(id));
+        if (pending.length === 0) return;
+
+        // Chunk requests defensively; some implementations may return partial results for huge lists.
+        const chunkSize = 250;
+        for (let i = 0; i < pending.length; i += chunkSize) {
+          const chunk = pending.slice(i, i + chunkSize);
+          try {
+            const defs = await model.getItemsMaterialDefinition(chunk);
+            if (!Array.isArray(defs)) continue;
+            for (const entry of defs) {
+              const def = entry?.definition;
+              const localIds = entry?.localIds;
+              if (!def || !localIds) continue;
+              forEachNumericId(localIds, (id) => localIdToMaterialDef.set(id, def));
+            }
+          } catch {
+            // ignore; fall back to shared material
+          }
+        }
+      };
+
+      if (itemIds.length > 0) {
+        await addMaterialDefsForIds(itemIds);
+      }
+
+      // If definitions end up effectively uniform (common when models have no true material colors),
+      // fall back to category-based colors to match the app's "color by type" behavior.
+      const uniqueDefKeys = new Set<string>();
+      const uniqueRgbKeys = new Set<string>();
+      let minRgb = 255;
+      let maxRgb = 0;
+
+      for (const def of localIdToMaterialDef.values()) {
+        const mat = getOrCreateMaterialFromDefinition(def);
+        const c = mat.color;
+        const r = Math.round(c.r * 255);
+        const g = Math.round(c.g * 255);
+        const b = Math.round(c.b * 255);
+
+        uniqueRgbKeys.add(`${r},${g},${b}`);
+        uniqueDefKeys.add(`${r},${g},${b},${mat.opacity.toFixed(3)},${mat.transparent ? 1 : 0},${mat.side}`);
+
+        minRgb = Math.min(minRgb, r, g, b);
+        maxRgb = Math.max(maxRgb, r, g, b);
+
+        if (uniqueDefKeys.size >= 64 && uniqueRgbKeys.size >= 16) break;
+      }
+
+      const rgbSpread = maxRgb - minRgb;
+      // Prefer category colors when material colors are not meaningfully varied.
+      // If the model only has a handful of distinct RGB values (e.g. all gray), category
+      // coloring (matching ColorSplash) gives a far more informative visual.
+      // Threshold: <=8 unique RGB values means "effectively monochrome", use categories.
+      const shouldUseCategoryColors = uniqueRgbKeys.size <= 8;
+      const localIdToCategory = new Map<number, string>();
+      const categoryMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
+      const getOrCreateCategoryMaterial = (category: string): THREE.MeshStandardMaterial => {
+        const cached = categoryMaterialCache.get(category);
+        if (cached) return cached;
+
+        // Match the app's existing WebGL ColorSplash palette.
+        const palette: Record<string, number> = {
+          'IFCWALL': 0xFFE066,
+          'IFCWALLSTANDARDCASE': 0xFFD700,
+          'IFCSLAB': 0xB0B0B0,
+          'IFCBEAM': 0xFF3366,
+          'IFCCOLUMN': 0x00D9FF,
+          'IFCDOOR': 0x8B4513,
+          'IFCWINDOW': 0x00BFFF,
+          'IFCROOF': 0xDC143C,
+          'IFCSTAIR': 0xFF6F00,
+          'IFCSTAIRFLIGHT': 0xFF8C00,
+          'IFCRAILING': 0xE0E0E0,
+          'IFCFURNISHINGELEMENT': 0xAB47BC,
+          'IFCFOOTING': 0x795548,
+          'IFCRAMP': 0xFFA726,
+          'IFCRAMPFLIGHT': 0xFF9800,
+          'IFCCURTAINWALL': 0x26C6DA,
+          'IFCPLATE': 0x90CAF9,
+          'IFCCOVERING': 0xFFAB91,
+
+          'IFCDUCTFITTING': 0x2196F3,
+          'IFCDUCTSEGMENT': 0x42A5F5,
+          'IFCDUCT': 0x1976D2,
+          'IFCAIRTERM': 0x03A9F4,
+          'IFCAIRTERMINAL': 0x00B0FF,
+          'IFCDAMPER': 0x0288D1,
+          'IFCFAN': 0x00E5FF,
+          'IFCCOIL': 0x2979FF,
+          'IFCCHILLER': 0x00C853,
+          'IFCBOILER': 0xFF5722,
+          'IFCHEATER': 0xFF6E40,
+          'IFCHUMIDIFIER': 0x26C6DA,
+
+          'IFCPIPEFITTING': 0x00E676,
+          'IFCPIPESEGMENT': 0x4CAF50,
+          'IFCPIPE': 0x2E7D32,
+          'IFCVALVE': 0x00FF00,
+          'IFCPUMP': 0x1DE9B6,
+          'IFCFLOWMETER': 0x00BFA5,
+          'IFCFILTER': 0x64DD17,
+          'IFCTANK': 0x00897B,
+
+          'IFCCABLEFITTING': 0xFFAB00,
+          'IFCCABLESEGMENT': 0xFF9100,
+          'IFCCABLE': 0xFFD600,
+          'IFCCABLECARRIERFITTING': 0xFFEA00,
+          'IFCCABLECARRIERSEGMENT': 0xFFC107,
+          'IFCCABLETRAY': 0xFFB300,
+          'IFCRACEWAY': 0xFFD54F,
+          'IFCLIGHTFIXTURE': 0xFFFF00,
+          'IFCLIGHT': 0xFFFF8D,
+          'IFCOUTLET': 0xFF6F00,
+          'IFCSWITCH': 0xFF9800,
+          'IFCTRANSFORMER': 0xF57C00,
+          'IFCMOTOR': 0xFF4081,
+          'IFCPROTECTIVEDEVICE': 0xE91E63,
+          'IFCJUNCTIONBOX': 0xFFB74D,
+
+          'IFCSENSOR': 0xE040FB,
+          'IFCCONTROLLER': 0xAB47BC,
+          'IFCACTUATOR': 0x9C27B0,
+          'IFCALARM': 0xFF1744,
+
+          'IFCEQUIPMENT': 0x9E9E9E,
+          'IFCFLOWFITTING': 0x757575,
+          'IFCFLOWSEGMENT': 0xBDBDBD,
+          'IFCFLOWTERMINAL': 0x78909C,
+          'IFCFLOWCONTROLLER': 0x546E7A,
+          'IFCDISTRIBUTIONELEMENT': 0x90A4AE,
+
+          'IFCSPACE': 0xE3F2FD,
+          'IFCSITE': 0x8D6E63,
+          'IFCBUILDING': 0xBCAAA4,
+          'IFCBUILDINGSTOREY': 0xD7CCC8,
+        };
+
+        const colorHex = palette[category] ?? 0x9E9E9E;
+        const color = new THREE.Color(colorHex);
+
+        const mat = new THREE.MeshStandardMaterial({
+          color,
+          roughness: 1,
+          metalness: 0,
+          opacity: 1,
+          transparent: false,
+          side: THREE.DoubleSide,
+        });
+        categoryMaterialCache.set(category, mat);
+        return mat;
+      };
+
+      if (shouldUseCategoryColors && typeof model?.getItemsWithGeometryCategories === 'function') {
+        try {
+          const cats = await model.getItemsWithGeometryCategories();
+          if (Array.isArray(cats) && cats.length > 0) {
+            const n = Math.min(itemIds.length, cats.length);
+            for (let i = 0; i < n; i++) {
+              const id = itemIds[i];
+              const cat = cats[i];
+              if (typeof id === 'number' && typeof cat === 'string' && cat.length) {
+                localIdToCategory.set(id, cat);
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let coloredMeshesInModel = 0;
+      let categoryColoredMeshesInModel = 0;
+      let missingMaterialDefsInModel = 0;
+
+      // =====================================================================
+      // Use model.getMaterials() to get the REAL material colors (24 materials, 20 unique colors)
+      // instead of getItemsMaterialDefinition() which only returns 4 colors
+      // =====================================================================
+      const realMaterialsMap = new Map<number, { r: number; g: number; b: number; a?: number }>();
+      try {
+        if (typeof model?.getMaterials === 'function') {
+          const allMats = await model.getMaterials();
+          if (allMats instanceof Map) {
+            for (const [matId, rawMat] of allMats) {
+              const r = (rawMat as any)?.r ?? 200;
+              const g = (rawMat as any)?.g ?? 200;
+              const b = (rawMat as any)?.b ?? 200;
+              const a = (rawMat as any)?.a;
+              realMaterialsMap.set(matId, { r, g, b, a });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to load materials from model.getMaterials():', e);
+      }
+
+      // =====================================================================
+      // Use model.getSamples() to build sampleId → materialId mapping
+      // meshData.sampleId → sample.material → realMaterialsMap
+      // =====================================================================
+      const sampleToMaterialId = new Map<number, number>();
+      try {
+        if (typeof model?.getSamples === 'function') {
+          const allSamples = await model.getSamples();
+          if (allSamples instanceof Map) {
+            for (const [sampleId, sample] of allSamples) {
+              const matId = (sample as any)?.material;
+              if (typeof matId === 'number') {
+                sampleToMaterialId.set(sampleId, matId);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to load samples from model.getSamples():', e);
+      }
+
+      console.log('✅ WebGPU materials loaded:', realMaterialsMap.size, 'samples:', sampleToMaterialId.size);
+
+      // Create a helper to get material from the real materials map
+      const realMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
+      const getOrCreateRealMaterial = (matId: number): THREE.MeshStandardMaterial | null => {
+        const rawMat = realMaterialsMap.get(matId);
+        if (!rawMat) return null;
+
+        const { r, g, b, a } = rawMat;
+        const opacity = typeof a === 'number' ? a / 255 : 1;
+        const transparent = opacity < 1;
+        const key = `${r},${g},${b},${opacity.toFixed(3)}`;
+
+        const cached = realMaterialCache.get(key);
+        if (cached) return cached;
+
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(r / 255, g / 255, b / 255),
+          roughness: 1,
+          metalness: 0,
+          opacity,
+          transparent,
+          side: THREE.DoubleSide,
+        });
+        realMaterialCache.set(key, mat);
+        return mat;
+      };
+
+      // Helper to get material from sampleId
+      const getMaterialFromSampleId = (sampleId: number): THREE.MeshStandardMaterial | null => {
+        const matId = sampleToMaterialId.get(sampleId);
+        if (typeof matId !== 'number') return null;
+        return getOrCreateRealMaterial(matId);
+      };
+
+      for (const itemId of itemIds) {
+        itemCount++;
+
+        let geometries: any[] | null = null;
+        try {
+          const geometriesArray = await model.getItemsGeometry([itemId]);
+          geometries = geometriesArray?.[0] || null;
+        } catch {
+          geometries = null;
+        }
+
+        if (!geometries || geometries.length === 0) {
+          try {
+            const children = await model.getItemsChildren([itemId]);
+            if (children && children.length > 0) {
+              // Ensure children materials are also available
+              await addMaterialDefsForIds(children);
+              const childrenGeometriesArray = await model.getItemsGeometry(children);
+              geometries = childrenGeometriesArray.flat();
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!geometries || geometries.length === 0) {
+          itemsWithNoGeometry++;
+          continue;
+        }
+
+        for (const meshData of geometries) {
+          if (!meshData?.positions) continue;
+
+          const localIdForMesh = typeof meshData.localId === 'number' ? meshData.localId : itemId;
+          
+          // Try to get material from meshData.sampleId → sample.material → realMaterialsMap
+          let materialForMesh: THREE.Material = sharedMaterial;
+          const sampleId = (meshData as any).sampleId;
+          
+          if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
+            const realMat = getMaterialFromSampleId(sampleId);
+            if (realMat) {
+              materialForMesh = realMat;
+              coloredMeshesInModel++;
+            }
+          }
+          
+          // Fall back to category colors if no real material found
+          if (materialForMesh === sharedMaterial && shouldUseCategoryColors) {
+            const cat = localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId);
+            if (cat) {
+              materialForMesh = getOrCreateCategoryMaterial(cat);
+              categoryColoredMeshesInModel++;
+            } else {
+              // Fall back to definition if category missing
+              const defForMesh = localIdToMaterialDef.get(localIdForMesh);
+              if (defForMesh) {
+                materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
+              } else {
+                missingMaterialDefsInModel++;
+              }
+            }
+          } else if (materialForMesh === sharedMaterial) {
+            const defForMesh = localIdToMaterialDef.get(localIdForMesh);
+            if (defForMesh) {
+              materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
+            } else {
+              missingMaterialDefsInModel++;
+            }
+          }
+
+          const geometry = new THREE.BufferGeometry();
+          // Ensure positions are Float32 for broad renderer compatibility
+          const posArray = meshData.positions instanceof Float64Array
+            ? new Float32Array(meshData.positions)
+            : (meshData.positions as Float32Array | Float64Array);
+          geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
+
+          // Normals are often provided as Int16Array (packed) in fragments.
+          // IMPORTANT (WebGPU): vertex buffer arrayStride must be a multiple of 4.
+          // A normalized Int16 vec3 uses 6 bytes/vertex, which is invalid in WebGPU.
+          // Convert to Float32 vec3 (12 bytes/vertex) to satisfy alignment.
+          if (meshData.normals && meshData.normals.length > 0) {
+            const n = meshData.normals;
+            const out = new Float32Array(n.length);
+            const scale = 1 / 32767;
+            for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
+          } else {
+            geometry.computeVertexNormals();
+          }
+
+          if (meshData.indices) {
+            geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
+          }
+
+          const mesh = new THREE.Mesh(geometry, materialForMesh);
+          if (meshData.transform) {
+            mesh.applyMatrix4(meshData.transform);
+          }
+
+          modelGroup.add(mesh);
+          this.createdGeometries.push(geometry);
+          meshCount++;
+        }
+
+        if (itemCount % 200 === 0) {
+          await new Promise<void>((r) => setTimeout(() => r(), 0));
+        }
+      }
+
+      // Helpful for verifying color coverage without spamming logs.
+      console.log('🎨 WebGPU proxy color stats', {
+        modelId,
+        mappedLocalIds: localIdToMaterialDef.size,
+        coloredMeshes: coloredMeshesInModel,
+        categoryColoredMeshes: categoryColoredMeshesInModel,
+        missingMaterialDefs: missingMaterialDefsInModel,
+        uniqueMaterialDefsSampled: uniqueDefKeys.size,
+        uniqueRgbSampled: uniqueRgbKeys.size,
+        rgbSpread,
+        usingCategoryColors: shouldUseCategoryColors,
+        totalMeshesSoFar: meshCount,
+      });
+    }
+
+    console.log('✅ WebGPU fragments proxy built', {
+      modelCount,
+      itemCount,
+      meshCount,
+      itemsWithNoGeometry,
+      copiedLights,
+    });
+
+    this.proxyScene = proxy;
+    this.proxySceneKind = 'fragments';
+
+    return true;
+  }
+
+  /**
+   * Dispose proxy scene
+   */
+  private disposeProxyScene(): void {
+    if (this.proxySceneKind === 'fragments') {
+      this.proxyScene = null;
+      this.proxySceneKind = 'in-place';
+      console.log('🗑️ WebGPU proxy scene cleared (fragments mode)');
+      return;
+    }
+
+    // In WebGPU mode we render the original scene and only swap materials.
+    // Disposing materials here can crash WebGPURenderer internal caches (seen as `usedTimes` errors).
+    // We only restore references and let GC/renderer lifecycle handle cleanup.
+    if (this.proxyScene) {
+      this.proxyScene = null;
+    }
+
+    // Restore materials
+    if (this.scene) {
+      this.scene.traverse((obj) => {
+        const before = this.onBeforeRenderBackup.get(obj.uuid);
+        if (before) {
+          (obj as any).onBeforeRender = before;
+        }
+        const after = this.onAfterRenderBackup.get(obj.uuid);
+        if (after) {
+          (obj as any).onAfterRender = after;
+        }
+
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+          const originalMat = this.materialBackup.get(obj.uuid);
+          if (originalMat) {
+            (obj as any).material = originalMat as any;
+          }
+
+          const originalGeo = this.geometryBackup.get(obj.uuid);
+          if (originalGeo) {
+            (obj as any).geometry = originalGeo as any;
+          }
+        }
+        const originalVisible = this.visibilityBackup.get(obj.uuid);
+        if (typeof originalVisible === 'boolean') {
+          obj.visible = originalVisible;
+        }
+      });
+    }
+
+    this.materialBackup.clear();
+    this.visibilityBackup.clear();
+    this.geometryBackup.clear();
+    this.onBeforeRenderBackup.clear();
+    this.onAfterRenderBackup.clear();
+
+    console.log('🗑️ WebGPU scene state restored');
+  }
+
+  /**
+   * Initialize and activate WebGPU renderer
+   */
+  public async enable(world: OBC.World, container: HTMLElement, components?: OBC.Components): Promise<boolean> {
+    // Check WebGPU support first
+    const status = await WebGPURendererModule.checkWebGPUSupport();
+    if (!status.available) {
+      console.warn('⚠️ WebGPU not available:', status.reason);
+      return false;
+    }
+
+    console.log('🚀 WebGPU supported! GPU Info:', status.browserInfo);
+
+    // Suppress material compatibility warnings before any WebGPU operations
+    this.suppressMaterialWarnings();
+
+    try {
+      this.world = world;
+      this.container = container;
+      this.components = components ?? null;
+      this.scene = world.scene?.three as THREE.Scene;
+      this.camera = world.camera?.three as THREE.Camera;
+      
+      if (!this.scene || !this.camera) {
+        console.error('❌ Scene or camera not available');
+        return false;
+      }
+
+      // Dynamically import WebGPURenderer from three/webgpu
+      const threeWebGPU = await import('three/webgpu');
+      const WebGPURenderer = threeWebGPU.WebGPURenderer;
+      
+      // IMPORTANT: WebGPU renderer needs access to THREE global for node system
+      // This fixes the "Cannot read properties of undefined (reading 'constructor')" error
+      // which happens when WebGPU nodes try to access THREE types
+      (window as any).THREE = THREE;
+      
+      if (!WebGPURenderer) {
+        console.error('❌ WebGPURenderer not found in three/webgpu');
+        return false;
+      }
+      
+      // Create WebGPU renderer
+      this.webgpuRenderer = new WebGPURenderer({
+        antialias: true,
+        alpha: true,
+      });
+
+      // Initialize the renderer (WebGPU requires async init)
+      await this.webgpuRenderer.init();
+
+      // Configure renderer
+      const { width, height } = container.getBoundingClientRect();
+      this.webgpuRenderer.setSize(width, height);
+      this.webgpuRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.webgpuRenderer.setClearColor(new THREE.Color(0xd1dee9), 1);
+      
+      // Create proxy scene with compatible materials
+      await this.createProxyScene(this.scene);
+
+      // Enable local clipping for section planes
+      if ('localClippingEnabled' in this.webgpuRenderer) {
+        this.webgpuRenderer.localClippingEnabled = true;
+      }
+      if ('clippingPlanes' in this.webgpuRenderer) {
+        this.webgpuRenderer.clippingPlanes = [];
+      }
+
+      // Hide the original canvas but keep it interactive for controls
+      const originalCanvas = container.querySelector('canvas');
+      if (originalCanvas) {
+        const canvasEl = originalCanvas as HTMLElement;
+        // We use opacity 0 instead of display none so it can still receive events
+        canvasEl.style.opacity = '0';
+        canvasEl.style.pointerEvents = 'auto'; // Ensure it captures events
+        canvasEl.style.position = 'absolute';
+        canvasEl.style.zIndex = '1'; // On top of WebGPU canvas
+      }
+
+      // Pause the original WebGL renderer to prevent conflicts
+      if (this.world && this.world.renderer) {
+        // Stop the main loop of the original renderer
+        // We access the private 'renderer' property of the SimpleRenderer or PostproductionRenderer
+        // This is a hack but necessary to stop the WebGL loop
+        const renderer = this.world.renderer as any;
+        if (renderer.enabled !== undefined) {
+          renderer.enabled = false;
+        }
+      }
+
+      // Add WebGPU canvas
+      const gpuCanvas = this.webgpuRenderer.domElement as HTMLCanvasElement;
+      gpuCanvas.style.position = 'absolute';
+      gpuCanvas.style.top = '0';
+      gpuCanvas.style.left = '0';
+      gpuCanvas.style.width = '100%';
+      gpuCanvas.style.height = '100%';
+      gpuCanvas.style.pointerEvents = 'none'; // Let events pass through to original canvas
+      gpuCanvas.style.zIndex = '0'; // Behind original canvas
+      gpuCanvas.id = 'webgpu-canvas';
+      container.appendChild(gpuCanvas);
+
+      // Start render loop
+      this.isActive = true;
+      this.startRenderLoop();
+
+      // Handle resize
+      this.setupResizeHandler();
+
+      console.log('✅ WebGPU renderer enabled successfully');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Failed to enable WebGPU renderer:', error);
+      this.disable();
+      return false;
+    }
+  }
+
+  /**
+   * Disable WebGPU renderer and restore WebGL
+   */
+  public disable(): void {
+    if (!this.isActive && !this.webgpuRenderer) return;
+
+    // Stop render loop
+    this.isActive = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    // Clean up resize observer
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+
+    // Remove WebGPU canvas
+    if (this.container) {
+      const webgpuCanvas = this.container.querySelector('#webgpu-canvas');
+      if (webgpuCanvas) {
+        webgpuCanvas.remove();
+      }
+    }
+
+    // Dispose renderer
+    if (this.webgpuRenderer) {
+      try {
+        this.webgpuRenderer.dispose();
+      } catch (e) {
+        console.warn('Warning during WebGPU cleanup:', e);
+      }
+      this.webgpuRenderer = null;
+    }
+
+    // Show original canvas
+    if (this.container) {
+      const originalCanvas = this.container.querySelector('canvas:not(#webgpu-canvas)');
+      if (originalCanvas) {
+        const canvasEl = originalCanvas as HTMLElement;
+        canvasEl.style.display = '';
+        canvasEl.style.opacity = '';
+        canvasEl.style.pointerEvents = '';
+        canvasEl.style.position = '';
+        canvasEl.style.zIndex = '';
+      }
+    }
+
+    // Resume the original WebGL renderer
+    if (this.world && this.world.renderer) {
+      const renderer = this.world.renderer as any;
+      if (renderer.enabled !== undefined) {
+        renderer.enabled = true;
+      }
+    }
+
+    // Restore console.warn
+    this.restoreConsoleWarn();
+
+    // Dispose proxy scene
+    this.disposeProxyScene();
+
+    // Dispose any temporary geometries created for WebGPU (after renderer disposal)
+    for (const g of this.createdGeometries) {
+      try {
+        g.dispose();
+      } catch {
+        // ignore
+      }
+    }
+    this.createdGeometries = [];
+    this.components = null;
+
+    console.log('✅ WebGPU renderer disabled, WebGL restored');
+  }
+
+  /**
+   * Check if WebGPU mode is currently active
+   */
+  public isEnabled(): boolean {
+    return this.isActive;
+  }
+
+  /**
+   * Get current renderer mode
+   */
+  public getMode(): RendererMode {
+    return this.isActive ? 'webgpu' : 'webgl';
+  }
+
+  /**
+   * Get renderer statistics
+   */
+  public getStats(): { triangles: number; drawCalls: number; geometries: number; textures: number } | null {
+    if (!this.webgpuRenderer || !this.isActive) return null;
+    
+    try {
+      return {
+        triangles: this.webgpuRenderer.info?.render?.triangles || 0,
+        drawCalls: this.webgpuRenderer.info?.render?.calls || 0,
+        geometries: this.webgpuRenderer.info?.memory?.geometries || 0,
+        textures: this.webgpuRenderer.info?.memory?.textures || 0,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Start the WebGPU render loop
+   */
+  private startRenderLoop(): void {
+    const render = () => {
+      if (!this.isActive || !this.webgpuRenderer || !this.proxyScene || !this.camera) {
+        return;
+      }
+
+      // Render the proxy scene
+      try {
+        this.webgpuRenderer.render(this.proxyScene, this.camera);
+      } catch (e) {
+        console.error("Render error", e);
+      }
+
+      // Continue loop
+      this.animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+  }
+
+  /**
+   * Setup resize handler
+   */
+  private setupResizeHandler(): void {
+    if (!this.container) return;
+
+    this.resizeObserver = new ResizeObserver((entries) => {
+      if (!this.webgpuRenderer || !this.isActive) return;
+
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          this.webgpuRenderer.setSize(width, height);
+        }
+      }
+    });
+
+    this.resizeObserver.observe(this.container);
+  }
+
+  /**
+   * Update clipping planes (for section tool compatibility)
+   */
+  public setClippingPlanes(planes: THREE.Plane[]): void {
+    if (this.webgpuRenderer && 'clippingPlanes' in this.webgpuRenderer) {
+      this.webgpuRenderer.clippingPlanes = planes;
+    }
+  }
+
+  /**
+   * Set background color
+   */
+  public setBackgroundColor(color: THREE.Color | string | number): void {
+    if (this.webgpuRenderer) {
+      this.webgpuRenderer.setClearColor(color);
+    }
+  }
+
+  /**
+   * Force a single frame render
+   */
+  public renderOnce(): void {
+    if (this.webgpuRenderer && this.scene && this.camera) {
+      this.webgpuRenderer.render(this.scene, this.camera);
+    }
+  }
+}

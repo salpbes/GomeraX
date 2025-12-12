@@ -28,6 +28,7 @@ import { MinimapModule } from './modules/MinimapModule';
 import { ClusterModule } from './modules/ClusterModule';
 import { ColorSplashModule } from './modules/ColorSplashModule';
 import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
+import { WebGPURendererModule } from './modules/WebGPURendererModule';
 import * as OBC from '@thatopen/components';
 
 export class IFCViewer {
@@ -48,6 +49,8 @@ export class IFCViewer {
   private cluster: ClusterModule | null = null;
   private colorSplash: ColorSplashModule | null = null;
   private adaptiveQuality: AdaptiveQualityController | null = null;
+  private webgpuRenderer: WebGPURendererModule | null = null;
+  private container: HTMLElement | null = null;
 
   constructor() {
     // Initialize the world manager first (foundation of the viewer)
@@ -78,6 +81,11 @@ export class IFCViewer {
       // Step 1: Create the 3D world
       console.log('📐 Creating 3D world...');
       const world = await this.worldManager.createWorld(container);
+      this.container = container;
+
+      // Step 1.5: Initialize WebGPU module (experimental)
+      console.log('🎮 Initializing WebGPU module...');
+      this.webgpuRenderer = new WebGPURendererModule();
 
       // Step 2: Initialize the IFC loader
       console.log('📦 Initializing IFC loader...');
@@ -346,12 +354,57 @@ export class IFCViewer {
   }
 
   /**
+   * Gets the WebGPU renderer module instance
+   */
+  public getWebGPURenderer(): WebGPURendererModule | null {
+    return this.webgpuRenderer;
+  }
+
+  /**
+   * Toggle WebGPU rendering mode (experimental)
+   * @returns Whether WebGPU is now enabled
+   */
+  public async toggleWebGPU(): Promise<boolean> {
+    if (!this.webgpuRenderer || !this.worldManager.world || !this.container) {
+      console.warn('⚠️ WebGPU toggle: Missing required components');
+      return false;
+    }
+
+    if (this.webgpuRenderer.isEnabled()) {
+      this.webgpuRenderer.disable();
+      return false;
+    } else {
+      const success = await this.webgpuRenderer.enable(
+        this.worldManager.world,
+        this.container,
+        this.worldManager.getComponents()
+      );
+      return success;
+    }
+  }
+
+  /**
+   * Check if WebGPU is supported
+   */
+  public async checkWebGPUSupport(): Promise<{ available: boolean; reason?: string }> {
+    return WebGPURendererModule.checkWebGPUSupport();
+  }
+
+  /**
+   * Check if WebGPU mode is currently active
+   */
+  public isWebGPUEnabled(): boolean {
+    return this.webgpuRenderer?.isEnabled() || false;
+  }
+
+  /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
    */
   public dispose(): void {
     console.log('🧹 Disposing IFC Viewer...');
     
+    this.webgpuRenderer?.disable();
     this.adaptiveQuality?.dispose();
     this.performanceMonitor?.dispose();
     this.propertiesPanel?.dispose();
