@@ -1,13 +1,84 @@
 /**
+ * =============================================================================
  * WebGPU Renderer Module (Experimental)
+ * =============================================================================
  * 
- * This module provides experimental WebGPU rendering support for the IFC Viewer.
- * WebGPU offers significant performance improvements over WebGL but:
+ * WHAT THIS MODULE DOES:
+ * ----------------------
+ * This module provides an optional WebGPU rendering mode for the IFC Viewer.
+ * When enabled, it renders the 3D model using WebGPU instead of WebGL.
+ * 
+ * WHY WEBGPU?
+ * -----------
+ * WebGPU is the next-generation graphics API that offers:
+ * - Better performance (especially for complex models)
+ * - More efficient GPU utilization
+ * - Modern shader capabilities
+ * 
+ * However, WebGPU has trade-offs:
  * - Requires modern browser support (Chrome 113+, Edge 113+, Firefox Nightly)
- * - PostProduction effects (AO, outlines) are NOT available in WebGPU mode
+ * - PostProduction effects (ambient occlusion, outlines) are NOT available
  * - This is experimental and may have visual differences
  * 
+ * 
+ * HOW IT WORKS (LAYMAN'S EXPLANATION):
+ * ------------------------------------
+ * Think of it like this: the IFC model is stored in a special format by OBC
+ * (ThatOpen Components) that's optimized for WebGL rendering. WebGPU speaks
+ * a slightly different "language", so we need to translate the model.
+ * 
+ * The translation process:
+ * 
+ * 1. GEOMETRY: We can't just copy the existing 3D meshes because OBC uses a
+ *    special "Level of Detail" (LOD) system that WebGPU doesn't understand.
+ *    Instead, we ask OBC for the raw geometry data (vertices, triangles) and
+ *    rebuild each mesh from scratch in a WebGPU-compatible format.
+ * 
+ * 2. MATERIALS/COLORS: This was tricky! OBC has multiple ways to get colors:
+ *    - `getItemsMaterialDefinition()` - BROKEN: only returns ~4 gray colors
+ *    - `getMaterials()` - CORRECT: returns all 24+ real material colors
+ *    
+ *    To connect a mesh to its color, we use this chain:
+ *    meshData.sampleId → model.getSamples() → sample.material → model.getMaterials()
+ *    
+ *    In plain English: each piece of geometry has a "sample ID", which points
+ *    to a "sample", which tells us which material (color) to use.
+ * 
+ * 3. NORMALS: WebGPU is stricter about data formats. OBC stores normals as
+ *    Int16 (compact, 6 bytes per vertex) but WebGPU requires Float32 with
+ *    4-byte alignment (12 bytes per vertex). We convert them on the fly.
+ * 
+ * 4. LIGHTING: Since we render a separate "proxy scene", we need to copy
+ *    the lights from the original scene, or add fallback lights.
+ * 
+ * 5. CONTROLS: We keep the original WebGL canvas active (but invisible) so
+ *    that OrbitControls still work. The WebGPU canvas is visual-only.
+ * 
+ * 
+ * ARCHITECTURE DECISIONS:
+ * -----------------------
+ * - "Proxy Scene": We build a completely separate THREE.Scene for WebGPU
+ *   rather than trying to modify OBC's fragment meshes in-place. This avoids
+ *   breaking OBC's internal state and makes cleanup easier.
+ * 
+ * - "Category Color Fallback": If the model has very few unique material colors
+ *   (e.g., everything is gray), we fall back to category-based coloring that
+ *   matches the ColorSplash feature (walls=yellow, beams=red, etc.).
+ * 
+ * - "Canvas Layering": Original canvas (opacity:0, pointer-events:auto) sits
+ *   on top of WebGPU canvas (pointer-events:none) so controls work normally.
+ * 
+ * 
+ * KNOWN LIMITATIONS:
+ * ------------------
+ * - No postprocessing effects (AO, outlines, custom passes)
+ * - No section plane hatching (relies on postprocessing)
+ * - Highlighting/selection may not work the same way
+ * - Some custom OBC features may not render correctly
+ * 
+ * 
  * @see https://threejs.org/docs/#api/en/renderers/WebGPURenderer
+ * =============================================================================
  */
 
 import * as THREE from 'three';
@@ -623,6 +694,30 @@ export class WebGPURendererModule {
     return true;
   }
 
+  /**
+   * ==========================================================================
+   * BUILD PROXY SCENE FROM FRAGMENTS
+   * ==========================================================================
+   * 
+   * This is the core method that translates OBC's fragment model to WebGPU.
+   * 
+   * WHY WE NEED THIS:
+   * OBC stores geometry in a special LOD (Level of Detail) format optimized
+   * for WebGL. WebGPU can't directly render these meshes, so we rebuild them.
+   * 
+   * THE PROCESS:
+   * 1. Get all items with geometry from the model
+   * 2. For each item, get its raw geometry data (positions, normals, indices)
+   * 3. Build new THREE.BufferGeometry from this data
+   * 4. Look up the correct material color using: sampleId → sample → material
+   * 5. Create a new mesh and add it to our proxy scene
+   * 
+   * COLOR RESOLUTION CHAIN:
+   * meshData.sampleId → model.getSamples().get(sampleId).material → model.getMaterials().get(materialId)
+   * 
+   * This gives us the actual IFC material colors (20+ unique colors) instead
+   * of the broken getItemsMaterialDefinition() which only returns ~4 grays.
+   */
   private async tryBuildProxySceneFromFragments(originalScene: THREE.Scene): Promise<boolean> {
     if (!this.components) return false;
 
@@ -643,14 +738,15 @@ export class WebGPURendererModule {
     // expose standard BufferGeometry, so we rebuild from getItemsGeometry().
     // =====================================================================
 
-    // Build a WebGPU-only proxy scene from typed geometry arrays.
-
     const proxy = new THREE.Scene();
     const bg = originalScene.background as any;
     proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
 
-    // MeshStandardMaterial requires lights. Since we're rendering a separate proxy scene,
-    // we must also provide lights (the original scene lights/camera-headlight won't be traversed).
+    // -------------------------------------------------------------------------
+    // STEP 1: Copy lights from original scene
+    // MeshStandardMaterial requires lights. Since we're rendering a separate
+    // proxy scene, we must copy lights (camera headlight won't be traversed).
+    // -------------------------------------------------------------------------
     let copiedLights = 0;
     originalScene.traverse((obj) => {
       if ((obj as any).isLight) {
@@ -671,7 +767,7 @@ export class WebGPURendererModule {
     });
 
     if (copiedLights === 0) {
-      // Minimal, safe fallback lighting.
+      // Fallback: add basic lighting if original scene has no lights
       proxy.add(new THREE.AmbientLight(0xffffff, 0.7));
       const dir = new THREE.DirectionalLight(0xffffff, 0.7);
       dir.position.set(1, 1, 1);
@@ -682,8 +778,8 @@ export class WebGPURendererModule {
     root.name = 'webgpu-fragments-proxy';
     proxy.add(root);
 
+    // Fallback material for meshes without color info
     const sharedMaterial = new THREE.MeshStandardMaterial({
-      // Neutral light-gray (avoid fully-white washout)
       color: 0xbfc8d4,
       roughness: 1,
       metalness: 0,
@@ -1005,8 +1101,19 @@ export class WebGPURendererModule {
       let missingMaterialDefsInModel = 0;
 
       // =====================================================================
-      // Use model.getMaterials() to get the REAL material colors (24 materials, 20 unique colors)
-      // instead of getItemsMaterialDefinition() which only returns 4 colors
+      // STEP 2: Load REAL material colors using model.getMaterials()
+      // =====================================================================
+      // 
+      // IMPORTANT: getItemsMaterialDefinition() is BROKEN - it only returns
+      // ~4 gray colors even when the model has 24+ materials with 20+ unique colors.
+      // 
+      // The CORRECT way to get material colors:
+      // 1. model.getMaterials() → Map<materialId, {r, g, b, a}> (the real colors!)
+      // 2. model.getSamples() → Map<sampleId, {material: materialId, ...}>
+      // 3. meshData.sampleId → look up in samples → get materialId → get color
+      //
+      // This chain: sampleId → sample.material → realMaterialsMap gives us the
+      // actual IFC material colors that match what WebGL renders.
       // =====================================================================
       const realMaterialsMap = new Map<number, { r: number; g: number; b: number; a?: number }>();
       try {
@@ -1027,8 +1134,8 @@ export class WebGPURendererModule {
       }
 
       // =====================================================================
-      // Use model.getSamples() to build sampleId → materialId mapping
-      // meshData.sampleId → sample.material → realMaterialsMap
+      // STEP 3: Build sampleId → materialId mapping
+      // Each mesh has a sampleId; each sample points to a materialId
       // =====================================================================
       const sampleToMaterialId = new Map<number, number>();
       try {
@@ -1049,7 +1156,7 @@ export class WebGPURendererModule {
 
       console.log('✅ WebGPU materials loaded:', realMaterialsMap.size, 'samples:', sampleToMaterialId.size);
 
-      // Create a helper to get material from the real materials map
+      // Helper to create MeshStandardMaterial from raw color data
       const realMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
       const getOrCreateRealMaterial = (matId: number): THREE.MeshStandardMaterial | null => {
         const rawMat = realMaterialsMap.get(matId);
@@ -1075,13 +1182,23 @@ export class WebGPURendererModule {
         return mat;
       };
 
-      // Helper to get material from sampleId
+      // Helper to get material from sampleId (the key to correct colors!)
       const getMaterialFromSampleId = (sampleId: number): THREE.MeshStandardMaterial | null => {
         const matId = sampleToMaterialId.get(sampleId);
         if (typeof matId !== 'number') return null;
         return getOrCreateRealMaterial(matId);
       };
 
+      // =====================================================================
+      // STEP 4: Build geometry for each item
+      // =====================================================================
+      // For each IFC item:
+      // 1. Get raw geometry data via model.getItemsGeometry()
+      // 2. meshData contains: positions, normals, indices, transform, sampleId, localId
+      // 3. Build a new THREE.BufferGeometry from this data
+      // 4. Look up color using meshData.sampleId → getMaterialFromSampleId()
+      // 5. Handle normals carefully (WebGPU requires Float32, not Int16)
+      // =====================================================================
       for (const itemId of itemIds) {
         itemCount++;
 
@@ -1153,32 +1270,44 @@ export class WebGPURendererModule {
             }
           }
 
+          // -----------------------------------------------------------------
+          // BUILD GEOMETRY
+          // -----------------------------------------------------------------
           const geometry = new THREE.BufferGeometry();
-          // Ensure positions are Float32 for broad renderer compatibility
+          
+          // Positions: ensure Float32 (WebGPU prefers this)
           const posArray = meshData.positions instanceof Float64Array
             ? new Float32Array(meshData.positions)
             : (meshData.positions as Float32Array | Float64Array);
           geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
 
-          // Normals are often provided as Int16Array (packed) in fragments.
-          // IMPORTANT (WebGPU): vertex buffer arrayStride must be a multiple of 4.
-          // A normalized Int16 vec3 uses 6 bytes/vertex, which is invalid in WebGPU.
-          // Convert to Float32 vec3 (12 bytes/vertex) to satisfy alignment.
+          // -----------------------------------------------------------------
+          // NORMALS: Critical WebGPU compatibility fix!
+          // -----------------------------------------------------------------
+          // OBC stores normals as Int16Array (packed, 6 bytes per vertex).
+          // WebGPU requires vertex buffer stride to be a multiple of 4 bytes.
+          // Int16 vec3 = 6 bytes → INVALID for WebGPU → causes pipeline error!
+          // Solution: Convert to Float32 vec3 = 12 bytes → valid for WebGPU.
+          // -----------------------------------------------------------------
           if (meshData.normals && meshData.normals.length > 0) {
             const n = meshData.normals;
             const out = new Float32Array(n.length);
-            const scale = 1 / 32767;
+            const scale = 1 / 32767; // Int16 normalized range
             for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
             geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
           } else {
             geometry.computeVertexNormals();
           }
 
+          // Indices
           if (meshData.indices) {
             geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
           }
 
+          // Create mesh with the resolved material
           const mesh = new THREE.Mesh(geometry, materialForMesh);
+          
+          // Apply transform from IFC (position, rotation, scale)
           if (meshData.transform) {
             mesh.applyMatrix4(meshData.transform);
           }
@@ -1188,12 +1317,13 @@ export class WebGPURendererModule {
           meshCount++;
         }
 
+        // Yield to UI every 200 items to prevent freezing
         if (itemCount % 200 === 0) {
           await new Promise<void>((r) => setTimeout(() => r(), 0));
         }
       }
 
-      // Helpful for verifying color coverage without spamming logs.
+      // Log color statistics for debugging
       console.log('🎨 WebGPU proxy color stats', {
         modelId,
         mappedLocalIds: localIdToMaterialDef.size,
