@@ -444,6 +444,20 @@ export class IFCViewer {
   }
 
   /**
+   * Enable or disable WebGPU edge/outline rendering
+   */
+  public setWebGPUEdges(enabled: boolean): void {
+    this.webgpuRenderer?.setEdgesEnabled(enabled);
+  }
+
+  /**
+   * Set WebGPU edge detection threshold (in degrees)
+   */
+  public setWebGPUEdgeThreshold(degrees: number): void {
+    this.webgpuRenderer?.setEdgeThreshold(degrees);
+  }
+
+  /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
    */

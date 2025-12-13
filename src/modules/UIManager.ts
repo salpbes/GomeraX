@@ -570,6 +570,10 @@ export class UIManager {
     const shadowElevationSlider = document.getElementById('shadowElevationSlider') as HTMLInputElement;
     const shadowElevationValue = document.getElementById('shadowElevationValue');
     const groundPlaneToggle = document.getElementById('webgpuGroundPlaneToggle') as HTMLInputElement;
+    const edgesToggle = document.getElementById('webgpuEdgesToggle') as HTMLInputElement;
+    const edgeThresholdControl = document.getElementById('edgeThresholdControl');
+    const edgeThresholdSlider = document.getElementById('edgeThresholdSlider') as HTMLInputElement;
+    const edgeThresholdValue = document.getElementById('edgeThresholdValue');
     
     // Tone mapping change
     if (toneMappingSelect) {
@@ -617,6 +621,24 @@ export class UIManager {
     if (groundPlaneToggle) {
       groundPlaneToggle.addEventListener('change', () => {
         this.viewer?.setWebGPUGroundPlane(groundPlaneToggle.checked);
+      });
+    }
+    
+    // Edges toggle
+    if (edgesToggle && edgeThresholdControl) {
+      edgesToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPUEdges(edgesToggle.checked);
+        // Show/hide threshold slider
+        edgeThresholdControl.style.display = edgesToggle.checked ? 'block' : 'none';
+      });
+    }
+    
+    // Edge threshold slider
+    if (edgeThresholdSlider && edgeThresholdValue) {
+      edgeThresholdSlider.addEventListener('input', () => {
+        const value = parseInt(edgeThresholdSlider.value);
+        edgeThresholdValue.textContent = `${value}°`;
+        this.viewer?.setWebGPUEdgeThreshold(value);
       });
     }
   }

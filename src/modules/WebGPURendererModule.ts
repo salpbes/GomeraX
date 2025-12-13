@@ -130,6 +130,11 @@ export class WebGPURendererModule {
   private groundPlaneEnabled: boolean = true;
   private groundPlane: THREE.Mesh | null = null;
 
+  // Edge/outline rendering settings
+  private edgesEnabled: boolean = false;
+  private edgeLines: THREE.LineSegments[] = [];
+  private edgeThreshold: number = 15; // angle threshold in degrees
+
   constructor() {}
 
   /**
@@ -758,6 +763,124 @@ export class WebGPURendererModule {
    */
   public isShadowsEnabled(): boolean {
     return this.shadowsEnabled;
+  }
+
+  /**
+   * Enable or disable edge/outline rendering
+   */
+  public setEdgesEnabled(enabled: boolean): void {
+    this.edgesEnabled = enabled;
+    
+    if (enabled && this.proxyScene && this.edgeLines.length === 0) {
+      // Create edges if not already created
+      this.createEdges();
+    }
+    
+    // Toggle visibility of existing edge lines
+    for (const line of this.edgeLines) {
+      line.visible = enabled;
+    }
+    
+    console.log(`✏️ Edges ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current edge rendering state
+   */
+  public isEdgesEnabled(): boolean {
+    return this.edgesEnabled;
+  }
+
+  /**
+   * Set edge detection threshold angle (in degrees)
+   * Lower = more edges, Higher = fewer edges (only sharp angles)
+   */
+  public setEdgeThreshold(degrees: number): void {
+    this.edgeThreshold = Math.max(1, Math.min(90, degrees));
+    
+    // Recreate edges with new threshold if enabled
+    if (this.edgesEnabled && this.proxyScene) {
+      this.removeEdges();
+      this.createEdges();
+    }
+    
+    console.log(`✏️ Edge threshold set to ${this.edgeThreshold}°`);
+  }
+
+  /**
+   * Get current edge threshold
+   */
+  public getEdgeThreshold(): number {
+    return this.edgeThreshold;
+  }
+
+  /**
+   * Create edge lines for all meshes in the proxy scene
+   */
+  private createEdges(): void {
+    if (!this.proxyScene) return;
+    
+    const thresholdRadians = (this.edgeThreshold * Math.PI) / 180;
+    let edgeCount = 0;
+    
+    // Create a shared material for all edges
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: 0x000000,
+      linewidth: 1, // Note: linewidth > 1 only works on some platforms
+      transparent: true,
+      opacity: 0.8,
+    });
+    
+    this.proxyScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.geometry && obj.name !== 'webgpu-ground-plane') {
+        try {
+          // Create edges geometry from mesh geometry
+          const edgesGeometry = new THREE.EdgesGeometry(obj.geometry, thresholdRadians * (180 / Math.PI));
+          
+          if (edgesGeometry.attributes.position && edgesGeometry.attributes.position.count > 0) {
+            const lineSegments = new THREE.LineSegments(edgesGeometry, edgeMaterial);
+            
+            // Copy transform from the mesh
+            lineSegments.position.copy(obj.position);
+            lineSegments.rotation.copy(obj.rotation);
+            lineSegments.scale.copy(obj.scale);
+            lineSegments.matrix.copy(obj.matrix);
+            lineSegments.matrixWorld.copy(obj.matrixWorld);
+            lineSegments.matrixAutoUpdate = false;
+            
+            lineSegments.name = 'edge-line';
+            lineSegments.visible = this.edgesEnabled;
+            
+            // Add to same parent as mesh or to scene
+            if (obj.parent) {
+              obj.parent.add(lineSegments);
+            } else {
+              this.proxyScene!.add(lineSegments);
+            }
+            
+            this.edgeLines.push(lineSegments);
+            edgeCount++;
+          }
+        } catch (e) {
+          // Skip meshes that can't have edges computed
+        }
+      }
+    });
+    
+    console.log(`✏️ Created ${edgeCount} edge outlines`);
+  }
+
+  /**
+   * Remove all edge lines
+   */
+  private removeEdges(): void {
+    for (const line of this.edgeLines) {
+      if (line.parent) {
+        line.parent.remove(line);
+      }
+      line.geometry.dispose();
+    }
+    this.edgeLines = [];
   }
 
   /**

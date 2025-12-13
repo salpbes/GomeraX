@@ -368,6 +368,21 @@ export function createToolbarHTML(): string {
               <input type="checkbox" id="webgpuGroundPlaneToggle" checked>
               <span>Show Ground Plane</span>
             </label>
+            
+            <!-- Edge Rendering Toggle -->
+            <label class="checkbox-label" style="margin-top: 8px;">
+              <input type="checkbox" id="webgpuEdgesToggle">
+              <span>Show Edges/Outlines</span>
+            </label>
+            
+            <!-- Edge Threshold Slider -->
+            <div id="edgeThresholdControl" style="margin-top: 8px; display: none;">
+              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: rgba(255,255,255,0.6);">
+                <span>Edge Threshold:</span>
+                <span id="edgeThresholdValue">15°</span>
+              </label>
+              <input type="range" id="edgeThresholdSlider" min="5" max="45" step="5" value="15" style="width: 100%; cursor: pointer;">
+            </div>
           </div>
           
           <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 6px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
