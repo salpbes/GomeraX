@@ -135,6 +135,27 @@ export class WebGPURendererModule {
   private edgeLines: THREE.LineSegments[] = [];
   private edgeThreshold: number = 15; // angle threshold in degrees
 
+  // Performance stats settings
+  private statsEnabled: boolean = false;
+  private statsOverlay: HTMLDivElement | null = null;
+  private frameCount: number = 0;
+  private lastFpsUpdate: number = 0;
+  private fps: number = 0;
+  private frameTime: number = 0;
+  private lastFrameTime: number = 0;
+  private triangleCount: number = 0;
+  private vertexCount: number = 0;
+  private drawCalls: number = 0;
+  private meshCount: number = 0;
+  private lineCount: number = 0;
+  private lightCount: number = 0;
+  private geometryCount: number = 0;
+  private materialCount: number = 0;
+  private textureCount: number = 0;
+  private frameTimeHistory: number[] = [];
+  private currentToneMapping: number = 4; // ACESFilmic default
+  private gpuInfo: string = 'Unknown';
+
   constructor() {}
 
   /**
@@ -891,6 +912,7 @@ export class WebGPURendererModule {
   public setToneMapping(type: THREE.ToneMapping): void {
     if (this.webgpuRenderer) {
       this.webgpuRenderer.toneMapping = type;
+      this.currentToneMapping = type;
       console.log('🎨 Tone mapping set to:', this.getToneMappingName(type));
     }
   }
@@ -1907,6 +1929,9 @@ export class WebGPURendererModule {
 
       // Initialize the renderer (WebGPU requires async init)
       await this.webgpuRenderer.init();
+      
+      // Capture GPU info for stats
+      await this.captureGPUInfo();
 
       // Configure renderer
       const { width, height } = container.getBoundingClientRect();
@@ -2101,9 +2126,25 @@ export class WebGPURendererModule {
    * Start the WebGPU render loop
    */
   private startRenderLoop(): void {
-    const render = () => {
+    const render = (currentTime: number = 0) => {
       if (!this.isActive || !this.webgpuRenderer || !this.proxyScene || !this.camera) {
         return;
+      }
+
+      // Track frame time for stats
+      if (this.statsEnabled) {
+        const delta = currentTime - this.lastFrameTime;
+        this.lastFrameTime = currentTime;
+        this.frameTime = delta;
+        this.frameCount++;
+        
+        // Update FPS every 500ms
+        if (currentTime - this.lastFpsUpdate >= 500) {
+          this.fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFpsUpdate));
+          this.frameCount = 0;
+          this.lastFpsUpdate = currentTime;
+          this.updateStatsDisplay();
+        }
       }
 
       // Update camera world matrix before rendering.
@@ -2170,5 +2211,599 @@ export class WebGPURendererModule {
     if (this.webgpuRenderer && this.scene && this.camera) {
       this.webgpuRenderer.render(this.scene, this.camera);
     }
+  }
+
+  /**
+   * Enable or disable performance stats overlay
+   */
+  public setStatsEnabled(enabled: boolean): void {
+    this.statsEnabled = enabled;
+    
+    if (enabled) {
+      this.createStatsOverlay();
+      this.countSceneObjects();
+      this.lastFpsUpdate = performance.now();
+      this.lastFrameTime = performance.now();
+      this.frameCount = 0;
+    } else {
+      this.removeStatsOverlay();
+    }
+    
+    console.log(`📊 Stats ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current stats enabled state
+   */
+  public isStatsEnabled(): boolean {
+    return this.statsEnabled;
+  }
+
+  /**
+   * Create the stats overlay element
+   */
+  private createStatsOverlay(): void {
+    if (this.statsOverlay) return;
+    
+    this.statsOverlay = document.createElement('div');
+    this.statsOverlay.id = 'webgpu-stats-overlay';
+    this.statsOverlay.innerHTML = `
+      <div class="stats-header">📊 WebGPU Performance</div>
+      
+      <div class="stats-section-title">⚡ Timing</div>
+      <div class="stats-row">
+        <span class="stats-label">FPS:</span>
+        <span class="stats-value" id="stats-fps">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Frame Time:</span>
+        <span class="stats-value" id="stats-frametime">-- ms</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Avg Frame:</span>
+        <span class="stats-value" id="stats-avgframe">-- ms</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">🎨 Scene</div>
+      <div class="stats-row">
+        <span class="stats-label">Meshes:</span>
+        <span class="stats-value" id="stats-meshes">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Triangles:</span>
+        <span class="stats-value" id="stats-triangles">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Vertices:</span>
+        <span class="stats-value" id="stats-vertices">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Draw Calls:</span>
+        <span class="stats-value" id="stats-drawcalls">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Lines:</span>
+        <span class="stats-value" id="stats-lines">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Lights:</span>
+        <span class="stats-value" id="stats-lights">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">📦 Memory</div>
+      <div class="stats-row">
+        <span class="stats-label">Geometries:</span>
+        <span class="stats-value" id="stats-geometries">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Materials:</span>
+        <span class="stats-value" id="stats-materials">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Textures:</span>
+        <span class="stats-value" id="stats-textures">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">⚙️ Settings</div>
+      <div class="stats-row">
+        <span class="stats-label">Shadows:</span>
+        <span class="stats-value" id="stats-shadows">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Edges:</span>
+        <span class="stats-value" id="stats-edges">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Ground:</span>
+        <span class="stats-value" id="stats-ground">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Tone Map:</span>
+        <span class="stats-value" id="stats-tonemap">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">📷 Camera</div>
+      <div class="stats-row">
+        <span class="stats-label">Position:</span>
+        <span class="stats-value stats-small" id="stats-campos">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Distance:</span>
+        <span class="stats-value" id="stats-camdist">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-row">
+        <span class="stats-label">Renderer:</span>
+        <span class="stats-value stats-highlight" id="stats-renderer">WebGPU</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">GPU:</span>
+        <span class="stats-value stats-small" id="stats-gpu">--</span>
+      </div>
+    `;
+    
+    // Apply styles
+    Object.assign(this.statsOverlay.style, {
+      position: 'absolute',
+      top: '10px',
+      left: '10px',
+      background: 'rgba(0, 0, 0, 0.75)',
+      backdropFilter: 'blur(8px)',
+      color: '#fff',
+      padding: '12px 16px',
+      borderRadius: '10px',
+      fontFamily: 'Monaco, Consolas, monospace',
+      fontSize: '11px',
+      lineHeight: '1.6',
+      zIndex: '10000',
+      minWidth: '160px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      cursor: 'move',
+      userSelect: 'none',
+    });
+    
+    // Make draggable
+    this.makeStatsDraggable();
+    
+    // Style the header
+    const header = this.statsOverlay.querySelector('.stats-header') as HTMLElement;
+    if (header) {
+      Object.assign(header.style, {
+        fontWeight: 'bold',
+        fontSize: '12px',
+        marginBottom: '8px',
+        paddingBottom: '6px',
+        borderBottom: '1px solid rgba(255,255,255,0.2)',
+        color: '#69db7c',
+      });
+    }
+    
+    // Style the rows
+    const rows = this.statsOverlay.querySelectorAll('.stats-row');
+    rows.forEach(row => {
+      Object.assign((row as HTMLElement).style, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: '12px',
+      });
+    });
+    
+    // Style dividers
+    const dividers = this.statsOverlay.querySelectorAll('.stats-divider');
+    dividers.forEach(divider => {
+      Object.assign((divider as HTMLElement).style, {
+        height: '1px',
+        background: 'rgba(255,255,255,0.1)',
+        margin: '6px 0',
+      });
+    });
+    
+    // Style labels
+    const labels = this.statsOverlay.querySelectorAll('.stats-label');
+    labels.forEach(label => {
+      Object.assign((label as HTMLElement).style, {
+        color: 'rgba(255,255,255,0.6)',
+      });
+    });
+    
+    // Style values
+    const values = this.statsOverlay.querySelectorAll('.stats-value');
+    values.forEach(value => {
+      Object.assign((value as HTMLElement).style, {
+        color: '#fff',
+        fontWeight: '600',
+      });
+    });
+    
+    // Style section titles
+    const sectionTitles = this.statsOverlay.querySelectorAll('.stats-section-title');
+    sectionTitles.forEach(title => {
+      Object.assign((title as HTMLElement).style, {
+        fontSize: '10px',
+        fontWeight: '600',
+        color: '#69db7c',
+        marginTop: '4px',
+        marginBottom: '4px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+      });
+    });
+    
+    // Style small values
+    const smallValues = this.statsOverlay.querySelectorAll('.stats-small');
+    smallValues.forEach(val => {
+      Object.assign((val as HTMLElement).style, {
+        fontSize: '9px',
+        maxWidth: '90px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      });
+    });
+    
+    // Style highlighted values
+    const highlights = this.statsOverlay.querySelectorAll('.stats-highlight');
+    highlights.forEach(hl => {
+      Object.assign((hl as HTMLElement).style, {
+        color: '#69db7c',
+        fontWeight: '700',
+      });
+    });
+    
+    // Add to container
+    if (this.container) {
+      this.container.appendChild(this.statsOverlay);
+    } else {
+      document.body.appendChild(this.statsOverlay);
+    }
+  }
+
+  /**
+   * Remove the stats overlay
+   */
+  private removeStatsOverlay(): void {
+    if (this.statsOverlay) {
+      // Clean up drag handlers
+      if ((this.statsOverlay as any)._dragCleanup) {
+        (this.statsOverlay as any)._dragCleanup();
+      }
+      this.statsOverlay.remove();
+      this.statsOverlay = null;
+    }
+  }
+
+  /**
+   * Make the stats overlay draggable
+   */
+  private makeStatsDraggable(): void {
+    if (!this.statsOverlay) return;
+    
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    
+    const overlay = this.statsOverlay;
+    
+    const onMouseDown = (e: MouseEvent) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = overlay.getBoundingClientRect();
+      const parentRect = overlay.parentElement?.getBoundingClientRect() || { left: 0, top: 0 };
+      initialLeft = rect.left - parentRect.left;
+      initialTop = rect.top - parentRect.top;
+      
+      overlay.style.transition = 'none';
+      overlay.style.opacity = '0.9';
+      
+      e.preventDefault();
+    };
+    
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      let newLeft = initialLeft + deltaX;
+      let newTop = initialTop + deltaY;
+      
+      // Constrain to container bounds
+      const parent = overlay.parentElement;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        
+        const maxLeft = parentRect.width - overlayRect.width;
+        const maxTop = parentRect.height - overlayRect.height;
+        
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+      }
+      
+      overlay.style.left = `${newLeft}px`;
+      overlay.style.top = `${newTop}px`;
+    };
+    
+    const onMouseUp = () => {
+      if (isDragging) {
+        isDragging = false;
+        overlay.style.opacity = '1';
+      }
+    };
+    
+    overlay.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    
+    // Store cleanup function
+    (overlay as any)._dragCleanup = () => {
+      overlay.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }
+
+  /**
+   * Update the stats display with current values
+   */
+  private updateStatsDisplay(): void {
+    if (!this.statsOverlay) return;
+    
+    // Track frame time for average calculation
+    if (this.frameTime > 0) {
+      this.frameTimeHistory.push(this.frameTime);
+      if (this.frameTimeHistory.length > 60) {
+        this.frameTimeHistory.shift();
+      }
+    }
+    const avgFrameTime = this.frameTimeHistory.length > 0 
+      ? this.frameTimeHistory.reduce((a, b) => a + b, 0) / this.frameTimeHistory.length 
+      : 0;
+    
+    // Timing stats
+    const fpsEl = this.statsOverlay.querySelector('#stats-fps');
+    const frametimeEl = this.statsOverlay.querySelector('#stats-frametime');
+    const avgframeEl = this.statsOverlay.querySelector('#stats-avgframe');
+    
+    if (fpsEl) {
+      fpsEl.textContent = this.fps.toString();
+      // Color code FPS
+      (fpsEl as HTMLElement).style.color = this.fps >= 55 ? '#69db7c' : this.fps >= 30 ? '#fbbf24' : '#f87171';
+    }
+    
+    if (frametimeEl) {
+      frametimeEl.textContent = `${this.frameTime.toFixed(1)} ms`;
+    }
+    
+    if (avgframeEl) {
+      avgframeEl.textContent = `${avgFrameTime.toFixed(1)} ms`;
+    }
+    
+    // Scene stats
+    const meshesEl = this.statsOverlay.querySelector('#stats-meshes');
+    const trianglesEl = this.statsOverlay.querySelector('#stats-triangles');
+    const verticesEl = this.statsOverlay.querySelector('#stats-vertices');
+    const drawcallsEl = this.statsOverlay.querySelector('#stats-drawcalls');
+    const linesEl = this.statsOverlay.querySelector('#stats-lines');
+    const lightsEl = this.statsOverlay.querySelector('#stats-lights');
+    
+    if (meshesEl) {
+      meshesEl.textContent = this.formatNumber(this.meshCount);
+    }
+    
+    if (trianglesEl) {
+      trianglesEl.textContent = this.formatNumber(this.triangleCount);
+    }
+    
+    if (verticesEl) {
+      verticesEl.textContent = this.formatNumber(this.vertexCount);
+    }
+    
+    if (drawcallsEl) {
+      drawcallsEl.textContent = this.formatNumber(this.drawCalls);
+    }
+    
+    if (linesEl) {
+      linesEl.textContent = this.formatNumber(this.lineCount);
+    }
+    
+    if (lightsEl) {
+      lightsEl.textContent = this.lightCount.toString();
+    }
+    
+    // Memory stats
+    const geometriesEl = this.statsOverlay.querySelector('#stats-geometries');
+    const materialsEl = this.statsOverlay.querySelector('#stats-materials');
+    const texturesEl = this.statsOverlay.querySelector('#stats-textures');
+    
+    if (geometriesEl) {
+      geometriesEl.textContent = this.formatNumber(this.geometryCount);
+    }
+    
+    if (materialsEl) {
+      materialsEl.textContent = this.formatNumber(this.materialCount);
+    }
+    
+    if (texturesEl) {
+      texturesEl.textContent = this.textureCount.toString();
+    }
+    
+    // Settings stats
+    const shadowsEl = this.statsOverlay.querySelector('#stats-shadows');
+    const edgesEl = this.statsOverlay.querySelector('#stats-edges');
+    const groundEl = this.statsOverlay.querySelector('#stats-ground');
+    const tonemapEl = this.statsOverlay.querySelector('#stats-tonemap');
+    
+    if (shadowsEl) {
+      shadowsEl.textContent = this.shadowsEnabled ? 'ON' : 'OFF';
+      (shadowsEl as HTMLElement).style.color = this.shadowsEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (edgesEl) {
+      edgesEl.textContent = this.edgesEnabled ? 'ON' : 'OFF';
+      (edgesEl as HTMLElement).style.color = this.edgesEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (groundEl) {
+      groundEl.textContent = this.groundPlaneEnabled ? 'ON' : 'OFF';
+      (groundEl as HTMLElement).style.color = this.groundPlaneEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (tonemapEl) {
+      tonemapEl.textContent = this.getToneMappingName(this.currentToneMapping as THREE.ToneMapping);
+    }
+    
+    // Camera stats
+    const camposEl = this.statsOverlay.querySelector('#stats-campos');
+    const camdistEl = this.statsOverlay.querySelector('#stats-camdist');
+    
+    if (this.camera && camposEl) {
+      const pos = this.camera.position;
+      camposEl.textContent = `${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}`;
+    }
+    
+    if (this.camera && camdistEl) {
+      const dist = this.camera.position.distanceTo(this.sceneCenter);
+      camdistEl.textContent = `${dist.toFixed(1)}m`;
+    }
+    
+    // GPU info
+    const gpuEl = this.statsOverlay.querySelector('#stats-gpu');
+    if (gpuEl) {
+      gpuEl.textContent = this.gpuInfo;
+    }
+  }
+
+  /**
+   * Capture GPU information from WebGPU adapter
+   */
+  private async captureGPUInfo(): Promise<void> {
+    try {
+      const nav = navigator as any;
+      if (nav.gpu) {
+        const adapter = await nav.gpu.requestAdapter();
+        if (adapter) {
+          // Try to get adapter info
+          if (adapter.requestAdapterInfo) {
+            const info = await adapter.requestAdapterInfo();
+            const vendor = info.vendor || '';
+            const device = info.device || '';
+            const arch = info.architecture || '';
+            const desc = info.description || '';
+            
+            // Build a readable GPU name
+            if (desc) {
+              this.gpuInfo = desc;
+            } else if (device) {
+              this.gpuInfo = `${vendor} ${device}`.trim();
+            } else if (arch) {
+              this.gpuInfo = `${vendor} ${arch}`.trim();
+            } else if (vendor) {
+              this.gpuInfo = vendor;
+            } else {
+              this.gpuInfo = 'WebGPU Adapter';
+            }
+            
+            console.log('🎮 GPU detected:', this.gpuInfo);
+          } else {
+            // Fallback: try info property directly
+            const info = adapter.info;
+            if (info) {
+              this.gpuInfo = `${info.vendor || ''} ${info.device || info.architecture || ''}`.trim() || 'WebGPU Adapter';
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not get GPU info:', e);
+      this.gpuInfo = 'WebGPU Adapter';
+    }
+  }
+
+  /**
+   * Count objects in the scene for stats
+   */
+  private countSceneObjects(): void {
+    if (!this.proxyScene) return;
+    
+    this.meshCount = 0;
+    this.triangleCount = 0;
+    this.vertexCount = 0;
+    this.drawCalls = 0;
+    this.lineCount = 0;
+    this.lightCount = 0;
+    
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    const textures = new Set<THREE.Texture>();
+    
+    this.proxyScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        this.meshCount++;
+        this.drawCalls++;
+        
+        const geometry = obj.geometry;
+        if (geometry) {
+          geometries.add(geometry);
+          const index = geometry.index;
+          const position = geometry.attributes.position;
+          
+          if (index) {
+            this.triangleCount += Math.floor(index.count / 3);
+          } else if (position) {
+            this.triangleCount += Math.floor(position.count / 3);
+          }
+          
+          if (position) {
+            this.vertexCount += position.count;
+          }
+        }
+        
+        // Count materials and textures
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach(mat => {
+          if (mat) {
+            materials.add(mat);
+            // Check for textures
+            if ((mat as any).map) textures.add((mat as any).map);
+            if ((mat as any).normalMap) textures.add((mat as any).normalMap);
+            if ((mat as any).roughnessMap) textures.add((mat as any).roughnessMap);
+            if ((mat as any).metalnessMap) textures.add((mat as any).metalnessMap);
+            if ((mat as any).aoMap) textures.add((mat as any).aoMap);
+          }
+        });
+        
+      } else if (obj instanceof THREE.LineSegments || obj instanceof THREE.Line) {
+        this.lineCount++;
+        this.drawCalls++;
+      } else if (obj instanceof THREE.Light) {
+        this.lightCount++;
+      }
+    });
+    
+    this.geometryCount = geometries.size;
+    this.materialCount = materials.size;
+    this.textureCount = textures.size;
+  }
+
+  /**
+   * Format large numbers with K/M suffix
+   */
+  private formatNumber(num: number): string {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
   }
 }

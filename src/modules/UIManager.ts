@@ -574,6 +574,7 @@ export class UIManager {
     const edgeThresholdControl = document.getElementById('edgeThresholdControl');
     const edgeThresholdSlider = document.getElementById('edgeThresholdSlider') as HTMLInputElement;
     const edgeThresholdValue = document.getElementById('edgeThresholdValue');
+    const statsToggle = document.getElementById('webgpuStatsToggle') as HTMLInputElement;
     
     // Tone mapping change
     if (toneMappingSelect) {
@@ -639,6 +640,13 @@ export class UIManager {
         const value = parseInt(edgeThresholdSlider.value);
         edgeThresholdValue.textContent = `${value}°`;
         this.viewer?.setWebGPUEdgeThreshold(value);
+      });
+    }
+    
+    // Stats toggle
+    if (statsToggle) {
+      statsToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPUStats(statsToggle.checked);
       });
     }
   }

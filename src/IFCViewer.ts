@@ -458,6 +458,13 @@ export class IFCViewer {
   }
 
   /**
+   * Enable or disable WebGPU performance stats overlay
+   */
+  public setWebGPUStats(enabled: boolean): void {
+    this.webgpuRenderer?.setStatsEnabled(enabled);
+  }
+
+  /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
    */

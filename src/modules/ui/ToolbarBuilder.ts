@@ -361,6 +361,16 @@ export function createToolbarHTML(): string {
                   <input type="range" id="edgeThresholdSlider" min="5" max="45" step="5" value="15">
                 </div>
               </div>
+              
+              <!-- Stats Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">📊 Performance</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuStatsToggle">
+                  <span>Show Stats Overlay</span>
+                </label>
+              </div>
             </div>
             
             <div class="webgpu-warning">
