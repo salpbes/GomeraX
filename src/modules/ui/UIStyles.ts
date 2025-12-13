@@ -492,6 +492,180 @@ export function getToolbarStyles(): string {
       box-shadow: 0 0 12px rgba(102, 126, 234, 0.8);
     }
     
+    /* WebGPU Submenu Styles */
+    .webgpu-submenu {
+      min-width: 280px !important;
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 0 !important;
+    }
+    
+    .webgpu-submenu::-webkit-scrollbar {
+      width: 5px;
+    }
+    
+    .webgpu-submenu::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 3px;
+    }
+    
+    .webgpu-submenu::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 3px;
+    }
+    
+    .webgpu-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, rgba(105, 219, 124, 0.2) 0%, rgba(40, 40, 70, 0.95) 100%);
+      border-bottom: 1px solid rgba(105, 219, 124, 0.3);
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+    }
+    
+    .webgpu-panel-header .experimental-badge {
+      margin-left: auto;
+      font-size: 9px;
+      padding: 2px 6px;
+      background: rgba(255, 193, 7, 0.3);
+      color: #ffc107;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    
+    .webgpu-panel-content {
+      padding: 12px 16px;
+    }
+    
+    .webgpu-main-toggle {
+      margin-bottom: 10px;
+    }
+    
+    .webgpu-status {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+    
+    .webgpu-options {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 12px;
+      margin-top: 8px;
+    }
+    
+    .webgpu-section {
+      margin-bottom: 14px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+    }
+    
+    .webgpu-section-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .webgpu-control {
+      margin-bottom: 10px;
+    }
+    
+    .webgpu-control:last-child {
+      margin-bottom: 0;
+    }
+    
+    .webgpu-control label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    
+    .webgpu-control select {
+      width: 100%;
+      padding: 5px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.3);
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    
+    .webgpu-control select:hover {
+      border-color: rgba(105, 219, 124, 0.5);
+    }
+    
+    .webgpu-control input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    
+    .webgpu-control input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #69db7c;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .webgpu-control input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #69db7c;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .webgpu-warning {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.4);
+      margin-top: 8px;
+      line-height: 1.4;
+      text-align: center;
+    }
+    
+    /* WebGPU checkbox labels - white text */
+    .webgpu-submenu .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 6px 0;
+      color: #ffffff;
+    }
+    
+    .webgpu-submenu .checkbox-label span {
+      color: #ffffff;
+      font-size: 12px;
+    }
+    
+    .webgpu-submenu .checkbox-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #69db7c;
+    }
+
     .settings-panel {
       position: absolute;
       bottom: 80px;

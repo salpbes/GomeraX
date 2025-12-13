@@ -254,6 +254,121 @@ export function createToolbarHTML(): string {
       <button class="toolbar-btn" data-action="settings" title="Settings">
         <span class="icon"><i class="fas fa-cog"></i></span>
       </button>
+      
+      <!-- WebGPU Renderer Group (expandable) -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleWebGPUPanel" title="WebGPU Renderer (Experimental)" id="webgpuMainBtn">
+          <span class="icon"><i class="fas fa-microchip"></i></span>
+        </button>
+        <div class="toolbar-submenu webgpu-submenu" id="webgpuSubmenu">
+          <div class="webgpu-panel-header">
+            <i class="fas fa-microchip" style="color: #69db7c;"></i>
+            <span>WebGPU Renderer</span>
+            <span class="experimental-badge">Experimental</span>
+          </div>
+          
+          <div class="webgpu-panel-content">
+            <!-- Enable WebGPU Toggle -->
+            <label class="checkbox-label webgpu-main-toggle">
+              <input type="checkbox" id="webgpuToggle">
+              <span>Enable WebGPU</span>
+            </label>
+            
+            <div id="webgpuStatus" class="webgpu-status">
+              <span id="webgpuStatusIcon">⏳</span> <span id="webgpuStatusText">Checking...</span>
+            </div>
+            
+            <!-- WebGPU Options (shown when WebGPU is active) -->
+            <div id="webgpuOptions" class="webgpu-options" style="display: none;">
+              
+              <!-- Lighting Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">☀️ Lighting</div>
+                
+                <!-- Tone Mapping -->
+                <div class="webgpu-control">
+                  <label>Tone Mapping:</label>
+                  <select id="toneMappingSelect">
+                    <option value="0">None</option>
+                    <option value="1">Linear</option>
+                    <option value="2">Reinhard</option>
+                    <option value="3">Cineon</option>
+                    <option value="4" selected>ACES Filmic</option>
+                    <option value="6">AgX</option>
+                    <option value="7">Neutral</option>
+                  </select>
+                </div>
+                
+                <!-- Exposure -->
+                <div class="webgpu-control">
+                  <label>
+                    <span>Exposure:</span>
+                    <span id="exposureValue">1.0</span>
+                  </label>
+                  <input type="range" id="exposureSlider" min="0.1" max="3" step="0.1" value="1">
+                </div>
+              </div>
+              
+              <!-- Shadows Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">🌒 Shadows</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuShadowsToggle" checked>
+                  <span>Enable Shadows</span>
+                </label>
+                
+                <!-- Shadow Angle -->
+                <div class="webgpu-control">
+                  <label>
+                    <span>Sun Angle:</span>
+                    <span id="shadowAngleValue">45°</span>
+                  </label>
+                  <input type="range" id="shadowAngleSlider" min="0" max="360" step="5" value="45">
+                </div>
+                
+                <!-- Shadow Elevation -->
+                <div class="webgpu-control">
+                  <label>
+                    <span>Sun Height:</span>
+                    <span id="shadowElevationValue">45°</span>
+                  </label>
+                  <input type="range" id="shadowElevationSlider" min="10" max="90" step="5" value="45">
+                </div>
+                
+                <!-- Ground Plane Toggle -->
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuGroundPlaneToggle" checked>
+                  <span>Show Ground Plane</span>
+                </label>
+              </div>
+              
+              <!-- Edges Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">✏️ Edges</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuEdgesToggle">
+                  <span>Show Edges/Outlines</span>
+                </label>
+                
+                <!-- Edge Threshold Slider -->
+                <div id="edgeThresholdControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Edge Threshold:</span>
+                    <span id="edgeThresholdValue">15°</span>
+                  </label>
+                  <input type="range" id="edgeThresholdSlider" min="5" max="45" step="5" value="15">
+                </div>
+              </div>
+            </div>
+            
+            <div class="webgpu-warning">
+              ⚠️ Disables post-processing (AO, outlines)
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- Settings Panel (hidden by default) -->
@@ -294,100 +409,6 @@ export function createToolbarHTML(): string {
             <option value="4" selected>Realistic (Shadows)</option>
             <option value="5">Full (Color+Pen+Shadows)</option>
           </select>
-        </div>
-        
-        <!-- WebGPU Experimental Settings -->
-        <div class="settings-group" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.15);">
-          <h4 style="margin: 0 0 12px 0; font-size: 13px; color: rgba(255,255,255,0.9); display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-microchip" style="color: #69db7c;"></i>
-            Renderer (Experimental)
-          </h4>
-          
-          <label class="checkbox-label">
-            <input type="checkbox" id="webgpuToggle">
-            <span>Enable WebGPU</span>
-          </label>
-          
-          <div id="webgpuStatus" style="font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
-            <span id="webgpuStatusIcon">⏳</span> <span id="webgpuStatusText">Checking...</span>
-          </div>
-          
-          <!-- WebGPU Options (shown when WebGPU is active) -->
-          <div id="webgpuOptions" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <!-- Tone Mapping -->
-            <div style="margin-bottom: 10px;">
-              <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-                Tone Mapping:
-              </label>
-              <select id="toneMappingSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
-                <option value="0">None</option>
-                <option value="1">Linear</option>
-                <option value="2">Reinhard</option>
-                <option value="3">Cineon</option>
-                <option value="4" selected>ACES Filmic</option>
-                <option value="6">AgX</option>
-                <option value="7">Neutral</option>
-              </select>
-            </div>
-            
-            <!-- Exposure -->
-            <div style="margin-bottom: 10px;">
-              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-                <span>Exposure:</span>
-                <span id="exposureValue">1.0</span>
-              </label>
-              <input type="range" id="exposureSlider" min="0.1" max="3" step="0.1" value="1" style="width: 100%; cursor: pointer;">
-            </div>
-            
-            <!-- Shadows Toggle -->
-            <label class="checkbox-label" style="margin-top: 8px;">
-              <input type="checkbox" id="webgpuShadowsToggle" checked>
-              <span>Enable Shadows</span>
-            </label>
-            
-            <!-- Shadow Angle -->
-            <div style="margin-top: 10px;">
-              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-                <span>Sun Angle:</span>
-                <span id="shadowAngleValue">45°</span>
-              </label>
-              <input type="range" id="shadowAngleSlider" min="0" max="360" step="5" value="45" style="width: 100%; cursor: pointer;">
-            </div>
-            
-            <!-- Shadow Elevation -->
-            <div style="margin-top: 10px;">
-              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
-                <span>Sun Height:</span>
-                <span id="shadowElevationValue">45°</span>
-              </label>
-              <input type="range" id="shadowElevationSlider" min="10" max="90" step="5" value="45" style="width: 100%; cursor: pointer;">
-            </div>
-            
-            <!-- Ground Plane Toggle -->
-            <label class="checkbox-label" style="margin-top: 8px;">
-              <input type="checkbox" id="webgpuGroundPlaneToggle" checked>
-              <span>Show Ground Plane</span>
-            </label>
-            
-            <!-- Edge Rendering Toggle -->
-            <label class="checkbox-label" style="margin-top: 8px;">
-              <input type="checkbox" id="webgpuEdgesToggle">
-              <span>Show Edges/Outlines</span>
-            </label>
-            
-            <!-- Edge Threshold Slider -->
-            <div id="edgeThresholdControl" style="margin-top: 8px; display: none;">
-              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: rgba(255,255,255,0.6);">
-                <span>Edge Threshold:</span>
-                <span id="edgeThresholdValue">15°</span>
-              </label>
-              <input type="range" id="edgeThresholdSlider" min="5" max="45" step="5" value="15" style="width: 100%; cursor: pointer;">
-            </div>
-          </div>
-          
-          <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 6px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
-            ⚠️ Disables post-processing (AO, outlines)
-          </div>
         </div>
         
         <!-- Section Cut Settings Group -->

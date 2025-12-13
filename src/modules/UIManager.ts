@@ -291,7 +291,7 @@ export class UIManager {
         const action = (e.currentTarget as HTMLElement).dataset.action;
         
         // Handle expandable groups (show submenu without triggering action)
-        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleExport') {
+        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleExport' || action === 'toggleWebGPUPanel') {
           const group = (e.currentTarget as HTMLElement).closest('.toolbar-group');
           if (group) {
             this.toggleSubmenu(group);
