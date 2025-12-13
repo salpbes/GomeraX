@@ -118,6 +118,18 @@ export class WebGPURendererModule {
   private onBeforeRenderBackup = new Map<string, THREE.Object3D['onBeforeRender']>();
   private onAfterRenderBackup = new Map<string, THREE.Object3D['onAfterRender']>();
 
+  // Shadow settings
+  private shadowsEnabled: boolean = true;
+  private shadowLight: THREE.DirectionalLight | null = null;
+  private shadowAngle: number = 45; // degrees (0-360)
+  private shadowElevation: number = 45; // degrees (10-90)
+  private sceneCenter: THREE.Vector3 = new THREE.Vector3();
+  private sceneMaxDim: number = 100;
+
+  // Ground plane settings
+  private groundPlaneEnabled: boolean = true;
+  private groundPlane: THREE.Mesh | null = null;
+
   constructor() {}
 
   /**
@@ -496,6 +508,305 @@ export class WebGPURendererModule {
   }
 
   /**
+   * Setup a directional light optimized for shadow casting.
+   * The shadow camera is configured to cover the model's bounding box.
+   */
+  private setupShadowLight(scene: THREE.Scene): void {
+    // Create shadow-casting directional light
+    const shadowLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    shadowLight.name = 'webgpu-shadow-light';
+    
+    // Position light at an angle for nice shadows
+    shadowLight.position.set(50, 100, 50);
+    shadowLight.target.position.set(0, 0, 0);
+    
+    if (this.shadowsEnabled) {
+      shadowLight.castShadow = true;
+      
+      // Shadow map size - higher = sharper shadows but more expensive
+      shadowLight.shadow.mapSize.width = 2048;
+      shadowLight.shadow.mapSize.height = 2048;
+      
+      // Shadow camera frustum - will be adjusted to fit the scene
+      const shadowCam = shadowLight.shadow.camera;
+      shadowCam.left = -100;
+      shadowCam.right = 100;
+      shadowCam.top = 100;
+      shadowCam.bottom = -100;
+      shadowCam.near = 1;
+      shadowCam.far = 500;
+      
+      // Reduce shadow artifacts
+      shadowLight.shadow.bias = -0.0005;
+      shadowLight.shadow.normalBias = 0.02;
+    }
+    
+    scene.add(shadowLight);
+    scene.add(shadowLight.target);
+    this.shadowLight = shadowLight;
+  }
+
+  /**
+   * Update shadow camera to fit the current scene bounds.
+   * Also sets up the ground plane.
+   * Call this after the proxy scene is fully built.
+   */
+  public updateShadowBounds(): void {
+    if (!this.proxyScene) return;
+    
+    // Ensure all world matrices are up to date
+    this.proxyScene.updateMatrixWorld(true);
+    
+    // Calculate scene bounding box (excluding ground plane)
+    const box = new THREE.Box3();
+    this.proxyScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.geometry && obj.name !== 'webgpu-ground-plane') {
+        obj.geometry.computeBoundingBox();
+        if (obj.geometry.boundingBox) {
+          const meshBox = obj.geometry.boundingBox.clone();
+          meshBox.applyMatrix4(obj.matrixWorld);
+          box.union(meshBox);
+        }
+      }
+    });
+    
+    if (box.isEmpty()) return;
+    
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    
+    console.log('📦 Bounding box:', {
+      min: box.min.toArray().map(v => v.toFixed(1)),
+      max: box.max.toArray().map(v => v.toFixed(1)),
+      center: center.toArray().map(v => v.toFixed(1)),
+    });
+    
+    // Store scene bounds for shadow angle updates
+    this.sceneCenter.copy(center);
+    this.sceneMaxDim = maxDim;
+    
+    // Update shadow light if available
+    if (this.shadowLight) {
+      // Adjust shadow camera to fit scene
+      const shadowCam = this.shadowLight.shadow.camera;
+      const padding = maxDim * 0.5;
+      shadowCam.left = -maxDim - padding;
+      shadowCam.right = maxDim + padding;
+      shadowCam.top = maxDim + padding;
+      shadowCam.bottom = -maxDim - padding;
+      shadowCam.near = 1;
+      shadowCam.far = maxDim * 4;
+      shadowCam.updateProjectionMatrix();
+      
+      // Position light based on current angle settings
+      this.updateShadowLightPosition();
+    }
+    
+    // Setup ground plane
+    this.setupGroundPlane(this.proxyScene, box);
+    
+    console.log('🌤️ Shadow bounds updated:', {
+      center: center.toArray().map(v => v.toFixed(1)),
+      size: size.toArray().map(v => v.toFixed(1)),
+      maxDim: maxDim.toFixed(1)
+    });
+  }
+
+  /**
+   * Setup a ground plane that receives shadows.
+   * Positioned below the model based on its bounding box.
+   */
+  private setupGroundPlane(scene: THREE.Scene, boundingBox: THREE.Box3): void {
+    if (!this.groundPlaneEnabled) return;
+    
+    // Remove existing ground plane if any
+    if (this.groundPlane) {
+      scene.remove(this.groundPlane);
+      this.groundPlane.geometry.dispose();
+      (this.groundPlane.material as THREE.Material).dispose();
+      this.groundPlane = null;
+    }
+    
+    const center = boundingBox.getCenter(new THREE.Vector3());
+    const size = boundingBox.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.z) * 2; // Make it larger than the model
+    
+    // Create ground plane geometry
+    const geometry = new THREE.PlaneGeometry(maxDim, maxDim);
+    
+    // Use MeshStandardMaterial for WebGPU compatibility
+    // ShadowMaterial is not compatible with WebGPU
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x909090,
+      roughness: 0.9,
+      metalness: 0,
+      side: THREE.DoubleSide,
+    });
+    
+    this.groundPlane = new THREE.Mesh(geometry, material);
+    this.groundPlane.name = 'webgpu-ground-plane';
+    
+    // Rotate to be horizontal (PlaneGeometry is vertical by default)
+    this.groundPlane.rotation.x = -Math.PI / 2;
+    
+    // Position slightly below ground level to avoid z-fighting with floor elements
+    this.groundPlane.position.set(center.x, -0.5, center.z);
+    
+    // Only receive shadows, don't cast
+    this.groundPlane.receiveShadow = true;
+    this.groundPlane.castShadow = false;
+    
+    scene.add(this.groundPlane);
+    
+    console.log('🏗️ Ground plane added:', {
+      position: `(${center.x.toFixed(1)}, -0.5, ${center.z.toFixed(1)})`,
+      size: maxDim.toFixed(1)
+    });
+  }
+
+  /**
+   * Enable or disable ground plane at runtime
+   */
+  public setGroundPlaneEnabled(enabled: boolean): void {
+    this.groundPlaneEnabled = enabled;
+    
+    if (this.groundPlane) {
+      this.groundPlane.visible = enabled;
+    }
+    
+    console.log(`🏗️ Ground plane ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current ground plane state
+   */
+  public isGroundPlaneEnabled(): boolean {
+    return this.groundPlaneEnabled;
+  }
+
+  /**
+   * Enable or disable shadows at runtime
+   */
+  public setShadowsEnabled(enabled: boolean): void {
+    this.shadowsEnabled = enabled;
+    
+    // Simply toggle the shadow light - no need to update every mesh
+    // The renderer will handle the rest
+    if (this.shadowLight) {
+      this.shadowLight.castShadow = enabled;
+      this.shadowLight.visible = enabled;
+    }
+    
+    console.log(`🌤️ Shadows ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Set shadow light angle (horizontal rotation around the model)
+   * @param angle - Angle in degrees (0-360). 0=North, 90=East, 180=South, 270=West
+   */
+  public setShadowAngle(angle: number): void {
+    this.shadowAngle = angle % 360;
+    this.updateShadowLightPosition();
+  }
+
+  /**
+   * Get current shadow angle
+   */
+  public getShadowAngle(): number {
+    return this.shadowAngle;
+  }
+
+  /**
+   * Set shadow light elevation (vertical angle)
+   * @param elevation - Angle in degrees (10-90). Higher = more overhead sun
+   */
+  public setShadowElevation(elevation: number): void {
+    this.shadowElevation = Math.max(10, Math.min(90, elevation));
+    this.updateShadowLightPosition();
+  }
+
+  /**
+   * Get current shadow elevation
+   */
+  public getShadowElevation(): number {
+    return this.shadowElevation;
+  }
+
+  /**
+   * Update shadow light position based on angle and elevation
+   */
+  private updateShadowLightPosition(): void {
+    if (!this.shadowLight) return;
+    
+    const angleRad = (this.shadowAngle * Math.PI) / 180;
+    const elevRad = (this.shadowElevation * Math.PI) / 180;
+    const distance = this.sceneMaxDim * 1.5;
+    
+    // Calculate position using spherical coordinates
+    const x = this.sceneCenter.x + distance * Math.cos(elevRad) * Math.sin(angleRad);
+    const y = this.sceneCenter.y + distance * Math.sin(elevRad);
+    const z = this.sceneCenter.z + distance * Math.cos(elevRad) * Math.cos(angleRad);
+    
+    this.shadowLight.position.set(x, y, z);
+    this.shadowLight.target.position.copy(this.sceneCenter);
+    this.shadowLight.target.updateMatrixWorld();
+  }
+
+  /**
+   * Get current shadow state
+   */
+  public isShadowsEnabled(): boolean {
+    return this.shadowsEnabled;
+  }
+
+  /**
+   * Set tone mapping type
+   * Options: NoToneMapping, LinearToneMapping, ReinhardToneMapping, 
+   *          CineonToneMapping, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping
+   */
+  public setToneMapping(type: THREE.ToneMapping): void {
+    if (this.webgpuRenderer) {
+      this.webgpuRenderer.toneMapping = type;
+      console.log('🎨 Tone mapping set to:', this.getToneMappingName(type));
+    }
+  }
+
+  /**
+   * Set exposure level for tone mapping (default 1.0)
+   * Higher = brighter, Lower = darker
+   */
+  public setExposure(value: number): void {
+    if (this.webgpuRenderer) {
+      this.webgpuRenderer.toneMappingExposure = value;
+      console.log('🎨 Exposure set to:', value.toFixed(2));
+    }
+  }
+
+  /**
+   * Get current exposure value
+   */
+  public getExposure(): number {
+    return this.webgpuRenderer?.toneMappingExposure ?? 1.0;
+  }
+
+  /**
+   * Get readable name for tone mapping type
+   */
+  private getToneMappingName(type: THREE.ToneMapping): string {
+    switch (type) {
+      case THREE.NoToneMapping: return 'None';
+      case THREE.LinearToneMapping: return 'Linear';
+      case THREE.ReinhardToneMapping: return 'Reinhard';
+      case THREE.CineonToneMapping: return 'Cineon';
+      case THREE.ACESFilmicToneMapping: return 'ACES Filmic';
+      case THREE.AgXToneMapping: return 'AgX';
+      case THREE.NeutralToneMapping: return 'Neutral';
+      default: return 'Unknown';
+    }
+  }
+
+  /**
    * Try to clone fragment meshes directly from the original scene, preserving
    * the actual rendered materials/colors. This produces exact visual parity with WebGL.
    */
@@ -507,12 +818,14 @@ export class WebGPURendererModule {
     const bg = originalScene.background as any;
     proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
 
-    // Copy lights
+    // Copy lights (but we'll add our own shadow light)
     let copiedLights = 0;
     originalScene.traverse((obj) => {
       if ((obj as any).isLight) {
         try {
           const light = obj.clone(true) as THREE.Light;
+          // Disable shadows on copied lights - we use our own shadow light
+          (light as any).castShadow = false;
           proxy.add(light);
           if ((light as any).isDirectionalLight && (light as any).target) {
             proxy.add((light as any).target);
@@ -522,12 +835,11 @@ export class WebGPURendererModule {
       }
     });
 
-    if (copiedLights === 0) {
-      proxy.add(new THREE.AmbientLight(0xffffff, 0.7));
-      const dir = new THREE.DirectionalLight(0xffffff, 0.7);
-      dir.position.set(1, 1, 1);
-      proxy.add(dir);
-    }
+    // Always add ambient light for fill
+    proxy.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    // Add shadow-casting directional light
+    this.setupShadowLight(proxy);
 
     const root = new THREE.Group();
     root.name = 'webgpu-fragments-cloned';
@@ -676,6 +988,8 @@ export class WebGPURendererModule {
         newMesh.applyMatrix4(localMatrix);
 
         newMesh.frustumCulled = false;
+        newMesh.castShadow = this.shadowsEnabled;
+        newMesh.receiveShadow = this.shadowsEnabled;
         modelGroup.add(newMesh);
         this.createdGeometries.push(newGeo);
         clonedMeshes++;
@@ -691,6 +1005,10 @@ export class WebGPURendererModule {
 
     this.proxyScene = proxy;
     this.proxySceneKind = 'fragments';
+    
+    // Adjust shadow camera to fit the model
+    this.updateShadowBounds();
+    
     return true;
   }
 
@@ -752,6 +1070,8 @@ export class WebGPURendererModule {
       if ((obj as any).isLight) {
         try {
           const light = obj.clone(true) as THREE.Light;
+          // Disable shadows on copied lights - we use our own shadow light
+          (light as any).castShadow = false;
           proxy.add(light);
 
           // DirectionalLight has a target object that must be in the scene.
@@ -766,13 +1086,11 @@ export class WebGPURendererModule {
       }
     });
 
-    if (copiedLights === 0) {
-      // Fallback: add basic lighting if original scene has no lights
-      proxy.add(new THREE.AmbientLight(0xffffff, 0.7));
-      const dir = new THREE.DirectionalLight(0xffffff, 0.7);
-      dir.position.set(1, 1, 1);
-      proxy.add(dir);
-    }
+    // Always add ambient light for fill
+    proxy.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    // Add shadow-casting directional light
+    this.setupShadowLight(proxy);
 
     const root = new THREE.Group();
     root.name = 'webgpu-fragments-proxy';
@@ -1307,6 +1625,10 @@ export class WebGPURendererModule {
           // Create mesh with the resolved material
           const mesh = new THREE.Mesh(geometry, materialForMesh);
           
+          // Enable shadows
+          mesh.castShadow = this.shadowsEnabled;
+          mesh.receiveShadow = this.shadowsEnabled;
+          
           // Apply transform from IFC (position, rotation, scale)
           if (meshData.transform) {
             mesh.applyMatrix4(meshData.transform);
@@ -1348,6 +1670,9 @@ export class WebGPURendererModule {
 
     this.proxyScene = proxy;
     this.proxySceneKind = 'fragments';
+
+    // Adjust shadow camera to fit the model
+    this.updateShadowBounds();
 
     return true;
   }
@@ -1465,6 +1790,17 @@ export class WebGPURendererModule {
       this.webgpuRenderer.setSize(width, height);
       this.webgpuRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.webgpuRenderer.setClearColor(new THREE.Color(0xd1dee9), 1);
+
+      // Tone mapping for better color/brightness balance
+      // ACES Filmic gives a cinematic look with natural highlights
+      this.webgpuRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.webgpuRenderer.toneMappingExposure = 1.0;
+
+      // Enable shadow mapping
+      if (this.shadowsEnabled) {
+        this.webgpuRenderer.shadowMap.enabled = true;
+        this.webgpuRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
       
       // Create proxy scene with compatible materials
       await this.createProxyScene(this.scene);
@@ -1646,6 +1982,11 @@ export class WebGPURendererModule {
       if (!this.isActive || !this.webgpuRenderer || !this.proxyScene || !this.camera) {
         return;
       }
+
+      // Update camera world matrix before rendering.
+      // OrbitControls modifies camera position/rotation, but we need to
+      // ensure the world matrix is current for accurate rendering.
+      this.camera.updateMatrixWorld();
 
       // Render the proxy scene
       try {

@@ -398,6 +398,52 @@ export class IFCViewer {
   }
 
   /**
+   * Set WebGPU tone mapping type
+   * @param type - THREE.ToneMapping value (0=None, 1=Linear, 2=Reinhard, 3=Cineon, 4=ACESFilmic, 6=AgX, 7=Neutral)
+   */
+  public setWebGPUToneMapping(type: number): void {
+    this.webgpuRenderer?.setToneMapping(type);
+  }
+
+  /**
+   * Set WebGPU exposure level
+   * @param value - Exposure value (default 1.0, range 0.1-3.0)
+   */
+  public setWebGPUExposure(value: number): void {
+    this.webgpuRenderer?.setExposure(value);
+  }
+
+  /**
+   * Enable or disable WebGPU shadows
+   */
+  public setWebGPUShadows(enabled: boolean): void {
+    this.webgpuRenderer?.setShadowsEnabled(enabled);
+  }
+
+  /**
+   * Set WebGPU shadow angle (sun direction)
+   * @param angle - Angle in degrees (0-360). 0=North, 90=East, 180=South, 270=West
+   */
+  public setWebGPUShadowAngle(angle: number): void {
+    this.webgpuRenderer?.setShadowAngle(angle);
+  }
+
+  /**
+   * Set WebGPU shadow elevation (sun height)
+   * @param elevation - Angle in degrees (10-90). Higher = more overhead
+   */
+  public setWebGPUShadowElevation(elevation: number): void {
+    this.webgpuRenderer?.setShadowElevation(elevation);
+  }
+
+  /**
+   * Enable or disable WebGPU ground plane
+   */
+  public setWebGPUGroundPlane(enabled: boolean): void {
+    this.webgpuRenderer?.setGroundPlaneEnabled(enabled);
+  }
+
+  /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
    */

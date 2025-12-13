@@ -312,6 +312,64 @@ export function createToolbarHTML(): string {
             <span id="webgpuStatusIcon">⏳</span> <span id="webgpuStatusText">Checking...</span>
           </div>
           
+          <!-- WebGPU Options (shown when WebGPU is active) -->
+          <div id="webgpuOptions" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <!-- Tone Mapping -->
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+                Tone Mapping:
+              </label>
+              <select id="toneMappingSelect" style="width: 100%; padding: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px; font-size: 12px;">
+                <option value="0">None</option>
+                <option value="1">Linear</option>
+                <option value="2">Reinhard</option>
+                <option value="3">Cineon</option>
+                <option value="4" selected>ACES Filmic</option>
+                <option value="6">AgX</option>
+                <option value="7">Neutral</option>
+              </select>
+            </div>
+            
+            <!-- Exposure -->
+            <div style="margin-bottom: 10px;">
+              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+                <span>Exposure:</span>
+                <span id="exposureValue">1.0</span>
+              </label>
+              <input type="range" id="exposureSlider" min="0.1" max="3" step="0.1" value="1" style="width: 100%; cursor: pointer;">
+            </div>
+            
+            <!-- Shadows Toggle -->
+            <label class="checkbox-label" style="margin-top: 8px;">
+              <input type="checkbox" id="webgpuShadowsToggle" checked>
+              <span>Enable Shadows</span>
+            </label>
+            
+            <!-- Shadow Angle -->
+            <div style="margin-top: 10px;">
+              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+                <span>Sun Angle:</span>
+                <span id="shadowAngleValue">45°</span>
+              </label>
+              <input type="range" id="shadowAngleSlider" min="0" max="360" step="5" value="45" style="width: 100%; cursor: pointer;">
+            </div>
+            
+            <!-- Shadow Elevation -->
+            <div style="margin-top: 10px;">
+              <label style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">
+                <span>Sun Height:</span>
+                <span id="shadowElevationValue">45°</span>
+              </label>
+              <input type="range" id="shadowElevationSlider" min="10" max="90" step="5" value="45" style="width: 100%; cursor: pointer;">
+            </div>
+            
+            <!-- Ground Plane Toggle -->
+            <label class="checkbox-label" style="margin-top: 8px;">
+              <input type="checkbox" id="webgpuGroundPlaneToggle" checked>
+              <span>Show Ground Plane</span>
+            </label>
+          </div>
+          
           <div style="font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 6px; line-height: 1.4; word-wrap: break-word; overflow-wrap: break-word;">
             ⚠️ Disables post-processing (AO, outlines)
           </div>

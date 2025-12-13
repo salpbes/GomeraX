@@ -462,6 +462,7 @@ export class UIManager {
     const toggle = document.getElementById('webgpuToggle') as HTMLInputElement;
     const statusIcon = document.getElementById('webgpuStatusIcon');
     const statusText = document.getElementById('webgpuStatusText');
+    const webgpuOptions = document.getElementById('webgpuOptions');
     
     if (!toggle || !statusIcon || !statusText) return;
     
@@ -485,6 +486,9 @@ export class UIManager {
     const notificationHelper = this.notificationHelper;
     const viewer = this.viewer;
     
+    // Setup WebGPU options handlers
+    this.setupWebGPUOptions();
+    
     // Handle toggle change
     toggle.addEventListener('change', async (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
@@ -505,6 +509,8 @@ export class UIManager {
             statusIcon.textContent = '🚀';
             statusText.textContent = 'Active';
             statusText.style.color = '#4ade80';
+            // Show WebGPU options
+            if (webgpuOptions) webgpuOptions.style.display = 'block';
             console.log('🚀 WebGPU renderer enabled');
             notificationHelper?.showNotification(
               '🚀 WebGPU Mode Active',
@@ -515,6 +521,8 @@ export class UIManager {
             statusIcon.textContent = '✅';
             statusText.textContent = 'Available';
             statusText.style.color = '#4ade80';
+            // Hide WebGPU options
+            if (webgpuOptions) webgpuOptions.style.display = 'none';
             console.log('🔄 Switched back to WebGL');
             notificationHelper?.showNotification(
               '🔄 WebGL Mode Active',
@@ -527,6 +535,8 @@ export class UIManager {
           statusIcon.textContent = '❌';
           statusText.textContent = 'Failed';
           statusText.style.color = '#f87171';
+          // Hide WebGPU options
+          if (webgpuOptions) webgpuOptions.style.display = 'none';
           notificationHelper?.showNotification(
             '❌ WebGPU Failed',
             'Could not initialize WebGPU. Your browser may not support it.',
@@ -539,10 +549,76 @@ export class UIManager {
         statusIcon.textContent = '❌';
         statusText.textContent = 'Error';
         statusText.style.color = '#f87171';
+        // Hide WebGPU options
+        if (webgpuOptions) webgpuOptions.style.display = 'none';
       }
       
       toggle.disabled = false;
     });
+  }
+
+  /**
+   * Sets up WebGPU options (tone mapping, exposure, shadows, ground plane)
+   */
+  private setupWebGPUOptions(): void {
+    const toneMappingSelect = document.getElementById('toneMappingSelect') as HTMLSelectElement;
+    const exposureSlider = document.getElementById('exposureSlider') as HTMLInputElement;
+    const exposureValue = document.getElementById('exposureValue');
+    const shadowsToggle = document.getElementById('webgpuShadowsToggle') as HTMLInputElement;
+    const shadowAngleSlider = document.getElementById('shadowAngleSlider') as HTMLInputElement;
+    const shadowAngleValue = document.getElementById('shadowAngleValue');
+    const shadowElevationSlider = document.getElementById('shadowElevationSlider') as HTMLInputElement;
+    const shadowElevationValue = document.getElementById('shadowElevationValue');
+    const groundPlaneToggle = document.getElementById('webgpuGroundPlaneToggle') as HTMLInputElement;
+    
+    // Tone mapping change
+    if (toneMappingSelect) {
+      toneMappingSelect.addEventListener('change', () => {
+        const value = parseInt(toneMappingSelect.value);
+        this.viewer?.setWebGPUToneMapping(value);
+      });
+    }
+    
+    // Exposure slider change
+    if (exposureSlider && exposureValue) {
+      exposureSlider.addEventListener('input', () => {
+        const value = parseFloat(exposureSlider.value);
+        exposureValue.textContent = value.toFixed(1);
+        this.viewer?.setWebGPUExposure(value);
+      });
+    }
+    
+    // Shadows toggle
+    if (shadowsToggle) {
+      shadowsToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPUShadows(shadowsToggle.checked);
+      });
+    }
+    
+    // Shadow angle slider
+    if (shadowAngleSlider && shadowAngleValue) {
+      shadowAngleSlider.addEventListener('input', () => {
+        const value = parseInt(shadowAngleSlider.value);
+        shadowAngleValue.textContent = `${value}°`;
+        this.viewer?.setWebGPUShadowAngle(value);
+      });
+    }
+    
+    // Shadow elevation slider
+    if (shadowElevationSlider && shadowElevationValue) {
+      shadowElevationSlider.addEventListener('input', () => {
+        const value = parseInt(shadowElevationSlider.value);
+        shadowElevationValue.textContent = `${value}°`;
+        this.viewer?.setWebGPUShadowElevation(value);
+      });
+    }
+    
+    // Ground plane toggle
+    if (groundPlaneToggle) {
+      groundPlaneToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPUGroundPlane(groundPlaneToggle.checked);
+      });
+    }
   }
 
   /**
