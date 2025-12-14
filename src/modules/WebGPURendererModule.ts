@@ -175,6 +175,11 @@ export class WebGPURendererModule {
   // Category visibility (for hiding spaces, etc.)
   private hiddenCategories: Set<string> = new Set();
   private meshCategoryMap: Map<THREE.Mesh, string> = new Map();
+  
+  // Model loading listener
+  private modelLoadListener: any = null;
+  private fragmentsManager: OBC.FragmentsManager | null = null;
+  private knownModelIds: Set<string> = new Set();
 
   constructor() {}
 
@@ -977,18 +982,74 @@ export class WebGPURendererModule {
    * Common values: 512, 1024, 2048, 4096
    */
   public setShadowMapResolution(resolution: number): void {
-    if (this.shadowLight && this.shadowLight.shadow) {
-      this.shadowLight.shadow.mapSize.set(resolution, resolution);
-      
-      // Force shadow map recreation
-      if (this.shadowLight.shadow.map) {
-        this.shadowLight.shadow.map.dispose();
-        this.shadowLight.shadow.map = null as any;
-      }
-      
-      this.shadowMapNeedsUpdate = true;
-      console.log(`🌑 Shadow map resolution set to ${resolution}x${resolution}`);
+    if (!this.shadowLight || !this.proxyScene) {
+      return;
     }
+    
+    const currentSize = this.shadowLight.shadow.mapSize.x;
+    
+    // Only update if resolution actually changed
+    if (currentSize === resolution) {
+      return;
+    }
+    
+    // Store current shadow configuration
+    const savedPosition = this.shadowLight.position.clone();
+    const savedTargetPosition = this.shadowLight.target.position.clone();
+    const savedIntensity = this.shadowLight.intensity;
+    const savedBias = this.shadowLight.shadow.bias;
+    const savedNormalBias = this.shadowLight.shadow.normalBias;
+    const shadowCam = this.shadowLight.shadow.camera;
+    const savedCamLeft = shadowCam.left;
+    const savedCamRight = shadowCam.right;
+    const savedCamTop = shadowCam.top;
+    const savedCamBottom = shadowCam.bottom;
+    const savedCamNear = shadowCam.near;
+    const savedCamFar = shadowCam.far;
+    
+    // WebGPU SAFETY: Remove the old light from the scene
+    // Don't dispose the shadow map - just remove the light entirely
+    // and let garbage collection handle cleanup
+    this.proxyScene.remove(this.shadowLight);
+    this.proxyScene.remove(this.shadowLight.target);
+    
+    // Create a completely new shadow light with the new resolution
+    const newLight = new THREE.DirectionalLight(0xffffff, savedIntensity);
+    newLight.name = 'webgpu-shadow-light';
+    newLight.position.copy(savedPosition);
+    newLight.target.position.copy(savedTargetPosition);
+    
+    if (this.shadowsEnabled) {
+      newLight.castShadow = true;
+      
+      // Set the new shadow map size
+      newLight.shadow.mapSize.width = resolution;
+      newLight.shadow.mapSize.height = resolution;
+      
+      // Restore shadow camera frustum
+      const newShadowCam = newLight.shadow.camera;
+      newShadowCam.left = savedCamLeft;
+      newShadowCam.right = savedCamRight;
+      newShadowCam.top = savedCamTop;
+      newShadowCam.bottom = savedCamBottom;
+      newShadowCam.near = savedCamNear;
+      newShadowCam.far = savedCamFar;
+      newShadowCam.updateProjectionMatrix();
+      
+      // Restore bias settings
+      newLight.shadow.bias = savedBias;
+      newLight.shadow.normalBias = savedNormalBias;
+    }
+    
+    // Add new light to scene
+    this.proxyScene.add(newLight);
+    this.proxyScene.add(newLight.target);
+    
+    // Store reference
+    this.shadowLight = newLight;
+    this.shadowMapNeedsUpdate = true;
+    
+    console.log(`🌑 Shadow map resolution set to ${resolution}x${resolution}`);
   }
 
   /**
@@ -2357,6 +2418,9 @@ export class WebGPURendererModule {
 
       // Handle resize
       this.setupResizeHandler();
+      
+      // Setup model load listener to update proxy scene when new models are added
+      this.setupModelLoadListener();
 
       console.log('✅ WebGPU renderer enabled successfully');
       return true;
@@ -2441,6 +2505,10 @@ export class WebGPURendererModule {
       }
     }
     this.createdGeometries = [];
+    
+    // Remove model load listener
+    this.removeModelLoadListener();
+    
     this.components = null;
 
     console.log('✅ WebGPU renderer disabled, WebGL restored');
@@ -2618,6 +2686,61 @@ export class WebGPURendererModule {
     });
 
     this.resizeObserver.observe(this.container);
+  }
+
+  /**
+   * Setup listener for new model loads to update proxy scene
+   */
+  private setupModelLoadListener(): void {
+    if (!this.components) return;
+    
+    try {
+      this.fragmentsManager = this.components.get(OBC.FragmentsManager);
+      if (!this.fragmentsManager) return;
+      
+      // Track currently known models
+      this.knownModelIds.clear();
+      for (const [modelId] of this.fragmentsManager.list) {
+        this.knownModelIds.add(modelId);
+      }
+      
+      // Listen for new models
+      this.modelLoadListener = this.fragmentsManager.list.onItemSet.add(async ({ key: modelId }: any) => {
+        // Check if this is a new model we haven't seen
+        if (!this.knownModelIds.has(modelId)) {
+          console.log('🆕 WebGPU: New model detected, rebuilding proxy scene...', modelId);
+          this.knownModelIds.add(modelId);
+          
+          // Wait a bit for model geometry to fully load
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Rebuild proxy scene to include new model
+          if (this.isActive) {
+            await this.rebuildProxyScene();
+          }
+        }
+      });
+      
+      console.log('✅ WebGPU model load listener setup');
+    } catch (e) {
+      console.warn('⚠️ Could not setup model load listener:', e);
+    }
+  }
+
+  /**
+   * Remove model load listener
+   */
+  private removeModelLoadListener(): void {
+    if (this.modelLoadListener && this.fragmentsManager) {
+      try {
+        this.fragmentsManager.list.onItemSet.remove(this.modelLoadListener);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      this.modelLoadListener = null;
+    }
+    this.fragmentsManager = null;
+    this.knownModelIds.clear();
   }
 
   /**
@@ -2818,6 +2941,21 @@ export class WebGPURendererModule {
       <div class="stats-row">
         <span class="stats-label">Pixel Ratio:</span>
         <span class="stats-value" id="stats-pixelratio">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">🖥️ Hardware</div>
+      <div class="stats-row">
+        <span class="stats-label">CPU Cores:</span>
+        <span class="stats-value" id="stats-cpucores">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Memory:</span>
+        <span class="stats-value" id="stats-devmemory">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Battery:</span>
+        <span class="stats-value" id="stats-battery">--</span>
       </div>
       
       <div class="stats-row stats-divider"></div>
@@ -3293,10 +3431,62 @@ export class WebGPURendererModule {
       pixelratioEl.textContent = this.webgpuRenderer.getPixelRatio().toFixed(1);
     }
     
+    // Hardware stats
+    const cpucoresEl = this.statsOverlay.querySelector('#stats-cpucores');
+    const devmemoryEl = this.statsOverlay.querySelector('#stats-devmemory');
+    const batteryEl = this.statsOverlay.querySelector('#stats-battery');
+    
+    if (cpucoresEl) {
+      const cores = navigator.hardwareConcurrency;
+      cpucoresEl.textContent = cores ? `${cores} cores` : 'N/A';
+    }
+    
+    if (devmemoryEl) {
+      const nav = navigator as any;
+      if (nav.deviceMemory) {
+        devmemoryEl.textContent = `${nav.deviceMemory} GB`;
+      } else {
+        devmemoryEl.textContent = 'N/A';
+      }
+    }
+    
+    if (batteryEl) {
+      this.updateBatteryStatus(batteryEl as HTMLElement);
+    }
+    
     // GPU info
     const gpuEl = this.statsOverlay.querySelector('#stats-gpu');
     if (gpuEl) {
       gpuEl.textContent = this.gpuInfo;
+    }
+  }
+  
+  /**
+   * Update battery status in stats overlay
+   */
+  private async updateBatteryStatus(element: HTMLElement): Promise<void> {
+    try {
+      const nav = navigator as any;
+      if (nav.getBattery) {
+        const battery = await nav.getBattery();
+        const level = Math.round(battery.level * 100);
+        const charging = battery.charging;
+        
+        element.textContent = `${level}%${charging ? ' ⚡' : ''}`;
+        
+        // Color code battery level
+        if (level > 50) {
+          element.style.color = '#69db7c';
+        } else if (level > 20) {
+          element.style.color = '#fbbf24';
+        } else {
+          element.style.color = '#f87171';
+        }
+      } else {
+        element.textContent = 'N/A';
+      }
+    } catch (e) {
+      element.textContent = 'N/A';
     }
   }
 
