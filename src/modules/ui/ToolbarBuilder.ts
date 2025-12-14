@@ -370,6 +370,33 @@ export function createToolbarHTML(): string {
                   <input type="checkbox" id="webgpuStatsToggle">
                   <span>Show Stats Overlay</span>
                 </label>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuFrustumCullingToggle" checked>
+                  <span>Frustum Culling</span>
+                </label>
+                
+                <!-- Shadow Quality -->
+                <div class="webgpu-control">
+                  <label>Shadow Quality:</label>
+                  <select id="shadowQualitySelect">
+                    <option value="512">Low (512)</option>
+                    <option value="1024">Medium (1024)</option>
+                    <option value="2048" selected>High (2048)</option>
+                    <option value="4096">Ultra (4096)</option>
+                  </select>
+                </div>
+                
+                <!-- Performance Presets -->
+                <div class="webgpu-control">
+                  <label>Performance Preset:</label>
+                  <select id="performancePresetSelect">
+                    <option value="">Custom</option>
+                    <option value="low">Low (Fast)</option>
+                    <option value="medium">Medium (Balanced)</option>
+                    <option value="high">High (Quality)</option>
+                  </select>
+                </div>
               </div>
             </div>
             

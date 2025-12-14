@@ -83,6 +83,7 @@
 
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export type RendererMode = 'webgl' | 'webgpu';
 
@@ -155,6 +156,25 @@ export class WebGPURendererModule {
   private frameTimeHistory: number[] = [];
   private currentToneMapping: number = 4; // ACESFilmic default
   private gpuInfo: string = 'Unknown';
+  private minFps: number = 999;
+  private maxFps: number = 0;
+  private visibleMeshCount: number = 0;
+  private fpsHistory: number[] = [];
+  
+  // Performance optimization settings
+  private frustumCullingEnabled: boolean = true;
+  private geometryMergingEnabled: boolean = true;
+  private shadowMapNeedsUpdate: boolean = true;
+  private mergedMeshes: THREE.Mesh[] = [];
+  private frustum: THREE.Frustum = new THREE.Frustum();
+  private projScreenMatrix: THREE.Matrix4 = new THREE.Matrix4();
+  private lastCameraPosition: THREE.Vector3 = new THREE.Vector3();
+  private lastCameraQuaternion: THREE.Quaternion = new THREE.Quaternion();
+  private cameraMovedThreshold: number = 0.001;
+  
+  // Category visibility (for hiding spaces, etc.)
+  private hiddenCategories: Set<string> = new Set();
+  private meshCategoryMap: Map<THREE.Mesh, string> = new Map();
 
   constructor() {}
 
@@ -904,6 +924,211 @@ export class WebGPURendererModule {
     this.edgeLines = [];
   }
 
+  // =========================================================================
+  // PERFORMANCE OPTIMIZATION CONTROLS
+  // =========================================================================
+
+  /**
+   * Enable or disable frustum culling optimization
+   * When enabled, objects outside the camera view are hidden (not rendered)
+   */
+  public setFrustumCullingEnabled(enabled: boolean): void {
+    this.frustumCullingEnabled = enabled;
+    
+    // If disabling, make all meshes visible again
+    if (!enabled && this.proxyScene) {
+      this.proxyScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.visible = true;
+        }
+      });
+    }
+    
+    console.log(`🔍 Frustum culling ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current frustum culling state
+   */
+  public isFrustumCullingEnabled(): boolean {
+    return this.frustumCullingEnabled;
+  }
+
+  /**
+   * Enable or disable geometry merging optimization
+   * When enabled, meshes with same material are merged to reduce draw calls
+   * Note: This only affects newly loaded models, not existing ones
+   */
+  public setGeometryMergingEnabled(enabled: boolean): void {
+    this.geometryMergingEnabled = enabled;
+    console.log(`🔗 Geometry merging ${enabled ? 'enabled' : 'disabled'} (applies to next model load)`);
+  }
+
+  /**
+   * Get current geometry merging state
+   */
+  public isGeometryMergingEnabled(): boolean {
+    return this.geometryMergingEnabled;
+  }
+
+  /**
+   * Set shadow map resolution
+   * Lower values = better performance but lower shadow quality
+   * Common values: 512, 1024, 2048, 4096
+   */
+  public setShadowMapResolution(resolution: number): void {
+    if (this.shadowLight && this.shadowLight.shadow) {
+      this.shadowLight.shadow.mapSize.set(resolution, resolution);
+      
+      // Force shadow map recreation
+      if (this.shadowLight.shadow.map) {
+        this.shadowLight.shadow.map.dispose();
+        this.shadowLight.shadow.map = null as any;
+      }
+      
+      this.shadowMapNeedsUpdate = true;
+      console.log(`🌑 Shadow map resolution set to ${resolution}x${resolution}`);
+    }
+  }
+
+  /**
+   * Get current shadow map resolution
+   */
+  public getShadowMapResolution(): number {
+    return this.shadowLight?.shadow?.mapSize?.x ?? 2048;
+  }
+
+  /**
+   * Apply performance preset
+   * 'low' = Maximum performance (for complex models)
+   * 'medium' = Balanced
+   * 'high' = Maximum quality
+   */
+  public applyPerformancePreset(preset: 'low' | 'medium' | 'high'): void {
+    switch (preset) {
+      case 'low':
+        this.setFrustumCullingEnabled(true);
+        this.setGeometryMergingEnabled(true);
+        this.setShadowMapResolution(512);
+        this.setShadowsEnabled(false);
+        this.setEdgesEnabled(false);
+        console.log('⚡ Applied LOW quality preset (maximum performance)');
+        break;
+        
+      case 'medium':
+        this.setFrustumCullingEnabled(true);
+        this.setGeometryMergingEnabled(true);
+        this.setShadowMapResolution(1024);
+        this.setShadowsEnabled(true);
+        this.setEdgesEnabled(false);
+        console.log('⚖️ Applied MEDIUM quality preset (balanced)');
+        break;
+        
+      case 'high':
+        this.setFrustumCullingEnabled(true);
+        this.setGeometryMergingEnabled(true);
+        this.setShadowMapResolution(2048);
+        this.setShadowsEnabled(true);
+        this.setEdgesEnabled(true);
+        console.log('✨ Applied HIGH quality preset (maximum quality)');
+        break;
+    }
+  }
+
+  // =========================================================================
+  // CATEGORY VISIBILITY (Hide Spaces, etc.)
+  // =========================================================================
+
+  /**
+   * Hide or show IFC Spaces in the WebGPU scene
+   * When spaces are hidden, they will be excluded when rebuilding the proxy scene
+   */
+  public async setSpacesVisible(visible: boolean): Promise<void> {
+    if (visible) {
+      this.hiddenCategories.delete('IFCSPACE');
+    } else {
+      this.hiddenCategories.add('IFCSPACE');
+    }
+    
+    console.log(`${visible ? '👁️' : '🙈'} WebGPU spaces ${visible ? 'shown' : 'hidden'}`);
+    
+    // Rebuild proxy scene to apply the change
+    if (this.isActive && this.world) {
+      await this.rebuildProxyScene();
+    }
+  }
+
+  /**
+   * Check if spaces are currently visible
+   */
+  public areSpacesVisible(): boolean {
+    return !this.hiddenCategories.has('IFCSPACE');
+  }
+
+  /**
+   * Hide or show a specific IFC category
+   */
+  public async setCategoryVisible(category: string, visible: boolean): Promise<void> {
+    const upperCategory = category.toUpperCase();
+    if (visible) {
+      this.hiddenCategories.delete(upperCategory);
+    } else {
+      this.hiddenCategories.add(upperCategory);
+    }
+    
+    console.log(`${visible ? '👁️' : '🙈'} WebGPU category ${upperCategory} ${visible ? 'shown' : 'hidden'}`);
+    
+    // Rebuild proxy scene to apply the change
+    if (this.isActive && this.world) {
+      await this.rebuildProxyScene();
+    }
+  }
+
+  /**
+   * Rebuild the proxy scene (used when visibility changes)
+   */
+  private async rebuildProxyScene(): Promise<void> {
+    if (!this.world || !this.scene) return;
+    
+    console.log('🔄 Rebuilding WebGPU proxy scene...');
+    
+    // Store current settings
+    const wasEdgesEnabled = this.edgesEnabled;
+    const wasGroundPlaneEnabled = this.groundPlaneEnabled;
+    
+    // Dispose old proxy scene resources
+    this.removeEdges();
+    for (const geo of this.createdGeometries) {
+      geo.dispose();
+    }
+    this.createdGeometries = [];
+    this.mergedMeshes = [];
+    this.meshCategoryMap.clear();
+    
+    // Remove old ground plane
+    if (this.groundPlane && this.proxyScene) {
+      this.proxyScene.remove(this.groundPlane);
+      this.groundPlane.geometry.dispose();
+      (this.groundPlane.material as THREE.Material).dispose();
+      this.groundPlane = null;
+    }
+    
+    // Temporarily enable ground plane so it gets created during rebuild
+    this.groundPlaneEnabled = wasGroundPlaneEnabled;
+    
+    // Build new proxy scene (this also sets up ground plane via updateShadowBounds)
+    const success = await this.tryBuildProxySceneFromFragments(this.scene);
+    
+    if (success && this.proxyScene) {
+      // Restore edges
+      if (wasEdgesEnabled) {
+        this.createEdges();
+      }
+      
+      console.log('✅ WebGPU proxy scene rebuilt');
+    }
+  }
+
   /**
    * Set tone mapping type
    * Options: NoToneMapping, LinearToneMapping, ReinhardToneMapping, 
@@ -1541,7 +1766,9 @@ export class WebGPURendererModule {
         return mat;
       };
 
-      if (shouldUseCategoryColors && typeof model?.getItemsWithGeometryCategories === 'function') {
+      // Always load categories for hidden category checking (e.g., IFCSPACE)
+      // This is needed even if we're not using category colors
+      if (typeof model?.getItemsWithGeometryCategories === 'function') {
         try {
           const cats = await model.getItemsWithGeometryCategories();
           if (Array.isArray(cats) && cats.length > 0) {
@@ -1662,8 +1889,37 @@ export class WebGPURendererModule {
       // 4. Look up color using meshData.sampleId → getMaterialFromSampleId()
       // 5. Handle normals carefully (WebGPU requires Float32, not Int16)
       // =====================================================================
+      
+      // PERFORMANCE OPTIMIZATION: Collect geometries by material for batching
+      // Instead of creating thousands of individual meshes (one per IFC item),
+      // we group geometries by material and merge them into fewer large meshes.
+      // This dramatically reduces draw calls (e.g., 10000 → 50).
+      const geometriesByMaterial = new Map<string, { 
+        geometries: THREE.BufferGeometry[]; 
+        material: THREE.Material;
+      }>();
+      
+      // Helper to get material key for batching
+      const getMaterialKey = (mat: THREE.Material): string => {
+        if (mat instanceof THREE.MeshStandardMaterial) {
+          const c = mat.color;
+          return `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${mat.opacity.toFixed(3)},${mat.transparent ? 1 : 0}`;
+        }
+        return mat.uuid;
+      };
+      
+      // Track skipped items for hidden categories
+      let skippedByCategory = 0;
+      
       for (const itemId of itemIds) {
         itemCount++;
+        
+        // Check if this item's category should be hidden
+        const itemCategory = localIdToCategory.get(itemId);
+        if (itemCategory && this.hiddenCategories.has(itemCategory)) {
+          skippedByCategory++;
+          continue; // Skip this item - it's in a hidden category
+        }
 
         let geometries: any[] | null = null;
         try {
@@ -1767,27 +2023,117 @@ export class WebGPURendererModule {
             geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
           }
 
-          // Create mesh with the resolved material
-          const mesh = new THREE.Mesh(geometry, materialForMesh);
-          
-          // Enable shadows
-          mesh.castShadow = this.shadowsEnabled;
-          mesh.receiveShadow = this.shadowsEnabled;
-          
-          // Apply transform from IFC (position, rotation, scale)
-          if (meshData.transform) {
-            mesh.applyMatrix4(meshData.transform);
-          }
+          // GEOMETRY MERGING OPTIMIZATION:
+          // Instead of creating a mesh immediately, apply transform to geometry
+          // and collect it for later merging with other geometries using same material.
+          // This reduces draw calls dramatically.
+          if (this.geometryMergingEnabled) {
+            // Apply transform to geometry vertices directly (bake transform)
+            if (meshData.transform) {
+              geometry.applyMatrix4(meshData.transform);
+            }
+            
+            // Compute bounding sphere now for frustum culling later
+            geometry.computeBoundingSphere();
+            
+            // Group by material for later merging
+            const matKey = getMaterialKey(materialForMesh);
+            if (!geometriesByMaterial.has(matKey)) {
+              geometriesByMaterial.set(matKey, { geometries: [], material: materialForMesh });
+            }
+            geometriesByMaterial.get(matKey)!.geometries.push(geometry);
+            meshCount++;
+          } else {
+            // Original path: create individual mesh per item
+            const mesh = new THREE.Mesh(geometry, materialForMesh);
+            mesh.castShadow = this.shadowsEnabled;
+            mesh.receiveShadow = this.shadowsEnabled;
+            
+            if (meshData.transform) {
+              mesh.applyMatrix4(meshData.transform);
+            }
 
-          modelGroup.add(mesh);
-          this.createdGeometries.push(geometry);
-          meshCount++;
+            modelGroup.add(mesh);
+            this.createdGeometries.push(geometry);
+            meshCount++;
+          }
         }
 
         // Yield to UI every 200 items to prevent freezing
         if (itemCount % 200 === 0) {
           await new Promise<void>((r) => setTimeout(() => r(), 0));
         }
+      }
+      
+      // =====================================================================
+      // STEP 5: Merge geometries by material (PERFORMANCE OPTIMIZATION)
+      // =====================================================================
+      // After collecting all geometries grouped by material, merge each group
+      // into a single large mesh. This is the key optimization that reduces
+      // draw calls from thousands to tens.
+      // =====================================================================
+      if (this.geometryMergingEnabled && geometriesByMaterial.size > 0) {
+        let mergedMeshCount = 0;
+        const MAX_VERTICES_PER_MERGE = 65535 * 3; // ~65K vertices per merged mesh (WebGPU limit friendly)
+        
+        for (const [matKey, { geometries, material }] of geometriesByMaterial) {
+          if (geometries.length === 0) continue;
+          
+          // Split into chunks if too many vertices (prevent GPU memory issues)
+          let currentBatch: THREE.BufferGeometry[] = [];
+          let currentVertexCount = 0;
+          
+          const flushBatch = () => {
+            if (currentBatch.length === 0) return;
+            
+            try {
+              const merged = currentBatch.length === 1 
+                ? currentBatch[0] 
+                : mergeGeometries(currentBatch, false);
+              
+              if (merged) {
+                const mesh = new THREE.Mesh(merged, material);
+                mesh.castShadow = this.shadowsEnabled;
+                mesh.receiveShadow = this.shadowsEnabled;
+                mesh.name = `merged-batch-${matKey}-${mergedMeshCount}`;
+                modelGroup.add(mesh);
+                this.createdGeometries.push(merged);
+                this.mergedMeshes.push(mesh);
+                mergedMeshCount++;
+              }
+            } catch (e) {
+              // Fallback: add geometries individually if merge fails
+              console.warn('⚠️ Geometry merge failed, adding individually:', e);
+              for (const geo of currentBatch) {
+                const mesh = new THREE.Mesh(geo, material);
+                mesh.castShadow = this.shadowsEnabled;
+                mesh.receiveShadow = this.shadowsEnabled;
+                modelGroup.add(mesh);
+                this.createdGeometries.push(geo);
+                mergedMeshCount++;
+              }
+            }
+            
+            currentBatch = [];
+            currentVertexCount = 0;
+          };
+          
+          for (const geo of geometries) {
+            const vertexCount = geo.attributes.position?.count || 0;
+            
+            if (currentVertexCount + vertexCount > MAX_VERTICES_PER_MERGE && currentBatch.length > 0) {
+              flushBatch();
+            }
+            
+            currentBatch.push(geo);
+            currentVertexCount += vertexCount;
+          }
+          
+          // Flush remaining
+          flushBatch();
+        }
+        
+        console.log(`✅ WebGPU geometry merging: ${meshCount} geometries → ${mergedMeshCount} merged meshes (${geometriesByMaterial.size} material groups)`);
       }
 
       // Log color statistics for debugging
@@ -1969,7 +2315,17 @@ export class WebGPURendererModule {
         canvasEl.style.opacity = '0';
         canvasEl.style.pointerEvents = 'auto'; // Ensure it captures events
         canvasEl.style.position = 'absolute';
-        canvasEl.style.zIndex = '1'; // On top of WebGPU canvas
+        canvasEl.style.top = '0';
+        canvasEl.style.left = '0';
+        canvasEl.style.width = '100%';
+        canvasEl.style.height = '100%';
+        canvasEl.style.zIndex = '2'; // On top of WebGPU canvas (higher z-index)
+      }
+      
+      // Ensure container has position relative for absolute positioning to work
+      const computedStyle = window.getComputedStyle(container);
+      if (computedStyle.position === 'static') {
+        container.style.position = 'relative';
       }
 
       // Pause the original WebGL renderer to prevent conflicts
@@ -2105,6 +2461,13 @@ export class WebGPURendererModule {
   }
 
   /**
+   * Check if WebGPU renderer is currently active
+   */
+  public isWebGPUActive(): boolean {
+    return this.isActive;
+  }
+
+  /**
    * Get renderer statistics
    */
   public getStats(): { triangles: number; drawCalls: number; geometries: number; textures: number } | null {
@@ -2151,6 +2514,25 @@ export class WebGPURendererModule {
       // OrbitControls modifies camera position/rotation, but we need to
       // ensure the world matrix is current for accurate rendering.
       this.camera.updateMatrixWorld();
+      
+      // Check if camera has moved significantly
+      const cameraMoved = this.hasCameraMoved();
+      
+      // Apply frustum culling for performance
+      if (this.frustumCullingEnabled && cameraMoved) {
+        this.performFrustumCulling();
+      }
+      
+      // Only update shadow map when needed (static scene optimization)
+      if (this.shadowLight && this.shadowsEnabled) {
+        // Update shadow map less frequently if camera hasn't moved much
+        if (cameraMoved || this.shadowMapNeedsUpdate) {
+          this.shadowLight.shadow.needsUpdate = true;
+          this.shadowMapNeedsUpdate = false;
+        } else {
+          this.shadowLight.shadow.needsUpdate = false;
+        }
+      }
 
       // Render the proxy scene
       try {
@@ -2164,6 +2546,58 @@ export class WebGPURendererModule {
     };
 
     render();
+  }
+  
+  /**
+   * Check if camera has moved significantly since last frame
+   */
+  private hasCameraMoved(): boolean {
+    if (!this.camera) return true;
+    
+    const pos = this.camera.position;
+    const quat = this.camera.quaternion;
+    
+    const posDiff = pos.distanceToSquared(this.lastCameraPosition);
+    const quatDiff = Math.abs(1 - Math.abs(quat.dot(this.lastCameraQuaternion)));
+    
+    const moved = posDiff > this.cameraMovedThreshold || quatDiff > 0.0001;
+    
+    if (moved) {
+      this.lastCameraPosition.copy(pos);
+      this.lastCameraQuaternion.copy(quat);
+    }
+    
+    return moved;
+  }
+  
+  /**
+   * Perform frustum culling to hide objects outside camera view
+   */
+  private performFrustumCulling(): void {
+    if (!this.proxyScene || !this.camera) return;
+    
+    // Update frustum from camera
+    this.projScreenMatrix.multiplyMatrices(
+      (this.camera as THREE.PerspectiveCamera).projectionMatrix,
+      this.camera.matrixWorldInverse
+    );
+    this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
+    
+    // Cull meshes outside frustum
+    this.proxyScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.name !== 'webgpu-ground-plane') {
+        // Use bounding sphere for fast culling
+        if (!obj.geometry.boundingSphere) {
+          obj.geometry.computeBoundingSphere();
+        }
+        
+        if (obj.geometry.boundingSphere) {
+          const sphere = obj.geometry.boundingSphere.clone();
+          sphere.applyMatrix4(obj.matrixWorld);
+          obj.visible = this.frustum.intersectsSphere(sphere);
+        }
+      }
+    });
   }
 
   /**
@@ -2263,12 +2697,20 @@ export class WebGPURendererModule {
         <span class="stats-label">Avg Frame:</span>
         <span class="stats-value" id="stats-avgframe">-- ms</span>
       </div>
+      <div class="stats-row">
+        <span class="stats-label">Min/Max FPS:</span>
+        <span class="stats-value" id="stats-minmaxfps">--/--</span>
+      </div>
       
       <div class="stats-row stats-divider"></div>
       <div class="stats-section-title">🎨 Scene</div>
       <div class="stats-row">
         <span class="stats-label">Meshes:</span>
         <span class="stats-value" id="stats-meshes">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Visible:</span>
+        <span class="stats-value" id="stats-visible">--</span>
       </div>
       <div class="stats-row">
         <span class="stats-label">Triangles:</span>
@@ -2305,6 +2747,29 @@ export class WebGPURendererModule {
         <span class="stats-label">Textures:</span>
         <span class="stats-value" id="stats-textures">--</span>
       </div>
+      <div class="stats-row">
+        <span class="stats-label">JS Heap:</span>
+        <span class="stats-value" id="stats-jsheap">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">🚀 Optimizations</div>
+      <div class="stats-row">
+        <span class="stats-label">Frustum Cull:</span>
+        <span class="stats-value" id="stats-frustum">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Geo Merging:</span>
+        <span class="stats-value" id="stats-merging">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Merged Meshes:</span>
+        <span class="stats-value" id="stats-mergedcount">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Shadow Res:</span>
+        <span class="stats-value" id="stats-shadowres">--</span>
+      </div>
       
       <div class="stats-row stats-divider"></div>
       <div class="stats-section-title">⚙️ Settings</div>
@@ -2324,6 +2789,10 @@ export class WebGPURendererModule {
         <span class="stats-label">Tone Map:</span>
         <span class="stats-value" id="stats-tonemap">--</span>
       </div>
+      <div class="stats-row">
+        <span class="stats-label">Spaces:</span>
+        <span class="stats-value" id="stats-spaces">--</span>
+      </div>
       
       <div class="stats-row stats-divider"></div>
       <div class="stats-section-title">📷 Camera</div>
@@ -2334,6 +2803,21 @@ export class WebGPURendererModule {
       <div class="stats-row">
         <span class="stats-label">Distance:</span>
         <span class="stats-value" id="stats-camdist">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">FOV:</span>
+        <span class="stats-value" id="stats-fov">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">🖥️ Display</div>
+      <div class="stats-row">
+        <span class="stats-label">Resolution:</span>
+        <span class="stats-value" id="stats-resolution">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Pixel Ratio:</span>
+        <span class="stats-value" id="stats-pixelratio">--</span>
       </div>
       
       <div class="stats-row stats-divider"></div>
@@ -2362,6 +2846,8 @@ export class WebGPURendererModule {
       lineHeight: '1.6',
       zIndex: '10000',
       minWidth: '160px',
+      maxHeight: 'calc(100vh - 100px)',
+      overflowY: 'auto',
       boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
       border: '1px solid rgba(255,255,255,0.1)',
       cursor: 'move',
@@ -2381,7 +2867,37 @@ export class WebGPURendererModule {
         paddingBottom: '6px',
         borderBottom: '1px solid rgba(255,255,255,0.2)',
         color: '#69db7c',
+        position: 'sticky',
+        top: '-12px',
+        background: 'rgba(0, 0, 0, 0.9)',
+        marginTop: '-12px',
+        paddingTop: '12px',
+        zIndex: '1',
       });
+    }
+    
+    // Add custom scrollbar styles
+    const styleId = 'webgpu-stats-scrollbar-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        #webgpu-stats-overlay::-webkit-scrollbar {
+          width: 6px;
+        }
+        #webgpu-stats-overlay::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 3px;
+        }
+        #webgpu-stats-overlay::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 3px;
+        }
+        #webgpu-stats-overlay::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.3);
+        }
+      `;
+      document.head.appendChild(style);
     }
     
     // Style the rows
@@ -2569,10 +3085,31 @@ export class WebGPURendererModule {
       ? this.frameTimeHistory.reduce((a, b) => a + b, 0) / this.frameTimeHistory.length 
       : 0;
     
+    // Track min/max FPS
+    if (this.fps > 0) {
+      this.fpsHistory.push(this.fps);
+      if (this.fpsHistory.length > 120) { // Track over ~1 minute
+        this.fpsHistory.shift();
+      }
+      if (this.fps < this.minFps && this.fps > 0) this.minFps = this.fps;
+      if (this.fps > this.maxFps) this.maxFps = this.fps;
+    }
+    
+    // Count visible meshes for frustum culling stats
+    this.visibleMeshCount = 0;
+    if (this.proxyScene) {
+      this.proxyScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.visible && obj.name !== 'webgpu-ground-plane') {
+          this.visibleMeshCount++;
+        }
+      });
+    }
+    
     // Timing stats
     const fpsEl = this.statsOverlay.querySelector('#stats-fps');
     const frametimeEl = this.statsOverlay.querySelector('#stats-frametime');
     const avgframeEl = this.statsOverlay.querySelector('#stats-avgframe');
+    const minmaxfpsEl = this.statsOverlay.querySelector('#stats-minmaxfps');
     
     if (fpsEl) {
       fpsEl.textContent = this.fps.toString();
@@ -2588,8 +3125,13 @@ export class WebGPURendererModule {
       avgframeEl.textContent = `${avgFrameTime.toFixed(1)} ms`;
     }
     
+    if (minmaxfpsEl) {
+      minmaxfpsEl.textContent = `${this.minFps === 999 ? '--' : this.minFps}/${this.maxFps === 0 ? '--' : this.maxFps}`;
+    }
+    
     // Scene stats
     const meshesEl = this.statsOverlay.querySelector('#stats-meshes');
+    const visibleEl = this.statsOverlay.querySelector('#stats-visible');
     const trianglesEl = this.statsOverlay.querySelector('#stats-triangles');
     const verticesEl = this.statsOverlay.querySelector('#stats-vertices');
     const drawcallsEl = this.statsOverlay.querySelector('#stats-drawcalls');
@@ -2598,6 +3140,13 @@ export class WebGPURendererModule {
     
     if (meshesEl) {
       meshesEl.textContent = this.formatNumber(this.meshCount);
+    }
+    
+    if (visibleEl) {
+      visibleEl.textContent = this.formatNumber(this.visibleMeshCount);
+      // Color code: green if frustum culling is saving work
+      const culledPercent = this.meshCount > 0 ? ((this.meshCount - this.visibleMeshCount) / this.meshCount) * 100 : 0;
+      (visibleEl as HTMLElement).style.color = culledPercent > 10 ? '#69db7c' : 'inherit';
     }
     
     if (trianglesEl) {
@@ -2624,6 +3173,7 @@ export class WebGPURendererModule {
     const geometriesEl = this.statsOverlay.querySelector('#stats-geometries');
     const materialsEl = this.statsOverlay.querySelector('#stats-materials');
     const texturesEl = this.statsOverlay.querySelector('#stats-textures');
+    const jsheapEl = this.statsOverlay.querySelector('#stats-jsheap');
     
     if (geometriesEl) {
       geometriesEl.textContent = this.formatNumber(this.geometryCount);
@@ -2637,11 +3187,49 @@ export class WebGPURendererModule {
       texturesEl.textContent = this.textureCount.toString();
     }
     
+    // JS Heap (only available in Chrome)
+    if (jsheapEl) {
+      const perf = (performance as any);
+      if (perf.memory) {
+        const usedMB = perf.memory.usedJSHeapSize / (1024 * 1024);
+        const totalMB = perf.memory.jsHeapSizeLimit / (1024 * 1024);
+        jsheapEl.textContent = `${usedMB.toFixed(0)}/${totalMB.toFixed(0)} MB`;
+      } else {
+        jsheapEl.textContent = 'N/A';
+      }
+    }
+    
+    // Optimization stats
+    const frustumEl = this.statsOverlay.querySelector('#stats-frustum');
+    const mergingEl = this.statsOverlay.querySelector('#stats-merging');
+    const mergedcountEl = this.statsOverlay.querySelector('#stats-mergedcount');
+    const shadowresEl = this.statsOverlay.querySelector('#stats-shadowres');
+    
+    if (frustumEl) {
+      frustumEl.textContent = this.frustumCullingEnabled ? 'ON' : 'OFF';
+      (frustumEl as HTMLElement).style.color = this.frustumCullingEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (mergingEl) {
+      mergingEl.textContent = this.geometryMergingEnabled ? 'ON' : 'OFF';
+      (mergingEl as HTMLElement).style.color = this.geometryMergingEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (mergedcountEl) {
+      mergedcountEl.textContent = this.mergedMeshes.length.toString();
+    }
+    
+    if (shadowresEl) {
+      const res = this.shadowLight?.shadow?.mapSize?.x ?? 2048;
+      shadowresEl.textContent = `${res}x${res}`;
+    }
+    
     // Settings stats
     const shadowsEl = this.statsOverlay.querySelector('#stats-shadows');
     const edgesEl = this.statsOverlay.querySelector('#stats-edges');
     const groundEl = this.statsOverlay.querySelector('#stats-ground');
     const tonemapEl = this.statsOverlay.querySelector('#stats-tonemap');
+    const spacesEl = this.statsOverlay.querySelector('#stats-spaces');
     
     if (shadowsEl) {
       shadowsEl.textContent = this.shadowsEnabled ? 'ON' : 'OFF';
@@ -2662,9 +3250,16 @@ export class WebGPURendererModule {
       tonemapEl.textContent = this.getToneMappingName(this.currentToneMapping as THREE.ToneMapping);
     }
     
+    if (spacesEl) {
+      const spacesVisible = !this.hiddenCategories.has('IFCSPACE');
+      spacesEl.textContent = spacesVisible ? 'Visible' : 'Hidden';
+      (spacesEl as HTMLElement).style.color = spacesVisible ? '#69db7c' : '#fbbf24';
+    }
+    
     // Camera stats
     const camposEl = this.statsOverlay.querySelector('#stats-campos');
     const camdistEl = this.statsOverlay.querySelector('#stats-camdist');
+    const fovEl = this.statsOverlay.querySelector('#stats-fov');
     
     if (this.camera && camposEl) {
       const pos = this.camera.position;
@@ -2674,6 +3269,28 @@ export class WebGPURendererModule {
     if (this.camera && camdistEl) {
       const dist = this.camera.position.distanceTo(this.sceneCenter);
       camdistEl.textContent = `${dist.toFixed(1)}m`;
+    }
+    
+    if (fovEl && this.camera) {
+      const cam = this.camera as THREE.PerspectiveCamera;
+      if (cam.fov) {
+        fovEl.textContent = `${cam.fov.toFixed(0)}°`;
+      } else {
+        fovEl.textContent = 'N/A';
+      }
+    }
+    
+    // Display stats
+    const resolutionEl = this.statsOverlay.querySelector('#stats-resolution');
+    const pixelratioEl = this.statsOverlay.querySelector('#stats-pixelratio');
+    
+    if (resolutionEl && this.webgpuRenderer) {
+      const size = this.webgpuRenderer.getSize(new THREE.Vector2());
+      resolutionEl.textContent = `${Math.round(size.x)}x${Math.round(size.y)}`;
+    }
+    
+    if (pixelratioEl && this.webgpuRenderer) {
+      pixelratioEl.textContent = this.webgpuRenderer.getPixelRatio().toFixed(1);
     }
     
     // GPU info

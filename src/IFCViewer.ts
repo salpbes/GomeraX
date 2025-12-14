@@ -398,6 +398,13 @@ export class IFCViewer {
   }
 
   /**
+   * Check if WebGPU renderer is currently active (alias for isWebGPUEnabled)
+   */
+  public isWebGPUActive(): boolean {
+    return this.webgpuRenderer?.isWebGPUActive() || false;
+  }
+
+  /**
    * Set WebGPU tone mapping type
    * @param type - THREE.ToneMapping value (0=None, 1=Linear, 2=Reinhard, 3=Cineon, 4=ACESFilmic, 6=AgX, 7=Neutral)
    */
@@ -462,6 +469,41 @@ export class IFCViewer {
    */
   public setWebGPUStats(enabled: boolean): void {
     this.webgpuRenderer?.setStatsEnabled(enabled);
+  }
+
+  /**
+   * Enable or disable frustum culling optimization
+   */
+  public setWebGPUFrustumCulling(enabled: boolean): void {
+    this.webgpuRenderer?.setFrustumCullingEnabled(enabled);
+  }
+
+  /**
+   * Set shadow map resolution for quality/performance trade-off
+   */
+  public setWebGPUShadowQuality(resolution: number): void {
+    this.webgpuRenderer?.setShadowMapResolution(resolution);
+  }
+
+  /**
+   * Apply a performance preset (low, medium, high)
+   */
+  public applyWebGPUPerformancePreset(preset: 'low' | 'medium' | 'high'): void {
+    this.webgpuRenderer?.applyPerformancePreset(preset);
+  }
+
+  /**
+   * Set WebGPU space visibility (hide/show IFCSPACE elements)
+   */
+  public async setWebGPUSpacesVisible(visible: boolean): Promise<void> {
+    await this.webgpuRenderer?.setSpacesVisible(visible);
+  }
+
+  /**
+   * Check if WebGPU spaces are visible
+   */
+  public areWebGPUSpacesVisible(): boolean {
+    return this.webgpuRenderer?.areSpacesVisible() ?? true;
   }
 
   /**

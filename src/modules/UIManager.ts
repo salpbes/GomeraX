@@ -575,6 +575,9 @@ export class UIManager {
     const edgeThresholdSlider = document.getElementById('edgeThresholdSlider') as HTMLInputElement;
     const edgeThresholdValue = document.getElementById('edgeThresholdValue');
     const statsToggle = document.getElementById('webgpuStatsToggle') as HTMLInputElement;
+    const frustumCullingToggle = document.getElementById('webgpuFrustumCullingToggle') as HTMLInputElement;
+    const shadowQualitySelect = document.getElementById('shadowQualitySelect') as HTMLSelectElement;
+    const performancePresetSelect = document.getElementById('performancePresetSelect') as HTMLSelectElement;
     
     // Tone mapping change
     if (toneMappingSelect) {
@@ -647,6 +650,47 @@ export class UIManager {
     if (statsToggle) {
       statsToggle.addEventListener('change', () => {
         this.viewer?.setWebGPUStats(statsToggle.checked);
+      });
+    }
+    
+    // Frustum culling toggle
+    if (frustumCullingToggle) {
+      frustumCullingToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPUFrustumCulling(frustumCullingToggle.checked);
+      });
+    }
+    
+    // Shadow quality select
+    if (shadowQualitySelect) {
+      shadowQualitySelect.addEventListener('change', () => {
+        const resolution = parseInt(shadowQualitySelect.value);
+        this.viewer?.setWebGPUShadowQuality(resolution);
+      });
+    }
+    
+    // Performance preset select
+    if (performancePresetSelect) {
+      performancePresetSelect.addEventListener('change', () => {
+        const preset = performancePresetSelect.value as 'low' | 'medium' | 'high' | '';
+        if (preset) {
+          this.viewer?.applyWebGPUPerformancePreset(preset);
+          
+          // Update UI to reflect preset settings
+          if (preset === 'low') {
+            if (shadowsToggle) shadowsToggle.checked = false;
+            if (edgesToggle) edgesToggle.checked = false;
+            if (shadowQualitySelect) shadowQualitySelect.value = '512';
+          } else if (preset === 'medium') {
+            if (shadowsToggle) shadowsToggle.checked = true;
+            if (edgesToggle) edgesToggle.checked = false;
+            if (shadowQualitySelect) shadowQualitySelect.value = '1024';
+          } else if (preset === 'high') {
+            if (shadowsToggle) shadowsToggle.checked = true;
+            if (edgesToggle) edgesToggle.checked = true;
+            if (edgeThresholdControl) edgeThresholdControl.style.display = 'block';
+            if (shadowQualitySelect) shadowQualitySelect.value = '2048';
+          }
+        }
       });
     }
   }
@@ -820,6 +864,11 @@ export class UIManager {
 
     try {
       const spacesHidden = await spaceVisibility.toggleSpaceVisibility();
+      
+      // Also update WebGPU if active
+      if (this.viewer.isWebGPUActive()) {
+        await this.viewer.setWebGPUSpacesVisible(!spacesHidden);
+      }
       
       // Update button label
       const toggleBtn = document.getElementById('toggleSpacesBtn');
