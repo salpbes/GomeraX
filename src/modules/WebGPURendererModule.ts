@@ -49,7 +49,8 @@
  *    4-byte alignment (12 bytes per vertex). We convert them on the fly.
  * 
  * 4. LIGHTING: Since we render a separate "proxy scene", we need to copy
- *    the lights from the original scene, or add fallback lights.
+ *    the lights from the original scene, or add fallback lights. A dedicated
+ *    shadow-casting directional light is set up for realistic shadows.
  * 
  * 5. CONTROLS: We keep the original WebGL canvas active (but invisible) so
  *    that OrbitControls still work. The WebGPU canvas is visual-only.
@@ -68,6 +69,44 @@
  * - "Canvas Layering": Original canvas (opacity:0, pointer-events:auto) sits
  *   on top of WebGPU canvas (pointer-events:none) so controls work normally.
  * 
+ * - "Model Load Listener": Automatically rebuilds the proxy scene when new
+ *   models are loaded, enabling multi-model support in WebGPU mode.
+ * 
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * --------------------------
+ * - Frustum Culling: Hides meshes outside the camera's view frustum
+ * - Geometry Merging: Combines meshes with same material to reduce draw calls
+ * - Shadow Map Caching: Only updates shadows when camera moves significantly
+ * - Adaptive Quality: Presets for low/medium/high performance trade-offs
+ * 
+ * 
+ * FEATURES:
+ * ---------
+ * - Hide Spaces: Toggle visibility of IFCSPACE elements (synced with WebGL mode)
+ * - Shadow Quality: Adjustable shadow map resolution (512/1024/2048/4096)
+ * - Shadow Direction: Configurable sun angle and elevation
+ * - Ground Plane: Optional shadow-receiving ground surface
+ * - Tone Mapping: Multiple tone mapping modes for visual style
+ * - Edge Rendering: Optional wireframe edges on meshes
+ * - Stats Overlay: Real-time performance metrics display including:
+ *   - FPS, frame time, min/max FPS
+ *   - Mesh counts, triangles, vertices, draw calls
+ *   - Memory usage (geometries, materials, JS heap)
+ *   - Optimization status (frustum culling, geometry merging)
+ *   - Hardware info (CPU cores, device memory, battery)
+ *   - GPU info and renderer details
+ * 
+ * 
+ * WEBGPU-SPECIFIC GOTCHAS:
+ * ------------------------
+ * - DO NOT dispose shadow maps directly - causes renderer freeze
+ *   Solution: Recreate the entire shadow light instead of modifying mapSize
+ * - DO NOT dispose materials while renderer is active - causes usedTimes errors
+ *   Solution: Let garbage collection handle cleanup
+ * - Shadow map resolution changes require recreating the DirectionalLight
+ *   to avoid WebGPU resource management conflicts
+ * 
  * 
  * KNOWN LIMITATIONS:
  * ------------------
@@ -75,6 +114,7 @@
  * - No section plane hatching (relies on postprocessing)
  * - Highlighting/selection may not work the same way
  * - Some custom OBC features may not render correctly
+ * - Hardware telemetry (CPU/GPU temperature) not available due to browser security
  * 
  * 
  * @see https://threejs.org/docs/#api/en/renderers/WebGPURenderer
