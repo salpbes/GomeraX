@@ -362,6 +362,46 @@ export function createToolbarHTML(): string {
                 </div>
               </div>
               
+              <!-- Selection Highlight Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">🎯 Selection Highlight</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuOutlineToggle" checked>
+                  <span>Enable Selection Outline</span>
+                </label>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuHoverToggle" checked>
+                  <span>Enable Hover Highlight</span>
+                </label>
+                
+                <!-- Outline Thickness Slider -->
+                <div id="outlineThicknessControl" class="webgpu-control">
+                  <label>
+                    <span>Outline Thickness:</span>
+                    <span id="outlineThicknessValue">3%</span>
+                  </label>
+                  <input type="range" id="outlineThicknessSlider" min="1" max="20" step="1" value="3">
+                </div>
+                
+                <!-- Selection Color -->
+                <div class="webgpu-control">
+                  <label>
+                    <span>Selection Color:</span>
+                    <input type="color" id="outlineSelectionColor" value="#00aaff">
+                  </label>
+                </div>
+                
+                <!-- Hover Color -->
+                <div class="webgpu-control">
+                  <label>
+                    <span>Hover Color:</span>
+                    <input type="color" id="outlineHoverColor" value="#ffff00">
+                  </label>
+                </div>
+              </div>
+              
               <!-- Stats Section -->
               <div class="webgpu-section">
                 <div class="webgpu-section-header">📊 Performance</div>

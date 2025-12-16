@@ -479,6 +479,55 @@ export class IFCViewer {
   }
 
   /**
+   * Enable or disable outline/selection highlighting
+   */
+  public setWebGPUOutlineEnabled(enabled: boolean): void {
+    this.webgpuRenderer?.setOutlineEnabled(enabled);
+  }
+
+  /**
+   * Enable or disable hover highlighting
+   */
+  public setWebGPUOutlineHoverEnabled(enabled: boolean): void {
+    this.webgpuRenderer?.setOutlineHoverEnabled(enabled);
+  }
+
+  /**
+   * Set outline thickness (0.01 - 0.2)
+   */
+  public setWebGPUOutlineThickness(thickness: number): void {
+    this.webgpuRenderer?.setOutlineThickness(thickness);
+  }
+
+  /**
+   * Set selection outline color
+   */
+  public setWebGPUOutlineSelectionColor(color: number | string): void {
+    this.webgpuRenderer?.setOutlineSelectionColor(color);
+  }
+
+  /**
+   * Set hover outline color
+   */
+  public setWebGPUOutlineHoverColor(color: number | string): void {
+    this.webgpuRenderer?.setOutlineHoverColor(color);
+  }
+
+  /**
+   * Clear all current selections in WebGPU mode
+   */
+  public clearWebGPUSelection(): void {
+    this.webgpuRenderer?.clearOutlineSelection();
+  }
+
+  /**
+   * Debug WebGPU outline/selection state - use from browser console
+   */
+  public debugWebGPUOutline(): void {
+    this.webgpuRenderer?.debugOutlineState();
+  }
+
+  /**
    * Set shadow map resolution for quality/performance trade-off
    */
   public setWebGPUShadowQuality(resolution: number): void {

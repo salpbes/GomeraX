@@ -125,6 +125,9 @@ import * as THREE from 'three';
 // ClippingGroup removed - sectioning not supported in WebGPU mode
 import * as OBC from '@thatopen/components';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { WebGPUOutlineManager, type SelectionInfo } from './webgpu/WebGPUOutlineManager';
+import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './webgpu/WebGPUColorPicker';
+import { WebGPUElementSelector, type ElementSelectionInfo } from './webgpu/WebGPUElementSelector';
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
 export type RendererMode = 'webgl' | 'webgpu';
@@ -232,6 +235,17 @@ export class WebGPURendererModule {
   private modelLoadListener: any = null;
   private fragmentsManager: OBC.FragmentsManager | null = null;
   private knownModelIds: Set<string> = new Set();
+
+  // Outline/selection highlighting
+  private outlineManager: WebGPUOutlineManager | null = null;
+  private outlineEnabled: boolean = true;
+
+  // GPU Color Picking for individual element selection
+  private colorPicker: WebGPUColorPicker | null = null;
+  private colorPickingEnabled: boolean = true;
+
+  // Element selector for individual element highlighting in merged geometry
+  private elementSelector: WebGPUElementSelector | null = null;
 
   // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
   // sectionManager and clippingGroup removed
@@ -987,6 +1001,434 @@ export class WebGPURendererModule {
       line.geometry.dispose();
     }
     this.edgeLines = [];
+  }
+
+  // =========================================================================
+  // OUTLINE/SELECTION HIGHLIGHTING
+  // =========================================================================
+
+  /**
+   * Initialize the outline manager for selection highlighting
+   */
+  private initializeOutlineManager(): void {
+    if (!this.proxyScene || !this.camera || !this.container) return;
+    
+    this.outlineManager = new WebGPUOutlineManager();
+    this.outlineManager.initialize(this.proxyScene, this.camera, this.container);
+    
+    // Set up selection callback to log selections
+    this.outlineManager.setOnSelect((mesh, info) => {
+      if (mesh && info) {
+        console.log(`🎯 WebGPU Selection: ${mesh.name || 'Unnamed mesh'}`, info);
+      }
+    });
+    
+    // Set up hover callback (optional)
+    this.outlineManager.setOnHover((mesh) => {
+      // Could update cursor or show tooltip here
+    });
+    
+    // If element selector is active, disable outline manager's click handling
+    // (element selector provides individual element selection)
+    if (this.elementSelector) {
+      this.outlineManager.setEnabled(false);
+      console.log('🎯 Outline manager disabled (using element selector instead)');
+    } else {
+      console.log('🎯 Outline/selection highlighting initialized');
+    }
+  }
+
+  /**
+   * Set up click/hover handlers that use GPU color picking for element selection
+   */
+  private setupElementSelectionHandlers(): void {
+    if (!this.container || !this.colorPicker || !this.elementSelector) return;
+
+    // Disable hover for performance (geometry extraction on every mouse move is expensive)
+    this.elementSelector.setShowHover(false);
+
+    // Disable outline manager if it exists (we're using element selector instead)
+    if (this.outlineManager) {
+      this.outlineManager.setEnabled(false);
+    }
+
+    // Find the original canvas (which receives pointer events)
+    let eventTarget: HTMLElement = this.container;
+    const originalCanvas = this.container.querySelector('canvas:not(#webgpu-canvas)') as HTMLElement | null;
+    if (originalCanvas) {
+      eventTarget = originalCanvas;
+    }
+
+    // Click handler for selection
+    const handleClick = async (event: MouseEvent) => {
+      if (!this.colorPicker || !this.elementSelector) return;
+
+      // Check for modifier keys
+      const isMultiSelect = event.shiftKey;
+      const isToggle = event.ctrlKey || event.metaKey;
+
+      // Use GPU color picker to identify the element
+      const result = await this.colorPicker.pick(event.clientX, event.clientY);
+
+      if (result) {
+        const info = this.colorPicker.getElementInfo(result.elementId);
+        if (info) {
+          if (isToggle && this.elementSelector.isElementSelected(result.elementId)) {
+            // Toggle off
+            this.elementSelector.deselectElement(result.elementId);
+          } else if (isMultiSelect) {
+            // Add to selection
+            this.elementSelector.selectElement(result, info);
+          } else {
+            // Single selection - clear others first
+            this.elementSelector.clearSelection();
+            this.elementSelector.selectElement(result, info);
+          }
+
+          console.log(`🎯 GPU Picked element: localId=${info.localId}, category=${info.category || 'unknown'}`);
+        }
+      } else if (!isMultiSelect && !isToggle) {
+        // Clicked on nothing - clear selection
+        this.elementSelector.clearSelection();
+      }
+    };
+
+    // Add event listeners (wrapped to handle pointer events)
+    const clickWrapper = (e: Event) => {
+      if (e instanceof PointerEvent || e instanceof MouseEvent) {
+        handleClick(e as MouseEvent);
+      }
+    };
+    
+    // Only listen for clicks, not hover (hover is disabled for performance)
+    eventTarget.addEventListener('pointerup', clickWrapper, { capture: true });
+
+    console.log('🎯 Element selection handlers attached (GPU color picking)');
+  }
+
+  /**
+   * Enable or disable outline/selection highlighting
+   */
+  public setOutlineEnabled(enabled: boolean): void {
+    this.outlineEnabled = enabled;
+    
+    if (this.outlineManager) {
+      this.outlineManager.setEnabled(enabled);
+    }
+    
+    console.log(`🎯 Outline highlighting ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current outline highlighting state
+   */
+  public isOutlineEnabled(): boolean {
+    return this.outlineEnabled;
+  }
+
+  /**
+   * Set the outline color for selected objects
+   * @param color Hex color value (e.g., 0x00aaff for blue)
+   */
+  public setOutlineSelectionColor(color: number | string): void {
+    if (this.outlineManager) {
+      this.outlineManager.setSelectionColor(color);
+    }
+    if (this.elementSelector) {
+      this.elementSelector.setSelectionColor(color);
+    }
+    console.log(`🎯 Selection color changed`);
+  }
+
+  /**
+   * Set the outline color for hovered objects
+   * @param color Hex color value (e.g., 0xffff00 for yellow)
+   */
+  public setOutlineHoverColor(color: number | string): void {
+    if (this.outlineManager) {
+      this.outlineManager.setHoverColor(color);
+    }
+    if (this.elementSelector) {
+      this.elementSelector.setHoverColor(color);
+    }
+    console.log(`🎯 Hover color changed`);
+  }
+
+  /**
+   * Set the outline thickness
+   * @param thickness Value between 0.01 and 0.2 (default: 0.03)
+   */
+  public setOutlineThickness(thickness: number): void {
+    if (this.outlineManager) {
+      this.outlineManager.setThickness(thickness);
+      console.log(`🎯 Outline thickness set to ${thickness}`);
+    }
+  }
+
+  /**
+   * Enable or disable hover highlighting
+   */
+  public setOutlineHoverEnabled(enabled: boolean): void {
+    if (this.outlineManager) {
+      this.outlineManager.setShowHover(enabled);
+      console.log(`🎯 Hover highlighting ${enabled ? 'enabled' : 'disabled'}`);
+    }
+  }
+
+  /**
+   * Clear all current selections
+   */
+  public clearOutlineSelection(): void {
+    if (this.outlineManager) {
+      this.outlineManager.clearSelection();
+    }
+  }
+
+  /**
+   * Get currently selected meshes
+   */
+  public getSelectedMeshes(): THREE.Mesh[] {
+    return this.outlineManager?.getSelectedMeshes() ?? [];
+  }
+
+  /**
+   * Get selection info for currently selected meshes
+   */
+  public getSelectionInfo(): SelectionInfo[] {
+    return this.outlineManager?.getSelectionInfo() ?? [];
+  }
+
+  /**
+   * Programmatically select meshes matching a name pattern
+   * @param pattern String or RegExp to match against mesh names
+   */
+  public selectMeshesByName(pattern: string | RegExp): void {
+    if (this.outlineManager) {
+      this.outlineManager.selectByName(pattern);
+    }
+  }
+
+  /**
+   * Debug outline/selection state - call this from console for troubleshooting
+   */
+  public debugOutlineState(): void {
+    console.log('🎯 ==========================================');
+    console.log('🎯 WebGPU Outline Debug');
+    console.log('🎯 ==========================================');
+    console.log('🎯 Outline manager exists:', !!this.outlineManager);
+    console.log('🎯 Outline enabled:', this.outlineEnabled);
+    console.log('🎯 Proxy scene exists:', !!this.proxyScene);
+    console.log('🎯 Camera exists:', !!this.camera);
+    console.log('🎯 Container exists:', !!this.container);
+    
+    if (this.outlineManager) {
+      this.outlineManager.debugSceneState();
+      this.outlineManager.testRaycastCenter();
+    }
+    console.log('🎯 ==========================================');
+  }
+
+  /**
+   * Get the outline manager instance (for advanced usage)
+   */
+  public getOutlineManager(): WebGPUOutlineManager | null {
+    return this.outlineManager;
+  }
+
+  // =========================================================================
+  // GPU COLOR PICKING API - Individual Element Selection
+  // =========================================================================
+
+  /**
+   * Enable or disable GPU color picking for individual element selection
+   * Note: This affects the next scene rebuild, not immediately
+   */
+  public setColorPickingEnabled(enabled: boolean): void {
+    this.colorPickingEnabled = enabled;
+    console.log(`🎯 GPU color picking ${enabled ? 'enabled' : 'disabled'} (applies to next scene build)`);
+  }
+
+  /**
+   * Check if GPU color picking is enabled
+   */
+  public isColorPickingEnabled(): boolean {
+    return this.colorPickingEnabled;
+  }
+
+  /**
+   * Pick an element at the given screen coordinates
+   * @param x Screen X coordinate (relative to container)
+   * @param y Screen Y coordinate (relative to container)
+   * @returns Promise resolving to picking result or null
+   */
+  public async pickElementAt(x: number, y: number): Promise<PickingResult | null> {
+    if (!this.colorPicker) {
+      console.warn('GPU color picker not initialized');
+      return null;
+    }
+    return this.colorPicker.pick(x, y);
+  }
+
+  /**
+   * Pick an element at the center of the screen
+   * @returns Promise resolving to picking result or null
+   */
+  public async pickElementAtCenter(): Promise<PickingResult | null> {
+    if (!this.colorPicker || !this.container) return null;
+    
+    const rect = this.container.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    return this.pickElementAt(centerX, centerY);
+  }
+
+  /**
+   * Get element info by local IFC element ID
+   * @param localId The IFC element ID (ExpressID)
+   * @returns Element info or undefined
+   */
+  public getElementInfoByLocalId(localId: number): ElementInfo | undefined {
+    if (!this.colorPicker) return undefined;
+    
+    // Search through all elements for the matching localId
+    const info = this.colorPicker.getElementInfo(localId);
+    return info;
+  }
+
+  /**
+   * Get the total number of pickable elements registered
+   */
+  public getPickableElementCount(): number {
+    return this.colorPicker?.getElementCount() ?? 0;
+  }
+
+  /**
+   * Set callback for GPU picking click events
+   * @param callback Function called when an element is clicked
+   */
+  public setOnColorPickClick(callback: ((result: PickingResult | null) => void) | null): void {
+    if (this.colorPicker) {
+      this.colorPicker.setOnSelect(callback);
+    }
+  }
+
+  /**
+   * Set callback for GPU picking hover events
+   * @param callback Function called when hovering over an element
+   */
+  public setOnColorPickHover(callback: ((result: PickingResult | null) => void) | null): void {
+    if (this.colorPicker) {
+      this.colorPicker.setOnHover(callback);
+    }
+  }
+
+  /**
+   * Get the color picker instance (for advanced usage)
+   */
+  public getColorPicker(): WebGPUColorPicker | null {
+    return this.colorPicker;
+  }
+
+  /**
+   * Debug GPU color picker state
+   */
+  public debugColorPickerState(): void {
+    console.log('🎯 ==========================================');
+    console.log('🎯 GPU Color Picker Debug');
+    console.log('🎯 ==========================================');
+    console.log('🎯 Color picker exists:', !!this.colorPicker);
+    console.log('🎯 Color picking enabled:', this.colorPickingEnabled);
+    
+    if (this.colorPicker) {
+      console.log('🎯 Registered elements:', this.colorPicker.getElementCount());
+      console.log('🎯 Picking scene ready:', !!this.colorPicker);
+    }
+    console.log('🎯 ==========================================');
+  }
+
+  // =========================================================================
+  // ELEMENT SELECTOR API - Individual Element Highlighting
+  // =========================================================================
+
+  /**
+   * Get the element selector instance (for advanced usage)
+   */
+  public getElementSelector(): WebGPUElementSelector | null {
+    return this.elementSelector;
+  }
+
+  /**
+   * Clear all element selections
+   */
+  public clearElementSelection(): void {
+    if (this.elementSelector) {
+      this.elementSelector.clearSelection();
+    }
+  }
+
+  /**
+   * Get currently selected elements
+   */
+  public getSelectedElements(): ElementSelectionInfo[] {
+    return this.elementSelector?.getSelectedElements() ?? [];
+  }
+
+  /**
+   * Get selected element count
+   */
+  public getSelectedElementCount(): number {
+    return this.elementSelector?.getSelectedCount() ?? 0;
+  }
+
+  /**
+   * Set element selection color
+   */
+  public setElementSelectionColor(color: number | string): void {
+    if (this.elementSelector) {
+      this.elementSelector.setSelectionColor(color);
+    }
+  }
+
+  /**
+   * Set element hover color
+   */
+  public setElementHoverColor(color: number | string): void {
+    if (this.elementSelector) {
+      this.elementSelector.setHoverColor(color);
+    }
+  }
+
+  /**
+   * Set callback for element selection events
+   */
+  public setOnElementSelect(callback: ((info: ElementSelectionInfo | null) => void) | null): void {
+    if (this.elementSelector) {
+      this.elementSelector.setOnSelect(callback);
+    }
+  }
+
+  /**
+   * Set callback for element hover events
+   */
+  public setOnElementHover(callback: ((info: ElementSelectionInfo | null) => void) | null): void {
+    if (this.elementSelector) {
+      this.elementSelector.setOnHover(callback);
+    }
+  }
+
+  /**
+   * Debug element selector state
+   */
+  public debugElementSelectorState(): void {
+    console.log('🎯 ==========================================');
+    console.log('🎯 Element Selector Debug');
+    console.log('🎯 ==========================================');
+    console.log('🎯 Element selector exists:', !!this.elementSelector);
+    
+    if (this.elementSelector) {
+      this.elementSelector.debugStats();
+    }
+    console.log('🎯 ==========================================');
   }
 
   // =========================================================================
@@ -2151,6 +2593,22 @@ export class WebGPURendererModule {
             geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
           }
 
+          // -----------------------------------------------------------------
+          // GPU COLOR PICKING: Add element ID as vertex color attribute
+          // -----------------------------------------------------------------
+          // Register the element with the color picker and encode its ID
+          // as a vertex color attribute. This survives geometry merging and
+          // allows individual element selection in GPU picking pass.
+          // -----------------------------------------------------------------
+          if (this.colorPicker && this.colorPickingEnabled) {
+            const elementId = this.colorPicker.registerElement({
+              localId: localIdForMesh,
+              modelId,
+              category: localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId),
+            });
+            this.colorPicker.createElementColorAttribute(geometry, elementId);
+          }
+
           // GEOMETRY MERGING OPTIMIZATION:
           // Instead of creating a mesh immediately, apply transform to geometry
           // and collect it for later merging with other geometries using same material.
@@ -2300,6 +2758,27 @@ export class WebGPURendererModule {
     // Adjust shadow camera to fit the model
     this.updateShadowBounds();
 
+    // Initialize and build GPU picking scene after all elements are registered
+    if (this.colorPicker && this.colorPickingEnabled && this.container && this.webgpuRenderer && this.camera) {
+      // Initialize with renderer, scene, camera, container
+      this.colorPicker.initialize(
+        this.webgpuRenderer,
+        proxy,
+        this.camera,
+        this.container
+      );
+      // Build the picking scene with cloned meshes using picking material
+      this.colorPicker.buildPickingScene();
+      console.log(`🎯 GPU color picker initialized with ${this.colorPicker.getElementCount()} elements`);
+
+      // Initialize element selector for shader-based highlighting
+      this.elementSelector = new WebGPUElementSelector();
+      this.elementSelector.initialize(proxy, this.camera, this.container);
+      
+      // Wire up click handling: use color picker to get element, then select in element selector
+      this.setupElementSelectionHandlers();
+    }
+
     return true;
   }
 
@@ -2443,6 +2922,13 @@ export class WebGPURendererModule {
         this.webgpuRenderer.shadowMap.enabled = true;
         this.webgpuRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
       }
+
+      // Initialize GPU color picker BEFORE proxy scene is built
+      // This allows elements to be registered during geometry creation
+      if (this.colorPickingEnabled) {
+        this.colorPicker = new WebGPUColorPicker();
+        // Initialize happens later after proxy scene is ready
+      }
       
       // Create proxy scene with compatible materials
       await this.createProxyScene(this.scene);
@@ -2505,6 +2991,9 @@ export class WebGPURendererModule {
       // Setup model load listener to update proxy scene when new models are added
       this.setupModelLoadListener();
 
+      // Initialize outline/selection highlighting
+      this.initializeOutlineManager();
+
       // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
       // Section manager initialization removed
 
@@ -2555,6 +3044,18 @@ export class WebGPURendererModule {
       this.webgpuRenderer = null;
     }
 
+    // Dispose color picker
+    if (this.colorPicker) {
+      this.colorPicker.dispose();
+      this.colorPicker = null;
+    }
+
+    // Dispose element selector
+    if (this.elementSelector) {
+      this.elementSelector.dispose();
+      this.elementSelector = null;
+    }
+
     // Show original canvas
     if (this.container) {
       const originalCanvas = this.container.querySelector('canvas:not(#webgpu-canvas)');
@@ -2595,10 +3096,10 @@ export class WebGPURendererModule {
     // Remove model load listener
     this.removeModelLoadListener();
     
-    // Dispose section manager
-    if (this.sectionManager) {
-      this.sectionManager.dispose();
-      this.sectionManager = null;
+    // Dispose outline manager
+    if (this.outlineManager) {
+      this.outlineManager.dispose();
+      this.outlineManager = null;
     }
     
     this.components = null;
@@ -2702,6 +3203,11 @@ export class WebGPURendererModule {
           this.webgpuRenderer.clear();
         }
         this.webgpuRenderer.render(this.proxyScene, this.camera);
+
+        // Render element selection overlay (shader-based individual element highlighting)
+        if (this.elementSelector) {
+          this.elementSelector.render(this.webgpuRenderer);
+        }
       } catch (e) {
         console.error("Render error", e);
       }
