@@ -122,8 +122,10 @@
  */
 
 import * as THREE from 'three';
+// ClippingGroup removed - sectioning not supported in WebGPU mode
 import * as OBC from '@thatopen/components';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+// WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
 export type RendererMode = 'webgl' | 'webgpu';
 
@@ -211,6 +213,16 @@ export class WebGPURendererModule {
   private lastCameraPosition: THREE.Vector3 = new THREE.Vector3();
   private lastCameraQuaternion: THREE.Quaternion = new THREE.Quaternion();
   private cameraMovedThreshold: number = 0.001;
+
+  // When section clipping is active, WebGPU shadow + clipping interactions can
+  // produce view-dependent artifacts. We temporarily disable shadows.
+  private shadowMapEnabledBeforeClipping: boolean | null = null;
+
+  // Sectioning/clipping is NOT supported in WebGPU mode
+  // ClippingGroup-based clipping has issues with edge lines and material compatibility
+  private isClippingEnabled(): boolean {
+    return false;  // Always false - sectioning disabled in WebGPU mode
+  }
   
   // Category visibility (for hiding spaces, etc.)
   private hiddenCategories: Set<string> = new Set();
@@ -220,6 +232,13 @@ export class WebGPURendererModule {
   private modelLoadListener: any = null;
   private fragmentsManager: OBC.FragmentsManager | null = null;
   private knownModelIds: Set<string> = new Set();
+
+  // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
+  // sectionManager and clippingGroup removed
+
+
+  // Sectioning-related state removed (sectioning not supported in WebGPU mode)
+  // originalMaterialSides, isClippingActive, originalAlphaToCoverage, edgesWereVisibleBeforeClipping removed
 
   constructor() {}
 
@@ -936,6 +955,7 @@ export class WebGPURendererModule {
             
             lineSegments.name = 'edge-line';
             lineSegments.visible = this.edgesEnabled;
+            lineSegments.frustumCulled = false;
             
             // Add to same parent as mesh or to scene
             if (obj.parent) {
@@ -1197,6 +1217,8 @@ export class WebGPURendererModule {
     const wasEdgesEnabled = this.edgesEnabled;
     const wasGroundPlaneEnabled = this.groundPlaneEnabled;
     
+    // Sectioning not supported in WebGPU mode - no clipping planes to preserve
+    
     // Dispose old proxy scene resources
     this.removeEdges();
     for (const geo of this.createdGeometries) {
@@ -1225,6 +1247,8 @@ export class WebGPURendererModule {
       if (wasEdgesEnabled) {
         this.createEdges();
       }
+      
+      // Sectioning not supported in WebGPU mode - no clipping planes to restore
       
       console.log('✅ WebGPU proxy scene rebuilt');
     }
@@ -1357,6 +1381,8 @@ export class WebGPURendererModule {
       modelGroup.position.copy(modelObj.position);
       modelGroup.quaternion.copy(modelObj.quaternion);
       modelGroup.scale.copy(modelObj.scale);
+      // Add to clipping group if available, otherwise to root
+      // Sectioning not supported - add directly to root
       root.add(modelGroup);
 
       // Traverse the model's scene graph and clone meshes
@@ -1667,6 +1693,7 @@ export class WebGPURendererModule {
 
       const modelGroup = new THREE.Group();
       modelGroup.name = `webgpu-model-${modelId}`;
+      // Sectioning not supported - add directly to root
       root.add(modelGroup);
 
       const modelObj = model?.object as THREE.Object3D | undefined;
@@ -2146,13 +2173,19 @@ export class WebGPURendererModule {
             meshCount++;
           } else {
             // Original path: create individual mesh per item
+            // IMPORTANT: bake transform into geometry (not Object3D.applyMatrix4).
+            // Some fragment transforms are not safely decomposable into TRS, which can
+            // lead to NaNs / invisible meshes if applied to the Object3D.
+            if (meshData.transform) {
+              geometry.applyMatrix4(meshData.transform);
+            }
+
+            geometry.computeBoundingSphere();
+
             const mesh = new THREE.Mesh(geometry, materialForMesh);
             mesh.castShadow = this.shadowsEnabled;
             mesh.receiveShadow = this.shadowsEnabled;
-            
-            if (meshData.transform) {
-              mesh.applyMatrix4(meshData.transform);
-            }
+            mesh.frustumCulled = false; // Disable THREE.js internal culling for clipping stability
 
             modelGroup.add(mesh);
             this.createdGeometries.push(geometry);
@@ -2196,6 +2229,7 @@ export class WebGPURendererModule {
                 const mesh = new THREE.Mesh(merged, material);
                 mesh.castShadow = this.shadowsEnabled;
                 mesh.receiveShadow = this.shadowsEnabled;
+                mesh.frustumCulled = false; // Disable THREE.js internal culling for clipping stability
                 mesh.name = `merged-batch-${matKey}-${mergedMeshCount}`;
                 modelGroup.add(mesh);
                 this.createdGeometries.push(merged);
@@ -2371,7 +2405,9 @@ export class WebGPURendererModule {
       // Create WebGPU renderer
       this.webgpuRenderer = new WebGPURenderer({
         antialias: true,
-        alpha: true,
+        // Opaque canvas prevents accumulation/trail artifacts while moving camera.
+        // We don't need transparency because the WebGL canvas above is opacity:0.
+        alpha: false,
       });
 
       // Initialize the renderer (WebGPU requires async init)
@@ -2385,6 +2421,17 @@ export class WebGPURendererModule {
       this.webgpuRenderer.setSize(width, height);
       this.webgpuRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.webgpuRenderer.setClearColor(new THREE.Color(0xd1dee9), 1);
+
+      // Be explicit about clearing behavior (WebGPU can otherwise look like it "smears"
+      // when the camera moves if the frame isn't fully cleared).
+      try {
+        this.webgpuRenderer.autoClear = true;
+        this.webgpuRenderer.autoClearColor = true;
+        this.webgpuRenderer.autoClearDepth = true;
+        this.webgpuRenderer.autoClearStencil = true;
+      } catch {
+        // Some properties may not exist depending on three/webgpu version.
+      }
 
       // Tone mapping for better color/brightness balance
       // ACES Filmic gives a cinematic look with natural highlights
@@ -2400,13 +2447,9 @@ export class WebGPURendererModule {
       // Create proxy scene with compatible materials
       await this.createProxyScene(this.scene);
 
-      // Enable local clipping for section planes
-      if ('localClippingEnabled' in this.webgpuRenderer) {
-        this.webgpuRenderer.localClippingEnabled = true;
-      }
-      if ('clippingPlanes' in this.webgpuRenderer) {
-        this.webgpuRenderer.clippingPlanes = [];
-      }
+      // Enable local clipping for section planes - MUST be set for material clipping to work
+      this.webgpuRenderer.localClippingEnabled = true;
+      console.log('✂️ WebGPU local clipping enabled');
 
       // Hide the original canvas but keep it interactive for controls
       const originalCanvas = container.querySelector('canvas');
@@ -2461,6 +2504,9 @@ export class WebGPURendererModule {
       
       // Setup model load listener to update proxy scene when new models are added
       this.setupModelLoadListener();
+
+      // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
+      // Section manager initialization removed
 
       console.log('✅ WebGPU renderer enabled successfully');
       return true;
@@ -2549,6 +2595,12 @@ export class WebGPURendererModule {
     // Remove model load listener
     this.removeModelLoadListener();
     
+    // Dispose section manager
+    if (this.sectionManager) {
+      this.sectionManager.dispose();
+      this.sectionManager = null;
+    }
+    
     this.components = null;
 
     console.log('✅ WebGPU renderer disabled, WebGL restored');
@@ -2627,6 +2679,7 @@ export class WebGPURendererModule {
       const cameraMoved = this.hasCameraMoved();
       
       // Apply frustum culling for performance
+      // Sectioning not supported in WebGPU mode, so no need to bypass culling
       if (this.frustumCullingEnabled && cameraMoved) {
         this.performFrustumCulling();
       }
@@ -2644,6 +2697,10 @@ export class WebGPURendererModule {
 
       // Render the proxy scene
       try {
+        // Force full clear every frame to avoid camera-motion artifacts.
+        if (typeof this.webgpuRenderer.clear === 'function') {
+          this.webgpuRenderer.clear();
+        }
         this.webgpuRenderer.render(this.proxyScene, this.camera);
       } catch (e) {
         console.error("Render error", e);
@@ -2655,7 +2712,7 @@ export class WebGPURendererModule {
 
     render();
   }
-  
+
   /**
    * Check if camera has moved significantly since last frame
    */
@@ -2784,12 +2841,120 @@ export class WebGPURendererModule {
   }
 
   /**
-   * Update clipping planes (for section tool compatibility)
+   * Set clipping planes - NOT SUPPORTED in WebGPU mode
+   * 
+   * WebGPU ClippingGroup has compatibility issues:
+   * - LineBasicMaterial (edge lines) don't clip
+   * - Material-level clipping causes camera-space artifacts
+   * - Complex workarounds still don't work reliably
+   * 
+   * This method is a no-op stub. Sectioning is disabled in WebGPU mode.
    */
-  public setClippingPlanes(planes: THREE.Plane[]): void {
-    if (this.webgpuRenderer && 'clippingPlanes' in this.webgpuRenderer) {
-      this.webgpuRenderer.clippingPlanes = planes;
+  public setClippingPlanes(_planes: THREE.Plane[]): void {
+    console.warn('⚠️ Sectioning/clipping is not supported in WebGPU mode');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION PLANES API (NOT SUPPORTED IN WEBGPU MODE)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Sectioning is NOT SUPPORTED in WebGPU mode.
+   * ClippingGroup has compatibility issues with edge lines and materials.
+   * Use WebGL mode for sectioning functionality.
+   */
+  
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public getSectionManager(): null {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+    return null;
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public createXAxisSectionPlane(): string {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+    return '';
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public createYAxisSectionPlane(): string {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+    return '';
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public createZAxisSectionPlane(): string {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+    return '';
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public deleteAllSectionPlanes(): void {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public flipSectionPlanes(): void {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public toggleSectionPlanesVisibility(): void {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public toggleSectionPlanesEnabled(): void {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+  }
+
+  /** @deprecated Sectioning not supported in WebGPU mode */
+  public setSectionModeEnabled(_enabled: boolean): void {
+    console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+  }
+
+  /** Sectioning is not supported in WebGPU mode - always returns false */
+  public isSectionModeEnabled(): boolean {
+    return false;
+  }
+
+  /** Sectioning is not supported in WebGPU mode - always returns 0 */
+  public getSectionPlaneCount(): number {
+    return 0;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UTILITY METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get scene center for positioning
+   */
+  private getSceneCenter(): THREE.Vector3 {
+    const center = new THREE.Vector3();
+    
+    if (this.proxyScene) {
+      const box = new THREE.Box3();
+      let meshCount = 0;
+      this.proxyScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.geometry && 
+            obj.name !== 'webgpu-ground-plane') {
+          obj.geometry.computeBoundingBox();
+          if (obj.geometry.boundingBox) {
+            const meshBox = obj.geometry.boundingBox.clone();
+            meshBox.applyMatrix4(obj.matrixWorld);
+            box.union(meshBox);
+            meshCount++;
+          }
+        }
+      });
+      
+      if (!box.isEmpty()) {
+        box.getCenter(center);
+      }
     }
+    
+    return center;
   }
 
   /**

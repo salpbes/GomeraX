@@ -8,6 +8,7 @@ export { WebGPUShadowManager } from './WebGPUShadowManager';
 export { WebGPUEdgeManager } from './WebGPUEdgeManager';
 export { WebGPUStatsOverlay, type StatsOverlayConfig } from './WebGPUStatsOverlay';
 export { WebGPUOptimizations } from './WebGPUOptimizations';
+// WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
 // Utilities
 export { WebGPUMaterialFactory } from './WebGPUMaterialFactory';

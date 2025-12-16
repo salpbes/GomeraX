@@ -93,6 +93,29 @@ export interface OptimizationConfig {
 }
 
 /**
+ * Section plane configuration
+ */
+export interface SectionConfig {
+  enabled: boolean;
+  helperSize: number;         // Size of plane helper visualization
+  helperColor: number;        // Color of plane helper (hex)
+  flipButtonColor: number;    // Color of flip button (hex)
+  flipButtonHoverColor: number; // Hover color of flip button (hex)
+  planeOpacity: number;       // Opacity of plane visualization
+}
+
+/**
+ * Serializable section plane data
+ */
+export interface SectionPlaneData {
+  id: string;
+  normal: [number, number, number];
+  constant: number;
+  visible: boolean;
+  enabled: boolean;
+}
+
+/**
  * Category colors for IFC elements (ColorSplash-compatible)
  */
 export const CATEGORY_COLORS: Record<string, number> = {

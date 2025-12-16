@@ -1478,7 +1478,17 @@ export class UIManager {
   }
 
   /**
+   * Check if WebGPU mode is currently active
+   */
+  private isWebGPUMode(): boolean {
+    if (!this.viewer) return false;
+    const webgpuRenderer = this.viewer.getWebGPURenderer?.();
+    return webgpuRenderer?.isEnabled?.() || false;
+  }
+
+  /**
    * Handles clipper toggle - enables/disables sectioning mode
+   * NOTE: Sectioning is NOT supported in WebGPU mode
    */
   private handleToggleClipper(): void {
     if (!this.viewer) {
@@ -1501,6 +1511,21 @@ export class UIManager {
       return;
     }
 
+    // Sectioning is NOT supported in WebGPU mode
+    if (this.isWebGPUMode()) {
+      console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+      import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+        NotificationHelper.show({
+          title: 'Sectioning Unavailable',
+          message: 'Sectioning is not supported in WebGPU mode. Switch to WebGL mode to use sectioning.',
+          type: 'warning',
+          duration: 4000
+        });
+      });
+      return;
+    }
+
+    // WebGL mode - use OBC.Clipper
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');
@@ -1528,6 +1553,7 @@ export class UIManager {
 
   /**
    * Handles preset clipping planes (X, Y, Z axis)
+   * NOTE: Sectioning is NOT supported in WebGPU mode
    */
   private handleClipperPreset(axis: 'x' | 'y' | 'z'): void {
     if (!this.viewer) {
@@ -1549,6 +1575,21 @@ export class UIManager {
       return;
     }
 
+    // Sectioning is NOT supported in WebGPU mode
+    if (this.isWebGPUMode()) {
+      console.warn('⚠️ Sectioning is not supported in WebGPU mode');
+      import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+        NotificationHelper.show({
+          title: 'Sectioning Unavailable',
+          message: 'Sectioning is not supported in WebGPU mode. Switch to WebGL mode to use sectioning.',
+          type: 'warning',
+          duration: 4000
+        });
+      });
+      return;
+    }
+
+    // WebGL mode - use OBC.Clipper
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');
@@ -1583,6 +1624,7 @@ export class UIManager {
   /**
    * Enables surface click mode for creating clipping planes
    * Double-click on any surface to create a section plane at that point
+   * Works with both WebGL and WebGPU modes
    */
   private handleClipperSurfaceMode(): void {
     if (!this.viewer) {
@@ -1590,6 +1632,34 @@ export class UIManager {
       return;
     }
 
+    // Check if in WebGPU mode
+    if (this.isWebGPUMode()) {
+      const webgpuRenderer = this.viewer.getWebGPURenderer();
+      if (webgpuRenderer) {
+        webgpuRenderer.setSectionModeEnabled(true);
+        this.updateClipperButtonState(true);
+        this.setSafeVisualStyle(true);
+        
+        const surfaceBtn = document.getElementById('clipperSurfaceBtn');
+        if (surfaceBtn) {
+          surfaceBtn.classList.add('active');
+        }
+        
+        console.log('🎯 WebGPU surface section mode enabled - Double-click on any surface to create section plane');
+        
+        import('./ui/NotificationHelper').then(({ NotificationHelper }) => {
+          NotificationHelper.show({
+            title: '🎯 Click Surface Mode',
+            message: 'Double-click on any surface to create a section plane at that point',
+            type: 'info',
+            duration: 3000
+          });
+        });
+        return;
+      }
+    }
+
+    // WebGL mode
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');
@@ -1626,6 +1696,7 @@ export class UIManager {
 
   /**
    * Flips clipping planes to show the other side
+   * Works with both WebGL and WebGPU modes
    */
   private handleClipperFlip(): void {
     if (!this.viewer) {
@@ -1633,6 +1704,25 @@ export class UIManager {
       return;
     }
 
+    // Check if in WebGPU mode
+    if (this.isWebGPUMode()) {
+      const webgpuRenderer = this.viewer.getWebGPURenderer();
+      if (webgpuRenderer) {
+        try {
+          if (webgpuRenderer.getSectionPlaneCount() === 0) {
+            console.warn('No section planes to flip');
+            return;
+          }
+          webgpuRenderer.flipSectionPlanes();
+          console.log('🔄 WebGPU section planes flipped');
+        } catch (error) {
+          console.error('❌ Error flipping WebGPU section planes:', error);
+        }
+        return;
+      }
+    }
+
+    // WebGL mode
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');
@@ -1654,6 +1744,7 @@ export class UIManager {
 
   /**
    * Handles canceling clipper mode (clears all planes and disables sectioning)
+   * Works with both WebGL and WebGPU modes
    */
   private handleCancelClipperMode(): void {
     if (!this.viewer) {
@@ -1661,6 +1752,37 @@ export class UIManager {
       return;
     }
 
+    // Check if in WebGPU mode
+    if (this.isWebGPUMode()) {
+      const webgpuRenderer = this.viewer.getWebGPURenderer();
+      if (webgpuRenderer) {
+        try {
+          // Clear all section planes
+          webgpuRenderer.deleteAllSectionPlanes();
+          console.log('🗑️ All WebGPU section planes cleared');
+          
+          // Disable section mode
+          webgpuRenderer.setSectionModeEnabled(false);
+          this.setSafeVisualStyle(false);
+          
+          // Update button states
+          this.updateClipperButtonState(false);
+          
+          // Remove active state from surface button
+          const surfaceBtn = document.getElementById('clipperSurfaceBtn');
+          if (surfaceBtn) {
+            surfaceBtn.classList.remove('active');
+          }
+          
+          console.log('✅ WebGPU section mode canceled');
+        } catch (error) {
+          console.error('❌ Error canceling WebGPU section mode:', error);
+        }
+        return;
+      }
+    }
+
+    // WebGL mode
     const clipper = this.viewer.getClipper();
     if (!clipper) {
       console.warn('⚠️ Clipper module not initialized');

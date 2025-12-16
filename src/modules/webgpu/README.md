@@ -14,22 +14,28 @@ webgpu/
 ├── WebGPUOptimizations.ts      # Frustum culling, geometry merging
 ├── WebGPUMaterialFactory.ts    # Material creation and caching
 ├── WebGPUGeometryUtils.ts      # Geometry conversion utilities
+├── WebGPUSectionManager.ts     # Section planes (clipping) functionality
 └── README.md                   # This file
 ```
 
 ## Module Descriptions
 
 ### WebGPUTypes.ts
+
 Shared type definitions and constants used across all WebGPU modules:
+
 - `RendererMode`, `WebGPUStatus`, `PerformancePreset`
 - `SceneStats`, `PerformanceStats` interfaces
 - `ShadowConfig`, `EdgeConfig`, `GroundPlaneConfig`
+- `SectionConfig`, `SectionPlaneData` - Section plane configuration
 - `CATEGORY_COLORS` - IFC element color palette
 - `TONE_MAPPING_MODES` - Available tone mapping options
 - Utility functions: `formatNumber`, `getToneMappingName`
 
 ### WebGPUShadowManager.ts
+
 Handles all shadow-related functionality:
+
 - Shadow-casting directional light setup
 - Ground plane creation and positioning
 - Shadow bounds calculation from scene
@@ -37,14 +43,18 @@ Handles all shadow-related functionality:
 - Safe shadow map resolution changes (recreates light to avoid WebGPU freeze)
 
 ### WebGPUEdgeManager.ts
+
 Manages edge/wireframe rendering:
+
 - Creates edge lines for all meshes using `THREE.EdgesGeometry`
 - Configurable angle threshold
 - Enable/disable at runtime
 - Proper cleanup and disposal
 
 ### WebGPUStatsOverlay.ts
+
 Real-time performance metrics display:
+
 - FPS, frame time, min/max tracking
 - Scene statistics (meshes, triangles, draw calls)
 - Memory usage (geometries, materials, JS heap)
@@ -52,25 +62,70 @@ Real-time performance metrics display:
 - Draggable, styled overlay with scrollbar support
 
 ### WebGPUOptimizations.ts
+
 Performance optimization utilities:
+
 - Frustum culling implementation
 - Camera movement detection
 - Geometry merging by material
 - Visible mesh counting
 
 ### WebGPUMaterialFactory.ts
+
 Material creation and caching:
+
 - Material caching by color key
 - Category-based materials (ColorSplash palette)
 - Real material conversion from IFC data
 - WebGPU-compatible MeshStandardMaterial creation
 
 ### WebGPUGeometryUtils.ts
+
 Geometry manipulation utilities:
+
 - TypedArray conversion (Float32, Uint32)
 - Buffer attribute copying
 - Int16 normals to Float32 conversion (WebGPU requirement)
 - Geometry sanitization for WebGPU compatibility
+
+### WebGPUSectionManager.ts
+
+Section planes (clipping) functionality for WebGPU mode:
+
+- Create section planes along X, Y, Z axes
+- Double-click on surfaces to create planes at that point
+- Interactive 3D flip buttons to reverse clipping direction
+- Drag plane helpers to reposition planes
+- Delete key to remove all planes
+- Visibility and enabled state toggling
+- Serialization/deserialization of plane data
+
+**Key Features:**
+
+- Visual plane helpers with configurable size and color
+- Real-time flip button positioning that scales with camera distance
+- Mouse hover effects on flip buttons
+- Raycasting for plane creation at surface hit points
+
+**Usage:**
+
+```typescript
+const sectionManager = new WebGPUSectionManager();
+sectionManager.initialize(scene, camera, container, (planes) => {
+  // Callback when planes change
+  renderer.clippingPlanes = planes;
+});
+
+// Create preset planes
+sectionManager.createXAxisPlane(center);
+sectionManager.createYAxisPlane(center);
+sectionManager.createZAxisPlane(center);
+
+// Flip, toggle, delete
+sectionManager.flipAllPlanes();
+sectionManager.toggleAllPlanesVisibility();
+sectionManager.deleteAllPlanes();
+```
 
 ## Usage
 
@@ -83,6 +138,7 @@ import {
   WebGPUStatsOverlay,
   WebGPUOptimizations,
   WebGPUMaterialFactory,
+  WebGPUSectionManager,
   CATEGORY_COLORS,
   formatNumber,
   sanitizeGeometryForWebGPU,
