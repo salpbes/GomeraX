@@ -555,6 +555,73 @@ export class IFCViewer {
     return this.webgpuRenderer?.areSpacesVisible() ?? true;
   }
 
+  // =========================================================================
+  // FOG EFFECT
+  // =========================================================================
+
+  /**
+   * Enable or disable fog effect in WebGPU mode
+   */
+  public setWebGPUFogEnabled(enabled: boolean): void {
+    this.webgpuRenderer?.setFogEnabled(enabled);
+  }
+
+  /**
+   * Check if fog is enabled
+   */
+  public isWebGPUFogEnabled(): boolean {
+    return this.webgpuRenderer?.isFogEnabled() ?? false;
+  }
+
+  /**
+   * Set fog type (linear, exponential, exponential2)
+   */
+  public setWebGPUFogType(type: 'linear' | 'exponential' | 'exponential2'): void {
+    this.webgpuRenderer?.setFogType(type);
+  }
+
+  /**
+   * Set fog color
+   */
+  public setWebGPUFogColor(hexColor: string): void {
+    this.webgpuRenderer?.setFogColor(hexColor);
+  }
+
+  /**
+   * Set fog density (for exponential fog types)
+   */
+  public setWebGPUFogDensity(density: number): void {
+    this.webgpuRenderer?.setFogDensity(density);
+  }
+
+  /**
+   * Set fog near distance (for linear fog)
+   */
+  public setWebGPUFogNear(near: number): void {
+    this.webgpuRenderer?.setFogNear(near);
+  }
+
+  /**
+   * Set fog far distance (for linear fog)
+   */
+  public setWebGPUFogFar(far: number): void {
+    this.webgpuRenderer?.setFogFar(far);
+  }
+
+  /**
+   * Apply a fog preset
+   */
+  public applyWebGPUFogPreset(preset: 'light' | 'medium' | 'heavy' | 'blue' | 'warm'): void {
+    this.webgpuRenderer?.applyFogPreset(preset);
+  }
+
+  /**
+   * Auto-configure fog based on model bounds
+   */
+  public autoConfigureWebGPUFog(): void {
+    this.webgpuRenderer?.autoConfigureFog();
+  }
+
   /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks

@@ -128,6 +128,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { WebGPUOutlineManager, type SelectionInfo } from './webgpu/WebGPUOutlineManager';
 import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './webgpu/WebGPUColorPicker';
 import { WebGPUElementSelector, type ElementSelectionInfo } from './webgpu/WebGPUElementSelector';
+import { WebGPUFog, type FogSettings, type FogType } from './webgpu/WebGPUFog';
+// NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
 export type RendererMode = 'webgl' | 'webgpu';
@@ -246,6 +248,13 @@ export class WebGPURendererModule {
 
   // Element selector for individual element highlighting in merged geometry
   private elementSelector: WebGPUElementSelector | null = null;
+
+  // NOTE: Ambient Occlusion (GTAO) was removed - see WebGPUAmbientOcclusion.ts for explanation
+  // The GTAONode requires non-multisampled depth textures, but our WebGPU renderer uses MSAA
+
+  // Fog effect
+  private fogManager: WebGPUFog | null = null;
+  private fogEnabled: boolean = false;
 
   // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
   // sectionManager and clippingGroup removed
@@ -1429,6 +1438,173 @@ export class WebGPURendererModule {
       this.elementSelector.debugStats();
     }
     console.log('🎯 ==========================================');
+  }
+
+  // =========================================================================
+  // AMBIENT OCCLUSION (GTAO)
+  // =========================================================================
+
+  // =========================================================================
+  // NOTE: AMBIENT OCCLUSION (GTAO) WAS REMOVED
+  // =========================================================================
+  // 
+  // We attempted to implement Screen-Space Ambient Occlusion (SSAO) using
+  // Three.js GTAONode (Ground Truth Ambient Occlusion) for WebGPU.
+  // 
+  // WHY IT DOESN'T WORK:
+  // --------------------
+  // 1. Our WebGPU renderer uses MSAA (Multi-Sample Anti-Aliasing) with 
+  //    `antialias: true` which creates multisampled depth textures.
+  // 
+  // 2. GTAONode's WGSL shader expects `texture_depth_2d` type for depth sampling,
+  //    but the MSAA-enabled renderer provides `texture_depth_multisampled_2d`.
+  // 
+  // 3. The WGSL shader error was:
+  //    "no matching call to textureDimensions(texture_depth_multisampled_2d, abstract-int)"
+  //    The shader tried to call textureDimensions with 2 arguments on a multisampled
+  //    texture, but multisampled textures only accept 1 argument.
+  // 
+  // 4. WGSL multisampled depth textures cannot be sampled directly - they require
+  //    textureLoad() with explicit sample index, not texture sampling operations.
+  // 
+  // POTENTIAL SOLUTIONS (not implemented):
+  // --------------------------------------
+  // - Disable MSAA when AO is enabled (would lose anti-aliasing quality)
+  // - Use a separate non-MSAA render pass for AO depth (complex, performance cost)
+  // - Wait for Three.js to add MSAA-compatible GTAO
+  // - Implement custom WGSL shader that handles multisampled depth
+  // 
+  // We chose to use Fog instead, which works at the scene level without
+  // post-processing and is fully compatible with MSAA.
+  // 
+  // See: WebGPUAmbientOcclusion.ts for the original implementation attempt
+  // =========================================================================
+
+  // =========================================================================
+  // FOG EFFECT
+  // =========================================================================
+
+  /**
+   * Initialize the fog effect system
+   */
+  private initializeFog(): void {
+    if (!this.proxyScene) {
+      console.log('⚠️ Cannot initialize Fog: scene not ready');
+      return;
+    }
+    
+    this.fogManager = new WebGPUFog();
+    this.fogManager.initialize(this.proxyScene);
+    console.log('🌫️ Fog effect initialized (disabled by default)');
+  }
+
+  /**
+   * Enable or disable fog effect
+   */
+  public setFogEnabled(enabled: boolean): void {
+    this.fogEnabled = enabled;
+    if (this.fogManager) {
+      this.fogManager.setEnabled(enabled);
+    }
+  }
+
+  /**
+   * Check if fog is enabled
+   */
+  public isFogEnabled(): boolean {
+    return this.fogEnabled && this.fogManager?.isEnabled() === true;
+  }
+
+  /**
+   * Set fog type (linear, exponential, exponential2)
+   */
+  public setFogType(type: FogType): void {
+    if (this.fogManager) {
+      this.fogManager.setType(type);
+    }
+  }
+
+  /**
+   * Set fog color
+   * @param hexColor Hex color string (e.g., '#e0e8f0')
+   */
+  public setFogColor(hexColor: string): void {
+    if (this.fogManager) {
+      this.fogManager.setColor(hexColor);
+    }
+  }
+
+  /**
+   * Set fog density (for exponential fog)
+   * @param density Density value (0.0001-0.1)
+   */
+  public setFogDensity(density: number): void {
+    if (this.fogManager) {
+      this.fogManager.setDensity(density);
+    }
+  }
+
+  /**
+   * Set fog near distance (for linear fog)
+   */
+  public setFogNear(near: number): void {
+    if (this.fogManager) {
+      this.fogManager.setNear(near);
+    }
+  }
+
+  /**
+   * Set fog far distance (for linear fog)
+   */
+  public setFogFar(far: number): void {
+    if (this.fogManager) {
+      this.fogManager.setFar(far);
+    }
+  }
+
+  /**
+   * Apply a fog preset
+   */
+  public applyFogPreset(preset: 'light' | 'medium' | 'heavy' | 'blue' | 'warm'): void {
+    if (this.fogManager) {
+      this.fogManager.applyPreset(preset);
+    }
+  }
+
+  /**
+   * Auto-configure fog based on model bounds
+   */
+  public autoConfigureFog(): void {
+    if (!this.fogManager || !this.proxyScene) return;
+    
+    // Calculate scene bounding box
+    const boundingBox = new THREE.Box3();
+    this.proxyScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.geometry) {
+        obj.geometry.computeBoundingBox();
+        if (obj.geometry.boundingBox) {
+          boundingBox.expandByObject(obj);
+        }
+      }
+    });
+    
+    if (!boundingBox.isEmpty()) {
+      this.fogManager.autoConfigureFromBounds(boundingBox);
+    }
+  }
+
+  /**
+   * Get fog settings
+   */
+  public getFogSettings(): FogSettings | null {
+    return this.fogManager?.getSettings() ?? null;
+  }
+
+  /**
+   * Get the fog manager instance (for advanced usage)
+   */
+  public getFogManager(): WebGPUFog | null {
+    return this.fogManager;
   }
 
   // =========================================================================
@@ -2994,6 +3170,11 @@ export class WebGPURendererModule {
       // Initialize outline/selection highlighting
       this.initializeOutlineManager();
 
+      // Initialize Fog effect
+      this.initializeFog();
+
+      // NOTE: Ambient Occlusion initialization removed - see comment in FOG EFFECT section
+
       // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
       // Section manager initialization removed
 
@@ -3054,6 +3235,12 @@ export class WebGPURendererModule {
     if (this.elementSelector) {
       this.elementSelector.dispose();
       this.elementSelector = null;
+    }
+
+    // Dispose fog
+    if (this.fogManager) {
+      this.fogManager.dispose();
+      this.fogManager = null;
     }
 
     // Show original canvas
@@ -3202,6 +3389,8 @@ export class WebGPURendererModule {
         if (typeof this.webgpuRenderer.clear === 'function') {
           this.webgpuRenderer.clear();
         }
+        
+        // Standard render (AO was removed - see FOG EFFECT section comment)
         this.webgpuRenderer.render(this.proxyScene, this.camera);
 
         // Render element selection overlay (shader-based individual element highlighting)

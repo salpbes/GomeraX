@@ -402,6 +402,80 @@ export function createToolbarHTML(): string {
                 </div>
               </div>
               
+              <!-- Fog Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">🌫️ Atmospheric Fog</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuFogToggle">
+                  <span>Enable Fog</span>
+                </label>
+                
+                <!-- Fog Type -->
+                <div id="fogTypeControl" class="webgpu-control" style="display: none;">
+                  <label>Fog Type:</label>
+                  <select id="fogTypeSelect">
+                    <option value="exponential2" selected>Exponential²</option>
+                    <option value="exponential">Exponential</option>
+                    <option value="linear">Linear</option>
+                  </select>
+                </div>
+                
+                <!-- Fog Density (for exponential) -->
+                <div id="fogDensityControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Fog Density:</span>
+                    <span id="fogDensityValue">0.003</span>
+                  </label>
+                  <input type="range" id="fogDensitySlider" min="0.0005" max="0.02" step="0.0005" value="0.003">
+                </div>
+                
+                <!-- Fog Near/Far (for linear) -->
+                <div id="fogNearControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Fog Near:</span>
+                    <span id="fogNearValue">10</span>
+                  </label>
+                  <input type="range" id="fogNearSlider" min="1" max="100" step="1" value="10">
+                </div>
+                
+                <div id="fogFarControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Fog Far:</span>
+                    <span id="fogFarValue">200</span>
+                  </label>
+                  <input type="range" id="fogFarSlider" min="50" max="500" step="10" value="200">
+                </div>
+                
+                <!-- Fog Color -->
+                <div id="fogColorControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Fog Color:</span>
+                    <input type="color" id="fogColorPicker" value="#e8ecf0">
+                  </label>
+                </div>
+                
+                <!-- Fog Presets -->
+                <div id="fogPresetControl" class="webgpu-control" style="display: none;">
+                  <label>Preset:</label>
+                  <select id="fogPresetSelect">
+                    <option value="">Custom</option>
+                    <option value="light">Light</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="heavy">Heavy</option>
+                    <option value="blue">Blue Haze</option>
+                    <option value="warm">Warm</option>
+                  </select>
+                </div>
+                
+                <!-- Auto Configure -->
+                <div id="fogAutoConfigControl" class="webgpu-control" style="display: none;">
+                  <button id="fogAutoConfigBtn" style="width: 100%; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.3); color: white; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s ease;">
+                    🎯 Auto Configure for Model
+                  </button>
+                </div>
+              </div>
+              
               <!-- Stats Section -->
               <div class="webgpu-section">
                 <div class="webgpu-section-header">📊 Performance</div>

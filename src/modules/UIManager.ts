@@ -687,6 +687,108 @@ export class UIManager {
       });
     }
     
+    // Fog controls
+    const fogToggle = document.getElementById('webgpuFogToggle') as HTMLInputElement;
+    const fogTypeSelect = document.getElementById('fogTypeSelect') as HTMLSelectElement;
+    const fogTypeControl = document.getElementById('fogTypeControl');
+    const fogDensitySlider = document.getElementById('fogDensitySlider') as HTMLInputElement;
+    const fogDensityValue = document.getElementById('fogDensityValue');
+    const fogDensityControl = document.getElementById('fogDensityControl');
+    const fogNearSlider = document.getElementById('fogNearSlider') as HTMLInputElement;
+    const fogNearValue = document.getElementById('fogNearValue');
+    const fogNearControl = document.getElementById('fogNearControl');
+    const fogFarSlider = document.getElementById('fogFarSlider') as HTMLInputElement;
+    const fogFarValue = document.getElementById('fogFarValue');
+    const fogFarControl = document.getElementById('fogFarControl');
+    const fogColorPicker = document.getElementById('fogColorPicker') as HTMLInputElement;
+    const fogColorControl = document.getElementById('fogColorControl');
+    const fogPresetSelect = document.getElementById('fogPresetSelect') as HTMLSelectElement;
+    const fogPresetControl = document.getElementById('fogPresetControl');
+    const fogAutoConfigBtn = document.getElementById('fogAutoConfigBtn') as HTMLButtonElement;
+    const fogAutoConfigControl = document.getElementById('fogAutoConfigControl');
+    
+    // Helper to show/hide fog controls based on type
+    const updateFogTypeControls = (type: string) => {
+      const isLinear = type === 'linear';
+      if (fogDensityControl) fogDensityControl.style.display = isLinear ? 'none' : 'block';
+      if (fogNearControl) fogNearControl.style.display = isLinear ? 'block' : 'none';
+      if (fogFarControl) fogFarControl.style.display = isLinear ? 'block' : 'none';
+    };
+    
+    if (fogToggle) {
+      fogToggle.addEventListener('change', () => {
+        const enabled = fogToggle.checked;
+        this.viewer?.setWebGPUFogEnabled(enabled);
+        
+        // Show/hide fog controls based on toggle
+        if (fogTypeControl) fogTypeControl.style.display = enabled ? 'block' : 'none';
+        if (fogColorControl) fogColorControl.style.display = enabled ? 'block' : 'none';
+        if (fogPresetControl) fogPresetControl.style.display = enabled ? 'block' : 'none';
+        if (fogAutoConfigControl) fogAutoConfigControl.style.display = enabled ? 'block' : 'none';
+        
+        if (enabled) {
+          updateFogTypeControls(fogTypeSelect?.value || 'exponential2');
+        } else {
+          if (fogDensityControl) fogDensityControl.style.display = 'none';
+          if (fogNearControl) fogNearControl.style.display = 'none';
+          if (fogFarControl) fogFarControl.style.display = 'none';
+        }
+      });
+    }
+    
+    if (fogTypeSelect) {
+      fogTypeSelect.addEventListener('change', () => {
+        const type = fogTypeSelect.value as 'linear' | 'exponential' | 'exponential2';
+        this.viewer?.setWebGPUFogType(type);
+        updateFogTypeControls(type);
+      });
+    }
+    
+    if (fogDensitySlider && fogDensityValue) {
+      fogDensitySlider.addEventListener('input', () => {
+        const value = parseFloat(fogDensitySlider.value);
+        fogDensityValue.textContent = value.toFixed(4);
+        this.viewer?.setWebGPUFogDensity(value);
+      });
+    }
+    
+    if (fogNearSlider && fogNearValue) {
+      fogNearSlider.addEventListener('input', () => {
+        const value = parseFloat(fogNearSlider.value);
+        fogNearValue.textContent = value.toFixed(0);
+        this.viewer?.setWebGPUFogNear(value);
+      });
+    }
+    
+    if (fogFarSlider && fogFarValue) {
+      fogFarSlider.addEventListener('input', () => {
+        const value = parseFloat(fogFarSlider.value);
+        fogFarValue.textContent = value.toFixed(0);
+        this.viewer?.setWebGPUFogFar(value);
+      });
+    }
+    
+    if (fogColorPicker) {
+      fogColorPicker.addEventListener('change', () => {
+        this.viewer?.setWebGPUFogColor(fogColorPicker.value);
+      });
+    }
+    
+    if (fogPresetSelect) {
+      fogPresetSelect.addEventListener('change', () => {
+        const preset = fogPresetSelect.value as 'light' | 'medium' | 'heavy' | 'blue' | 'warm' | '';
+        if (preset) {
+          this.viewer?.applyWebGPUFogPreset(preset);
+        }
+      });
+    }
+    
+    if (fogAutoConfigBtn) {
+      fogAutoConfigBtn.addEventListener('click', () => {
+        this.viewer?.autoConfigureWebGPUFog();
+      });
+    }
+    
     // Stats toggle
     if (statsToggle) {
       statsToggle.addEventListener('change', () => {
