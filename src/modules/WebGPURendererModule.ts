@@ -129,6 +129,7 @@ import { WebGPUOutlineManager, type SelectionInfo } from './webgpu/WebGPUOutline
 import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './webgpu/WebGPUColorPicker';
 import { WebGPUElementSelector, type ElementSelectionInfo } from './webgpu/WebGPUElementSelector';
 import { WebGPUFog, type FogSettings, type FogType } from './webgpu/WebGPUFog';
+import { WebGPULODManager, type LODSettings, type LODStats } from './webgpu/WebGPULODManager';
 // NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
@@ -255,6 +256,10 @@ export class WebGPURendererModule {
   // Fog effect
   private fogManager: WebGPUFog | null = null;
   private fogEnabled: boolean = false;
+
+  // Level of Detail (LOD) system
+  private lodManager: WebGPULODManager | null = null;
+  private lodEnabled: boolean = false;
 
   // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
   // sectionManager and clippingGroup removed
@@ -1605,6 +1610,119 @@ export class WebGPURendererModule {
    */
   public getFogManager(): WebGPUFog | null {
     return this.fogManager;
+  }
+
+  // =========================================================================
+  // LEVEL OF DETAIL (LOD) SYSTEM
+  // =========================================================================
+
+  /**
+   * Initialize the LOD system
+   */
+  private initializeLOD(): void {
+    if (!this.proxyScene || !this.camera) {
+      console.log('⚠️ Cannot initialize LOD: scene or camera not ready');
+      return;
+    }
+    
+    this.lodManager = new WebGPULODManager();
+    this.lodManager.initialize(this.proxyScene, this.camera);
+    console.log('📐 LOD system initialized (disabled by default)');
+  }
+
+  /**
+   * Enable or disable LOD system
+   */
+  public setLODEnabled(enabled: boolean): void {
+    this.lodEnabled = enabled;
+    
+    if (this.lodManager) {
+      if (enabled && !this.lodManager.isInitialized()) {
+        this.initializeLOD();
+      }
+      
+      // Process scene to create LOD objects if enabling for first time
+      if (enabled && this.lodManager.getStats().totalObjects === 0) {
+        this.lodManager.processScene();
+      }
+      
+      this.lodManager.setEnabled(enabled);
+    }
+    
+    console.log(`📐 LOD ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Check if LOD is enabled
+   */
+  public isLODEnabled(): boolean {
+    return this.lodEnabled && this.lodManager?.isEnabled() === true;
+  }
+
+  /**
+   * Set LOD high distance threshold (full detail up to this distance)
+   */
+  public setLODHighDistance(distance: number): void {
+    if (this.lodManager) {
+      this.lodManager.setHighDistance(distance);
+    }
+  }
+
+  /**
+   * Set LOD medium distance threshold
+   */
+  public setLODMediumDistance(distance: number): void {
+    if (this.lodManager) {
+      this.lodManager.setMediumDistance(distance);
+    }
+  }
+
+  /**
+   * Set LOD low distance threshold
+   */
+  public setLODLowDistance(distance: number): void {
+    if (this.lodManager) {
+      this.lodManager.setLowDistance(distance);
+    }
+  }
+
+  /**
+   * Toggle impostor visibility (bounding boxes for very far objects)
+   */
+  public setLODShowImpostors(show: boolean): void {
+    if (this.lodManager) {
+      this.lodManager.setShowImpostors(show);
+    }
+  }
+
+  /**
+   * Get LOD statistics
+   */
+  public getLODStats(): LODStats | null {
+    return this.lodManager?.getStats() ?? null;
+  }
+
+  /**
+   * Get LOD settings
+   */
+  public getLODSettings(): LODSettings | null {
+    return this.lodManager?.getSettings() ?? null;
+  }
+
+  /**
+   * Refresh LOD (reprocess scene)
+   */
+  public refreshLOD(): void {
+    if (this.lodManager && this.lodEnabled) {
+      this.lodManager.refresh();
+    }
+  }
+
+  /**
+   * Get the LOD manager instance (for advanced usage)
+   */
+  public getLODManager(): WebGPULODManager | null {
+    return this.lodManager;
   }
 
   // =========================================================================
@@ -3173,6 +3291,9 @@ export class WebGPURendererModule {
       // Initialize Fog effect
       this.initializeFog();
 
+      // Initialize LOD system
+      this.initializeLOD();
+
       // NOTE: Ambient Occlusion initialization removed - see comment in FOG EFFECT section
 
       // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
@@ -3241,6 +3362,12 @@ export class WebGPURendererModule {
     if (this.fogManager) {
       this.fogManager.dispose();
       this.fogManager = null;
+    }
+
+    // Dispose LOD
+    if (this.lodManager) {
+      this.lodManager.dispose();
+      this.lodManager = null;
     }
 
     // Show original canvas
@@ -3388,6 +3515,11 @@ export class WebGPURendererModule {
         // Force full clear every frame to avoid camera-motion artifacts.
         if (typeof this.webgpuRenderer.clear === 'function') {
           this.webgpuRenderer.clear();
+        }
+        
+        // Update LOD based on camera distance - pass current camera to ensure fresh reference
+        if (this.lodEnabled && this.lodManager && this.camera) {
+          this.lodManager.update(this.camera);
         }
         
         // Standard render (AO was removed - see FOG EFFECT section comment)
@@ -3795,6 +3927,29 @@ export class WebGPURendererModule {
       </div>
       
       <div class="stats-row stats-divider"></div>
+      <div class="stats-section-title">📐 LOD System</div>
+      <div class="stats-row">
+        <span class="stats-label">LOD Status:</span>
+        <span class="stats-value" id="stats-lod-status">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">LOD Objects:</span>
+        <span class="stats-value" id="stats-lod-objects">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">Full/Simp/Imp:</span>
+        <span class="stats-value" id="stats-lod-levels">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">LOD Triangles:</span>
+        <span class="stats-value" id="stats-lod-tris">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">LOD Savings:</span>
+        <span class="stats-value" id="stats-lod-savings">--</span>
+      </div>
+      
+      <div class="stats-row stats-divider"></div>
       <div class="stats-section-title">⚙️ Settings</div>
       <div class="stats-row">
         <span class="stats-label">Shadows:</span>
@@ -3824,8 +3979,12 @@ export class WebGPURendererModule {
         <span class="stats-value stats-small" id="stats-campos">--</span>
       </div>
       <div class="stats-row">
-        <span class="stats-label">Distance:</span>
+        <span class="stats-label">To Center:</span>
         <span class="stats-value" id="stats-camdist">--</span>
+      </div>
+      <div class="stats-row">
+        <span class="stats-label">To Nearest:</span>
+        <span class="stats-value" id="stats-camnearest">--</span>
       </div>
       <div class="stats-row">
         <span class="stats-label">FOV:</span>
@@ -4262,6 +4421,47 @@ export class WebGPURendererModule {
       shadowresEl.textContent = `${res}x${res}`;
     }
     
+    // LOD stats
+    const lodStatusEl = this.statsOverlay.querySelector('#stats-lod-status');
+    const lodObjectsEl = this.statsOverlay.querySelector('#stats-lod-objects');
+    const lodLevelsEl = this.statsOverlay.querySelector('#stats-lod-levels');
+    const lodTrisEl = this.statsOverlay.querySelector('#stats-lod-tris');
+    const lodSavingsEl = this.statsOverlay.querySelector('#stats-lod-savings');
+    
+    if (lodStatusEl) {
+      lodStatusEl.textContent = this.lodEnabled ? 'ON' : 'OFF';
+      (lodStatusEl as HTMLElement).style.color = this.lodEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
+    }
+    
+    if (this.lodEnabled && this.lodManager) {
+      const lodStats = this.lodManager.getStats();
+      
+      if (lodObjectsEl) {
+        lodObjectsEl.textContent = lodStats.totalObjects.toString();
+      }
+      
+      if (lodLevelsEl) {
+        lodLevelsEl.textContent = `${lodStats.fullDetail}/${lodStats.simplified}/${lodStats.impostor}`;
+      }
+      
+      if (lodTrisEl) {
+        lodTrisEl.textContent = `${lodStats.currentTriangles.toLocaleString()}`;
+      }
+      
+      if (lodSavingsEl) {
+        const savedPercent = lodStats.originalTriangles > 0 
+          ? Math.round((lodStats.trianglesSaved / lodStats.originalTriangles) * 100) 
+          : 0;
+        lodSavingsEl.textContent = `${lodStats.trianglesSaved.toLocaleString()} (${savedPercent}%)`;
+        (lodSavingsEl as HTMLElement).style.color = savedPercent > 0 ? '#69db7c' : 'rgba(255,255,255,0.5)';
+      }
+    } else {
+      if (lodObjectsEl) lodObjectsEl.textContent = '--';
+      if (lodLevelsEl) lodLevelsEl.textContent = '--';
+      if (lodTrisEl) lodTrisEl.textContent = '--';
+      if (lodSavingsEl) lodSavingsEl.textContent = '--';
+    }
+    
     // Settings stats
     const shadowsEl = this.statsOverlay.querySelector('#stats-shadows');
     const edgesEl = this.statsOverlay.querySelector('#stats-edges');
@@ -4297,6 +4497,7 @@ export class WebGPURendererModule {
     // Camera stats
     const camposEl = this.statsOverlay.querySelector('#stats-campos');
     const camdistEl = this.statsOverlay.querySelector('#stats-camdist');
+    const camnearestEl = this.statsOverlay.querySelector('#stats-camnearest');
     const fovEl = this.statsOverlay.querySelector('#stats-fov');
     
     if (this.camera && camposEl) {
@@ -4307,6 +4508,30 @@ export class WebGPURendererModule {
     if (this.camera && camdistEl) {
       const dist = this.camera.position.distanceTo(this.sceneCenter);
       camdistEl.textContent = `${dist.toFixed(1)}m`;
+    }
+    
+    // Calculate distance to nearest visible mesh (for LOD calibration)
+    if (this.camera && camnearestEl && this.proxyScene) {
+      let nearestDist = Infinity;
+      const camPos = this.camera.position;
+      
+      this.proxyScene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.visible) {
+          // Get world position of the mesh
+          const meshPos = new THREE.Vector3();
+          obj.getWorldPosition(meshPos);
+          const dist = camPos.distanceTo(meshPos);
+          if (dist < nearestDist) {
+            nearestDist = dist;
+          }
+        }
+      });
+      
+      if (nearestDist < Infinity) {
+        camnearestEl.textContent = `${nearestDist.toFixed(1)}m`;
+      } else {
+        camnearestEl.textContent = '--';
+      }
     }
     
     if (fovEl && this.camera) {

@@ -789,6 +789,75 @@ export class UIManager {
       });
     }
     
+    // LOD controls (2-tier system)
+    const lodToggle = document.getElementById('webgpuLODToggle') as HTMLInputElement;
+    const lodDetailDistanceSlider = document.getElementById('lodDetailDistanceSlider') as HTMLInputElement;
+    const lodDetailDistanceValue = document.getElementById('lodDetailDistanceValue');
+    const lodDetailDistanceControl = document.getElementById('lodDetailDistanceControl');
+    const lodImpostorDistanceSlider = document.getElementById('lodImpostorDistanceSlider') as HTMLInputElement;
+    const lodImpostorDistanceValue = document.getElementById('lodImpostorDistanceValue');
+    const lodImpostorDistanceControl = document.getElementById('lodImpostorDistanceControl');
+    const lodImpostorToggle = document.getElementById('webgpuLODImpostorToggle') as HTMLInputElement;
+    const lodImpostorControl = document.getElementById('lodImpostorControl');
+    const lodStatsDisplay = document.getElementById('lodStatsDisplay');
+    const lodStatsText = document.getElementById('lodStatsText');
+    
+    // LOD stats update interval
+    let lodStatsInterval: number | null = null;
+    
+    if (lodToggle) {
+      lodToggle.addEventListener('change', () => {
+        const enabled = lodToggle.checked;
+        this.viewer?.setWebGPULODEnabled(enabled);
+        
+        // Show/hide LOD controls
+        if (lodDetailDistanceControl) lodDetailDistanceControl.style.display = enabled ? 'block' : 'none';
+        if (lodImpostorDistanceControl) lodImpostorDistanceControl.style.display = enabled ? 'block' : 'none';
+        if (lodImpostorControl) lodImpostorControl.style.display = enabled ? 'flex' : 'none';
+        if (lodStatsDisplay) lodStatsDisplay.style.display = enabled ? 'block' : 'none';
+        
+        // Start/stop stats update
+        if (enabled) {
+          const lodTriangleStats = document.getElementById('lodTriangleStats');
+          lodStatsInterval = window.setInterval(() => {
+            const stats = this.viewer?.getWebGPULODStats();
+            if (stats && lodStatsText) {
+              lodStatsText.textContent = `Full: ${stats.fullDetail} | Simplified: ${stats.simplified} | Impostor: ${stats.impostor}`;
+              if (lodTriangleStats) {
+                const savedPercent = stats.originalTriangles > 0 ? Math.round((stats.trianglesSaved / stats.originalTriangles) * 100) : 0;
+                lodTriangleStats.textContent = `Tris: ${stats.originalTriangles.toLocaleString()} → ${stats.currentTriangles.toLocaleString()} (${savedPercent}% saved)`;
+              }
+            }
+          }, 500);
+        } else if (lodStatsInterval) {
+          clearInterval(lodStatsInterval);
+          lodStatsInterval = null;
+        }
+      });
+    }
+    
+    if (lodDetailDistanceSlider && lodDetailDistanceValue) {
+      lodDetailDistanceSlider.addEventListener('input', () => {
+        const value = parseFloat(lodDetailDistanceSlider.value);
+        lodDetailDistanceValue.textContent = value.toFixed(0);
+        this.viewer?.setWebGPULODHighDistance(value); // Uses legacy method that maps to setDetailDistance
+      });
+    }
+    
+    if (lodImpostorDistanceSlider && lodImpostorDistanceValue) {
+      lodImpostorDistanceSlider.addEventListener('input', () => {
+        const value = parseFloat(lodImpostorDistanceSlider.value);
+        lodImpostorDistanceValue.textContent = value.toFixed(0);
+        this.viewer?.setWebGPULODMediumDistance(value); // Uses legacy method that maps to setImpostorDistance
+      });
+    }
+    
+    if (lodImpostorToggle) {
+      lodImpostorToggle.addEventListener('change', () => {
+        this.viewer?.setWebGPULODShowImpostors(lodImpostorToggle.checked);
+      });
+    }
+    
     // Stats toggle
     if (statsToggle) {
       statsToggle.addEventListener('change', () => {

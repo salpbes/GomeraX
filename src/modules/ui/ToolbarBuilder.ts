@@ -476,6 +476,52 @@ export function createToolbarHTML(): string {
                 </div>
               </div>
               
+              <!-- LOD Section -->
+              <div class="webgpu-section">
+                <div class="webgpu-section-header">📐 Level of Detail (LOD)</div>
+                
+                <label class="checkbox-label">
+                  <input type="checkbox" id="webgpuLODToggle">
+                  <span>Enable LOD</span>
+                </label>
+                
+                <!-- LOD Detail Distance (Full → Simplified threshold) -->
+                <div id="lodDetailDistanceControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Detail Distance:</span>
+                    <span id="lodDetailDistanceValue">30</span>m
+                  </label>
+                  <input type="range" id="lodDetailDistanceSlider" min="5" max="100" step="5" value="30">
+                  <div style="font-size: 9px; color: rgba(255,255,255,0.4); margin-top: 2px;">
+                    Objects closer than this = full detail
+                  </div>
+                </div>
+                
+                <!-- LOD Impostor Distance (Simplified → Impostor threshold) -->
+                <div id="lodImpostorDistanceControl" class="webgpu-control" style="display: none;">
+                  <label>
+                    <span>Impostor Distance:</span>
+                    <span id="lodImpostorDistanceValue">100</span>m
+                  </label>
+                  <input type="range" id="lodImpostorDistanceSlider" min="50" max="300" step="10" value="100">
+                  <div style="font-size: 9px; color: rgba(255,255,255,0.4); margin-top: 2px;">
+                    Objects farther than this = bounding box only
+                  </div>
+                </div>
+                
+                <!-- Show Impostors -->
+                <label id="lodImpostorControl" class="checkbox-label" style="display: none;">
+                  <input type="checkbox" id="webgpuLODImpostorToggle" checked>
+                  <span>Show Impostors (Far)</span>
+                </label>
+                
+                <!-- LOD Stats -->
+                <div id="lodStatsDisplay" class="webgpu-control" style="display: none; font-size: 10px; color: rgba(255,255,255,0.6);">
+                  <div id="lodStatsText">Full: - | Simplified: - | Impostor: -</div>
+                  <div id="lodTriangleStats" style="margin-top: 2px;">Triangles: - → - (saved: -)</div>
+                </div>
+              </div>
+              
               <!-- Stats Section -->
               <div class="webgpu-section">
                 <div class="webgpu-section-header">📊 Performance</div>

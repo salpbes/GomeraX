@@ -12,6 +12,7 @@ export { WebGPUOutlineManager, type OutlineSettings, type SelectionInfo } from '
 export { WebGPUColorPicker, type PickingResult, type ElementInfo } from './WebGPUColorPicker';
 export { WebGPUElementSelector, type ElementSelectionInfo } from './WebGPUElementSelector';
 export { WebGPUFog, type FogSettings, type FogType } from './WebGPUFog';
+export { WebGPULODManager, type LODSettings, type LODStats } from './WebGPULODManager';
 // NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 

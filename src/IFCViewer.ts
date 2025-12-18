@@ -622,6 +622,74 @@ export class IFCViewer {
     this.webgpuRenderer?.autoConfigureFog();
   }
 
+  // =========================================================================
+  // LEVEL OF DETAIL (LOD)
+  // =========================================================================
+
+  /**
+   * Enable or disable LOD system in WebGPU mode
+   */
+  public setWebGPULODEnabled(enabled: boolean): void {
+    this.webgpuRenderer?.setLODEnabled(enabled);
+  }
+
+  /**
+   * Check if LOD is enabled
+   */
+  public isWebGPULODEnabled(): boolean {
+    return this.webgpuRenderer?.isLODEnabled() ?? false;
+  }
+
+  /**
+   * Set LOD high distance (full detail up to this distance)
+   */
+  public setWebGPULODHighDistance(distance: number): void {
+    this.webgpuRenderer?.setLODHighDistance(distance);
+  }
+
+  /**
+   * Set LOD medium distance threshold
+   */
+  public setWebGPULODMediumDistance(distance: number): void {
+    this.webgpuRenderer?.setLODMediumDistance(distance);
+  }
+
+  /**
+   * Set LOD low distance threshold
+   */
+  public setWebGPULODLowDistance(distance: number): void {
+    this.webgpuRenderer?.setLODLowDistance(distance);
+  }
+
+  /**
+   * Toggle impostor visibility (bounding boxes for very far objects)
+   */
+  public setWebGPULODShowImpostors(show: boolean): void {
+    this.webgpuRenderer?.setLODShowImpostors(show);
+  }
+
+  /**
+   * Get LOD statistics
+   */
+  public getWebGPULODStats(): { 
+    totalObjects: number; 
+    fullDetail: number;
+    simplified: number;
+    impostor: number;
+    trianglesSaved: number;
+    originalTriangles: number;
+    currentTriangles: number;
+  } | null {
+    return this.webgpuRenderer?.getLODStats() ?? null;
+  }
+
+  /**
+   * Refresh LOD (reprocess scene after model changes)
+   */
+  public refreshWebGPULOD(): void {
+    this.webgpuRenderer?.refreshLOD();
+  }
+
   /**
    * Cleanup method - call this when destroying the viewer
    * Essential for preventing memory leaks
