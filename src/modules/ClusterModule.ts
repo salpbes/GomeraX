@@ -47,6 +47,7 @@ import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
 import { ModelTransformModule } from './ModelTransformModule';
 import type { ClipperModule } from './ClipperModule';
+import type { WebGPURendererModule } from './WebGPURendererModule';
 
 // ==================================================================================
 // 1. CLUSTER DATA CLASS
@@ -134,6 +135,7 @@ class ClusterVisualizer {
     this.scene = scene;
     this.clusterGroup = new THREE.Group();
     this.clusterGroup.name = 'IFC_Clusters';
+    this.clusterGroup.userData.isClusterMesh = true;
     this.scene.add(this.clusterGroup);
   }
 
@@ -160,6 +162,8 @@ class ClusterVisualizer {
     });
 
     const lineSegments = new THREE.LineSegments(edges, material);
+    lineSegments.userData.isClusterMesh = true;
+    lineSegments.frustumCulled = false;
     
     // Don't position here - will be positioned at cluster position in visualizeClusters()
     // The geometry is centered at origin, and we'll move the whole thing to clusterPosition
@@ -306,11 +310,20 @@ class ClusterManager {
   private visualizer: ClusterVisualizer;
   private components: OBC.Components;
   private colorOverrides: Map<string, THREE.Color> = new Map(); // category -> custom color
+  private webgpu: WebGPURendererModule | null = null;
 
   constructor(components: OBC.Components, scene: THREE.Scene) {
     this.components = components;
     this.fragmentsManager = components.get(OBC.FragmentsManager);
     this.visualizer = new ClusterVisualizer(scene);
+  }
+
+  /**
+   * Set WebGPU renderer module reference
+   */
+  setWebGPURenderer(webgpu: WebGPURendererModule): void {
+    this.webgpu = webgpu;
+    console.log('🎮 ClusterManager: WebGPU renderer set');
   }
 
   /**
@@ -709,6 +722,7 @@ class ClusterManager {
     clusterGroup.name = `Cluster_${cluster.modelId}_${cluster.category}`;
     clusterGroup.userData.modelId = cluster.modelId;
     clusterGroup.userData.category = cluster.category;
+    clusterGroup.userData.isClusterMesh = true;
     
     // Get the color for this category
     const categoryColor = this.getCategoryColor(cluster.category);
@@ -792,7 +806,12 @@ class ClusterManager {
           geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
           
           if (meshData.normals) {
-            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(meshData.normals, 3));
+            // WebGPU compatibility: Convert Int16 normals to Float32 and scale them
+            const n = meshData.normals;
+            const out = new Float32Array(n.length);
+            const scale = 1 / 32767; // Int16 normalized range
+            for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
           } else {
             geometry.computeVertexNormals();
           }
@@ -801,6 +820,7 @@ class ClusterManager {
           
           // Create mesh
           const mesh = new THREE.Mesh(geometry, sharedMaterial);
+          mesh.frustumCulled = false;
           
           // Apply the transform from IFC (this preserves the original positioning of parts)
           if (meshData.transform) {
@@ -978,6 +998,8 @@ class ClusterManager {
     });
     
     const labelMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+    labelMesh.userData.isClusterMesh = true;
+    labelMesh.frustumCulled = false;
     
     // Position above the cluster
     const labelPosition = offset.clone();
@@ -1191,6 +1213,15 @@ class ClusterManager {
     this.visualizer.toggleVisibility(true); // Ensure visible
     this.visualizer.animateEntry();
 
+    // Update WebGPU if active
+    if (this.webgpu) {
+      console.log('🎮 ClusterManager: Passing cluster group to WebGPU:', this.visualizer.clusterGroup.children.length, 'children');
+      this.webgpu.setClusterGroup(this.visualizer.clusterGroup);
+      this.webgpu.setModelsVisible(false);
+    } else {
+      console.log('🎮 ClusterManager: No WebGPU reference available');
+    }
+
     console.log('✅ Cluster visualization complete');
   }
 
@@ -1217,6 +1248,12 @@ class ClusterManager {
           }
         }
         this.clusters.clear(); // Actually clear the map
+
+        // Update WebGPU if active
+        if (this.webgpu) {
+          this.webgpu.setClusterGroup(null);
+          this.webgpu.setModelsVisible(true);
+        }
 
         console.log('✅ Clusters cleared');
         resolve();
@@ -1263,6 +1300,12 @@ class ClusterManager {
     this.visualizer.animateExit(400, () => {
       this.visualizer.toggleVisibility(false);
       this.visualizer.restoreAllModels();
+      
+      // Update WebGPU if active
+      if (this.webgpu) {
+        this.webgpu.setClusterGroup(null);
+        this.webgpu.setModelsVisible(true);
+      }
     });
   }
 
@@ -1289,6 +1332,12 @@ class ClusterManager {
 
     this.visualizer.toggleVisibility(true);
     this.visualizer.animateEntry();
+    
+    // Update WebGPU if active
+    if (this.webgpu) {
+      this.webgpu.setClusterGroup(this.visualizer.clusterGroup);
+      this.webgpu.setModelsVisible(false);
+    }
   }
 
   /**
@@ -1358,6 +1407,7 @@ export class ClusterModule {
   private modelTransform: ModelTransformModule | null = null;
   private clipperModule: ClipperModule | null = null;
   private clipperWasEnabled: boolean = false; // Track if clipper was enabled before cluster mode
+  private webgpu: WebGPURendererModule | null = null;
 
   // Callbacks for loading state
   public onLoadingStart: (() => void) | null = null;
@@ -1367,6 +1417,17 @@ export class ClusterModule {
     this.worldManager = worldManager;
     this.components = worldManager.getComponents();
     this.world = worldManager.world!;
+  }
+
+  /**
+   * Set WebGPU renderer module reference
+   */
+  public setWebGPURenderer(webgpu: WebGPURendererModule): void {
+    this.webgpu = webgpu;
+    // Also pass to ClusterManager
+    if (this.clusterManager) {
+      this.clusterManager.setWebGPURenderer(webgpu);
+    }
   }
 
   /**
@@ -1399,6 +1460,12 @@ export class ClusterModule {
   async initialize(): Promise<void> {
     const scene = this.world.scene.three as THREE.Scene;
     this.clusterManager = new ClusterManager(this.components, scene);
+    
+    // Pass WebGPU reference if already set
+    if (this.webgpu && this.clusterManager) {
+      this.clusterManager.setWebGPURenderer(this.webgpu);
+    }
+    
     console.log('✅ ClusterModule initialized');
   }
 

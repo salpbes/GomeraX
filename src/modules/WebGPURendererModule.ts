@@ -261,6 +261,15 @@ export class WebGPURendererModule {
   private lodManager: WebGPULODManager | null = null;
   private lodEnabled: boolean = false;
 
+  // Color Splash support
+  private colorSplashActive: boolean = false;
+  private colorSplashColors: Map<string, THREE.Color> = new Map();
+
+  // Cluster support
+  private clusterGroup: THREE.Group | null = null;
+  private modelsVisible: boolean = true;
+  private modelGroups: THREE.Group[] = [];
+
   // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
   // sectionManager and clippingGroup removed
 
@@ -269,6 +278,62 @@ export class WebGPURendererModule {
   // originalMaterialSides, isClippingActive, originalAlphaToCoverage, edgesWereVisibleBeforeClipping removed
 
   constructor() {}
+
+  /**
+   * Set Color Splash state for WebGPU
+   */
+  public async setColorSplash(active: boolean, colors?: Map<string, THREE.Color>): Promise<void> {
+    this.colorSplashActive = active;
+    if (colors) {
+      this.colorSplashColors = colors;
+    }
+    
+    console.log(`🎨 WebGPU Color Splash ${active ? 'enabled' : 'disabled'}`);
+    
+    // Rebuild scene to apply colors
+    if (this.isActive) {
+      await this.rebuildProxyScene();
+    }
+  }
+
+  /**
+   * Set Cluster Group for WebGPU
+   */
+  public setClusterGroup(group: THREE.Group | null): void {
+    // Remove old group if exists
+    if (this.clusterGroup && this.proxyScene) {
+      this.proxyScene.remove(this.clusterGroup);
+    }
+    
+    this.clusterGroup = group;
+    
+    // Add new group if exists
+    if (this.clusterGroup && this.proxyScene) {
+      // Disable frustum culling for all meshes in the cluster group
+      // to ensure they are always rendered in WebGPU mode
+      this.clusterGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.frustumCulled = false;
+        }
+      });
+      
+      this.proxyScene.add(this.clusterGroup);
+      console.log('🔷 WebGPU Cluster Group added to scene');
+    }
+  }
+
+  /**
+   * Set visibility of main models in WebGPU
+   */
+  public setModelsVisible(visible: boolean): void {
+    this.modelsVisible = visible;
+    
+    for (const group of this.modelGroups) {
+      group.visible = visible;
+    }
+    
+    console.log(`👁️ WebGPU Models ${visible ? 'visible' : 'hidden'}`);
+  }
 
   /**
    * Check if WebGPU is available in the current browser
@@ -1962,6 +2027,7 @@ export class WebGPURendererModule {
     }
     this.createdGeometries = [];
     this.mergedMeshes = [];
+    this.modelGroups = [];
     this.meshCategoryMap.clear();
     
     // Remove old ground plane
@@ -1982,6 +2048,11 @@ export class WebGPURendererModule {
       // Restore edges
       if (wasEdgesEnabled) {
         this.createEdges();
+      }
+      
+      // Re-attach cluster group if active
+      if (this.clusterGroup && this.proxyScene) {
+        this.proxyScene.add(this.clusterGroup);
       }
       
       // Sectioning not supported in WebGPU mode - no clipping planes to restore
@@ -2328,6 +2399,8 @@ export class WebGPURendererModule {
     const root = new THREE.Group();
     root.name = 'webgpu-fragments-proxy';
     proxy.add(root);
+    this.modelGroups.push(root);
+    root.visible = this.modelsVisible;
 
     // Fallback material for meshes without color info
     const sharedMaterial = new THREE.MeshStandardMaterial({
@@ -2743,6 +2816,27 @@ export class WebGPURendererModule {
         return getOrCreateRealMaterial(matId);
       };
 
+      // Helper to get Color Splash material for a category
+      const getColorSplashMaterial = (category: string): THREE.MeshStandardMaterial | null => {
+        if (!this.colorSplashActive) return null;
+        
+        const color = this.colorSplashColors.get(category);
+        if (!color) return null;
+        
+        const key = `splash_${category}_${color.getHexString()}`;
+        const cached = realMaterialCache.get(key);
+        if (cached) return cached;
+        
+        const mat = new THREE.MeshStandardMaterial({
+          color: color.clone(),
+          roughness: 1,
+          metalness: 0,
+          side: THREE.DoubleSide,
+        });
+        realMaterialCache.set(key, mat);
+        return mat;
+      };
+
       // =====================================================================
       // STEP 4: Build geometry for each item
       // =====================================================================
@@ -2764,7 +2858,10 @@ export class WebGPURendererModule {
       }>();
       
       // Helper to get material key for batching
-      const getMaterialKey = (mat: THREE.Material): string => {
+      const getMaterialKey = (mat: THREE.Material, category?: string): string => {
+        if (this.colorSplashActive && category) {
+          return `splash_${category}`;
+        }
         if (mat instanceof THREE.MeshStandardMaterial) {
           const c = mat.color;
           return `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${mat.opacity.toFixed(3)},${mat.transparent ? 1 : 0}`;
@@ -2783,6 +2880,19 @@ export class WebGPURendererModule {
         if (itemCategory && this.hiddenCategories.has(itemCategory)) {
           skippedByCategory++;
           continue; // Skip this item - it's in a hidden category
+        }
+
+        // Determine material for this item
+        let materialForMesh: THREE.MeshStandardMaterial | null = null;
+        
+        // Priority 1: Color Splash
+        if (this.colorSplashActive && itemCategory) {
+          materialForMesh = getColorSplashMaterial(itemCategory);
+        }
+        
+        // Priority 2: Real material colors (if Color Splash not active or no color found)
+        if (!materialForMesh) {
+          // We'll resolve this per-mesh below
         }
 
         let geometries: any[] | null = null;
@@ -2816,41 +2926,46 @@ export class WebGPURendererModule {
           if (!meshData?.positions) continue;
 
           const localIdForMesh = typeof meshData.localId === 'number' ? meshData.localId : itemId;
+          const meshCategory = localIdToCategory.get(localIdForMesh) || itemCategory;
           
-          // Try to get material from meshData.sampleId → sample.material → realMaterialsMap
-          let materialForMesh: THREE.Material = sharedMaterial;
-          const sampleId = (meshData as any).sampleId;
-          
-          if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
-            const realMat = getMaterialFromSampleId(sampleId);
-            if (realMat) {
-              materialForMesh = realMat;
-              coloredMeshesInModel++;
+          // -----------------------------------------------------------------
+          // RESOLVE MATERIAL
+          // -----------------------------------------------------------------
+          let materialForMesh: THREE.MeshStandardMaterial | null = null;
+
+          // Priority 1: Color Splash
+          if (this.colorSplashActive && meshCategory) {
+            materialForMesh = getColorSplashMaterial(meshCategory);
+          }
+
+          // Priority 2: Real material colors
+          if (!materialForMesh) {
+            const sampleId = (meshData as any).sampleId;
+            if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
+              materialForMesh = getMaterialFromSampleId(sampleId);
+              if (materialForMesh) coloredMeshesInModel++;
             }
           }
-          
-          // Fall back to category colors if no real material found
-          if (materialForMesh === sharedMaterial && shouldUseCategoryColors) {
-            const cat = localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId);
-            if (cat) {
-              materialForMesh = getOrCreateCategoryMaterial(cat);
-              categoryColoredMeshesInModel++;
-            } else {
-              // Fall back to definition if category missing
-              const defForMesh = localIdToMaterialDef.get(localIdForMesh);
-              if (defForMesh) {
-                materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
-              } else {
-                missingMaterialDefsInModel++;
-              }
-            }
-          } else if (materialForMesh === sharedMaterial) {
+
+          // Priority 3: Category colors (fallback)
+          if (!materialForMesh && shouldUseCategoryColors && meshCategory) {
+            materialForMesh = getOrCreateCategoryMaterial(meshCategory);
+            if (materialForMesh) categoryColoredMeshesInModel++;
+          }
+
+          // Priority 4: Shared material (last resort)
+          if (!materialForMesh) {
             const defForMesh = localIdToMaterialDef.get(localIdForMesh);
             if (defForMesh) {
               materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
             } else {
               missingMaterialDefsInModel++;
             }
+          }
+
+          // Final fallback
+          if (!materialForMesh) {
+            materialForMesh = sharedMaterial;
           }
 
           // -----------------------------------------------------------------
@@ -2917,7 +3032,7 @@ export class WebGPURendererModule {
             geometry.computeBoundingSphere();
             
             // Group by material for later merging
-            const matKey = getMaterialKey(materialForMesh);
+            const matKey = getMaterialKey(materialForMesh, meshCategory);
             if (!geometriesByMaterial.has(matKey)) {
               geometriesByMaterial.set(matKey, { geometries: [], material: materialForMesh });
             }
@@ -3493,6 +3608,39 @@ export class WebGPURendererModule {
       // Check if camera has moved significantly
       const cameraMoved = this.hasCameraMoved();
       
+      // Ensure cluster group is in the scene if it exists
+      // We do this before frustum culling so cluster meshes are correctly handled
+      if (this.clusterGroup && this.proxyScene) {
+        if (this.clusterGroup.parent !== this.proxyScene) {
+          this.proxyScene.add(this.clusterGroup);
+          console.log('🔷 WebGPU: Cluster group attached to proxy scene');
+        }
+        
+        // Force visibility and update matrix world for clusters
+        this.clusterGroup.visible = true;
+        this.clusterGroup.renderOrder = 1000;
+        
+        // Ensure scale is correct (in case animation is stuck or hasn't started)
+        if (this.clusterGroup.scale.x < 0.1) {
+          // If it's very small, it might be the start of an animation or a bug
+          // We'll let the animation handle it, but if it stays small for many frames, 
+          // that would be a problem.
+        }
+        
+        this.clusterGroup.updateMatrixWorld(true);
+        
+        // Debug: Log first child info occasionally
+        if (this.frameCount % 120 === 0 && this.clusterGroup.children.length > 0) {
+          const firstChild = this.clusterGroup.children[0];
+          console.log('📊 WebGPU Cluster Debug:', {
+            children: this.clusterGroup.children.length,
+            visible: this.clusterGroup.visible,
+            scale: this.clusterGroup.scale.x.toFixed(2),
+            firstChildPos: firstChild.position.toArray().map(v => v.toFixed(2))
+          });
+        }
+      }
+      
       // Apply frustum culling for performance
       // Sectioning not supported in WebGPU mode, so no need to bypass culling
       if (this.frustumCullingEnabled && cameraMoved) {
@@ -3568,6 +3716,9 @@ export class WebGPURendererModule {
   private performFrustumCulling(): void {
     if (!this.proxyScene || !this.camera) return;
     
+    // Ensure world matrices are up to date before culling
+    this.proxyScene.updateMatrixWorld();
+    
     // Update frustum from camera
     this.projScreenMatrix.multiplyMatrices(
       (this.camera as THREE.PerspectiveCamera).projectionMatrix,
@@ -3577,7 +3728,18 @@ export class WebGPURendererModule {
     
     // Cull meshes outside frustum
     this.proxyScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh && obj.name !== 'webgpu-ground-plane') {
+      // Skip ground plane and cluster group from culling
+      if (obj.name === 'webgpu-ground-plane') return;
+      
+      // If clustering is active, don't cull cluster meshes or anything in the cluster group
+      // We check for isClusterMesh flag which we added to all cluster-related objects
+      if (obj.userData && obj.userData.isClusterMesh) {
+        obj.visible = true;
+        // We continue traversal to ensure children are also processed, 
+        // but we skip the frustum check for them below.
+      }
+
+      if (obj instanceof THREE.Mesh && !(obj.userData && obj.userData.isClusterMesh)) {
         // Use bounding sphere for fast culling
         if (!obj.geometry.boundingSphere) {
           obj.geometry.computeBoundingSphere();

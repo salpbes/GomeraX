@@ -8,6 +8,7 @@ import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
 import type { WorldManager } from './WorldManager';
 import { PropertyTableModule } from './PropertyTableModule';
+import type { WebGPURendererModule } from './WebGPURendererModule';
 
 export class ColorSplashModule {
   private components: OBC.Components;
@@ -15,6 +16,7 @@ export class ColorSplashModule {
   private fragmentsManager: OBC.FragmentsManager;
   private highlighter: OBF.Highlighter | null = null;
   private propertyTable: PropertyTableModule;
+  private webgpu: WebGPURendererModule | null = null;
   
   /**
    * Tracks whether color splash is currently active
@@ -53,6 +55,13 @@ export class ColorSplashModule {
     this.propertyTable = new PropertyTableModule(worldManager);
 
     console.log('✅ ColorSplashModule initialized');
+  }
+
+  /**
+   * Set WebGPU renderer module reference
+   */
+  public setWebGPURenderer(webgpu: WebGPURendererModule): void {
+    this.webgpu = webgpu;
   }
 
   /**
@@ -212,6 +221,15 @@ export class ColorSplashModule {
 
     console.log('✅ Color splash applied to all models');
     
+    // Update WebGPU if active
+    if (this.webgpu) {
+      const categoryColors = new Map<string, THREE.Color>();
+      for (const info of this.categoryInfo.values()) {
+        categoryColors.set(info.category, info.color);
+      }
+      this.webgpu.setColorSplash(true, categoryColors);
+    }
+
     // Notify UI with grouped data
     if (this.onColorsApplied) {
       this.onColorsApplied(categoryList, modelGroups);
@@ -241,6 +259,12 @@ export class ColorSplashModule {
     }
 
     this.categorySelections = [];
+    
+    // Update WebGPU if active
+    if (this.webgpu) {
+      this.webgpu.setColorSplash(false);
+    }
+
     console.log('✅ Original colors restored');
   }
 
@@ -288,6 +312,15 @@ export class ColorSplashModule {
         
         await this.highlighter.highlightByID(selectionName, selection, false);
         console.log(`✅ Updated color for ${info.category} to ${newColor}`);
+        
+        // Update WebGPU if active
+        if (this.webgpu) {
+          const categoryColors = new Map<string, THREE.Color>();
+          for (const info of this.categoryInfo.values()) {
+            categoryColors.set(info.category, info.color);
+          }
+          this.webgpu.setColorSplash(true, categoryColors);
+        }
       }
     }
   }

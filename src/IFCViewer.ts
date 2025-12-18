@@ -184,6 +184,11 @@ export class IFCViewer {
       console.log('🔷 Initializing cluster module...');
       this.cluster = new ClusterModule(this.worldManager);
       await this.cluster.initialize();
+      
+      // Pass WebGPU renderer to cluster module
+      if (this.webgpuRenderer) {
+        this.cluster.setWebGPURenderer(this.webgpuRenderer);
+      }
 
       // Pass cluster module to UI manager and properties panel
       if (this.uiManager) {
@@ -203,6 +208,11 @@ export class IFCViewer {
       // Step 4.12: Initialize color splash module
       console.log('🎨 Initializing color splash module...');
       this.colorSplash = new ColorSplashModule(this.worldManager);
+      
+      // Pass WebGPU renderer to color splash module
+      if (this.webgpuRenderer) {
+        this.colorSplash.setWebGPURenderer(this.webgpuRenderer);
+      }
 
       // Pass color splash module to UI manager
       if (this.uiManager) {
