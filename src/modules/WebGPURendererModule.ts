@@ -183,6 +183,7 @@ export class WebGPURendererModule {
   private edgesEnabled: boolean = false;
   private edgeLines: THREE.LineSegments[] = [];
   private edgeThreshold: number = 15; // angle threshold in degrees
+  private edgeMaterial: THREE.LineBasicMaterial | null = null;
 
   // Performance stats settings
   private statsEnabled: boolean = false;
@@ -233,6 +234,11 @@ export class WebGPURendererModule {
   // Category visibility (for hiding spaces, etc.)
   private hiddenCategories: Set<string> = new Set();
   private meshCategoryMap: Map<THREE.Mesh, string> = new Map();
+  
+  // Element visibility tracking
+  private hiddenElements: Map<string, Set<number>> = new Map();
+  private isolatedElements: Map<string, Set<number>> | null = null;
+  private ghostMaterial: THREE.MeshStandardMaterial | null = null;
   
   // Model loading listener
   private modelLoadListener: any = null;
@@ -703,7 +709,7 @@ export class WebGPURendererModule {
         }
 
         // Avoid culling surprises in WebGPU mode
-        mesh.frustumCulled = false;
+        mesh.frustumCulled = this.frustumCullingEnabled;
       }
     });
 
@@ -891,6 +897,67 @@ export class WebGPURendererModule {
   }
 
   /**
+   * Set visibility for specific elements in WebGPU mode
+   */
+  public setElementVisibility(modelId: string, localIds: number[], visible: boolean): void {
+    if (!this.hiddenElements.has(modelId)) {
+      this.hiddenElements.set(modelId, new Set());
+    }
+    
+    const hiddenSet = this.hiddenElements.get(modelId)!;
+    for (const id of localIds) {
+      if (visible) {
+        hiddenSet.delete(id);
+      } else {
+        hiddenSet.add(id);
+      }
+    }
+    
+    // Rebuild proxy scene to reflect changes
+    this.rebuildProxyScene();
+  }
+
+  /**
+   * Isolate specific elements in WebGPU mode
+   */
+  public isolateElements(modelId: string, localIds: number[]): void {
+    this.isolatedElements = new Map();
+    this.isolatedElements.set(modelId, new Set(localIds));
+    
+    // Rebuild proxy scene to reflect changes
+    this.rebuildProxyScene();
+  }
+
+  /**
+   * Show all elements in WebGPU mode (clear isolation and hidden elements)
+   */
+  public showAllElements(): void {
+    this.isolatedElements = null;
+    this.hiddenElements.clear();
+    
+    // Rebuild proxy scene to reflect changes
+    this.rebuildProxyScene();
+  }
+
+  /**
+   * Get or create a ghost material for non-isolated elements
+   */
+  private getOrCreateGhostMaterial(): THREE.MeshStandardMaterial {
+    if (!this.ghostMaterial) {
+      this.ghostMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        opacity: 0.15,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        roughness: 1,
+        metalness: 0
+      });
+    }
+    return this.ghostMaterial;
+  }
+
+  /**
    * Enable or disable shadows at runtime
    */
   public setShadowsEnabled(enabled: boolean): void {
@@ -968,12 +1035,12 @@ export class WebGPURendererModule {
   /**
    * Enable or disable edge/outline rendering
    */
-  public setEdgesEnabled(enabled: boolean): void {
+  public async setEdgesEnabled(enabled: boolean): Promise<void> {
     this.edgesEnabled = enabled;
     
     if (enabled && this.proxyScene && this.edgeLines.length === 0) {
       // Create edges if not already created
-      this.createEdges();
+      await this.createEdges();
     }
     
     // Toggle visibility of existing edge lines
@@ -995,13 +1062,13 @@ export class WebGPURendererModule {
    * Set edge detection threshold angle (in degrees)
    * Lower = more edges, Higher = fewer edges (only sharp angles)
    */
-  public setEdgeThreshold(degrees: number): void {
+  public async setEdgeThreshold(degrees: number): Promise<void> {
     this.edgeThreshold = Math.max(1, Math.min(90, degrees));
     
     // Recreate edges with new threshold if enabled
     if (this.edgesEnabled && this.proxyScene) {
       this.removeEdges();
-      this.createEdges();
+      await this.createEdges();
     }
     
     console.log(`✏️ Edge threshold set to ${this.edgeThreshold}°`);
@@ -1017,56 +1084,77 @@ export class WebGPURendererModule {
   /**
    * Create edge lines for all meshes in the proxy scene
    */
-  private createEdges(): void {
+  private async createEdges(): Promise<void> {
     if (!this.proxyScene) return;
     
     const thresholdRadians = (this.edgeThreshold * Math.PI) / 180;
     let edgeCount = 0;
+    let processedCount = 0;
     
-    // Create a shared material for all edges
-    const edgeMaterial = new THREE.LineBasicMaterial({
-      color: 0x000000,
-      linewidth: 1, // Note: linewidth > 1 only works on some platforms
-      transparent: true,
-      opacity: 0.8,
-    });
+    // Reuse or create the shared material for all edges
+    if (!this.edgeMaterial) {
+      this.edgeMaterial = new THREE.LineBasicMaterial({
+        color: 0x000000,
+        linewidth: 1, // Note: linewidth > 1 only works on some platforms
+        transparent: true,
+        opacity: 0.8,
+      });
+    }
     
+    // Collect meshes first to avoid issues with scene modification during traversal
+    const meshes: THREE.Mesh[] = [];
     this.proxyScene.traverse((obj) => {
       if (obj instanceof THREE.Mesh && obj.geometry && obj.name !== 'webgpu-ground-plane') {
-        try {
-          // Create edges geometry from mesh geometry
-          const edgesGeometry = new THREE.EdgesGeometry(obj.geometry, thresholdRadians * (180 / Math.PI));
-          
-          if (edgesGeometry.attributes.position && edgesGeometry.attributes.position.count > 0) {
-            const lineSegments = new THREE.LineSegments(edgesGeometry, edgeMaterial);
-            
-            // Copy transform from the mesh
-            lineSegments.position.copy(obj.position);
-            lineSegments.rotation.copy(obj.rotation);
-            lineSegments.scale.copy(obj.scale);
-            lineSegments.matrix.copy(obj.matrix);
-            lineSegments.matrixWorld.copy(obj.matrixWorld);
-            lineSegments.matrixAutoUpdate = false;
-            
-            lineSegments.name = 'edge-line';
-            lineSegments.visible = this.edgesEnabled;
-            lineSegments.frustumCulled = false;
-            
-            // Add to same parent as mesh or to scene
-            if (obj.parent) {
-              obj.parent.add(lineSegments);
-            } else {
-              this.proxyScene!.add(lineSegments);
-            }
-            
-            this.edgeLines.push(lineSegments);
-            edgeCount++;
-          }
-        } catch (e) {
-          // Skip meshes that can't have edges computed
-        }
+        meshes.push(obj);
       }
     });
+
+    for (const obj of meshes) {
+      // OPTIMIZATION: Skip edges for ghosted items during isolation
+      // This significantly improves performance and makes isolated items stand out
+      if (this.isolatedElements && obj.material === this.ghostMaterial) {
+        continue;
+      }
+
+      try {
+        // Create edges geometry from mesh geometry
+        const edgesGeometry = new THREE.EdgesGeometry(obj.geometry, thresholdRadians * (180 / Math.PI));
+        
+        if (edgesGeometry.attributes.position && edgesGeometry.attributes.position.count > 0) {
+          const lineSegments = new THREE.LineSegments(edgesGeometry, this.edgeMaterial);
+          
+          // Copy transform from the mesh
+          lineSegments.position.copy(obj.position);
+          lineSegments.rotation.copy(obj.rotation);
+          lineSegments.scale.copy(obj.scale);
+          lineSegments.matrix.copy(obj.matrix);
+          lineSegments.matrixWorld.copy(obj.matrixWorld);
+          lineSegments.matrixAutoUpdate = false;
+          
+          lineSegments.name = 'edge-line';
+          lineSegments.visible = this.edgesEnabled;
+          lineSegments.frustumCulled = true; // Enable culling for performance
+          
+          // Add to same parent as mesh or to scene
+          if (obj.parent) {
+            obj.parent.add(lineSegments);
+          } else {
+            this.proxyScene!.add(lineSegments);
+          }
+          
+          this.edgeLines.push(lineSegments);
+          edgeCount++;
+        }
+      } catch (e) {
+        // Skip meshes that can't have edges computed
+      }
+
+      // Yield to UI every 50 meshes to prevent freezing
+      processedCount++;
+      if (processedCount % 50 === 0) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+    }
     
     console.log(`✏️ Created ${edgeCount} edge outlines`);
   }
@@ -1079,9 +1167,12 @@ export class WebGPURendererModule {
       if (line.parent) {
         line.parent.remove(line);
       }
-      line.geometry.dispose();
+      if (line.geometry) {
+        line.geometry.dispose();
+      }
     }
     this.edgeLines = [];
+    // Note: we keep this.edgeMaterial for reuse to avoid WebGPU "usedTimes" errors
   }
 
   // =========================================================================
@@ -2049,7 +2140,7 @@ export class WebGPURendererModule {
     if (success && this.proxyScene) {
       // Restore edges
       if (wasEdgesEnabled) {
-        this.createEdges();
+        await this.createEdges();
       }
       
       // Re-attach cluster group if active
@@ -2293,7 +2384,7 @@ export class WebGPURendererModule {
         const localMatrix = new THREE.Matrix4().copy(modelObj.matrixWorld).invert().multiply(child.matrixWorld);
         newMesh.applyMatrix4(localMatrix);
 
-        newMesh.frustumCulled = false;
+        newMesh.frustumCulled = this.frustumCullingEnabled;
         newMesh.castShadow = this.shadowsEnabled;
         newMesh.receiveShadow = this.shadowsEnabled;
         modelGroup.add(newMesh);
@@ -2884,11 +2975,31 @@ export class WebGPURendererModule {
           continue; // Skip this item - it's in a hidden category
         }
 
+        // Check if this item is explicitly hidden
+        const hiddenIds = this.hiddenElements.get(modelId);
+        if (hiddenIds && hiddenIds.has(itemId)) {
+          continue;
+        }
+
+        let isGhost = false;
+        // Check if isolation is active
+        if (this.isolatedElements) {
+          const isolatedIds = this.isolatedElements.get(modelId);
+          if (!isolatedIds || !isolatedIds.has(itemId)) {
+            isGhost = true; // Mark as ghost instead of skipping
+          }
+        }
+
         // Determine material for this item
         let materialForMesh: THREE.MeshStandardMaterial | null = null;
         
+        // Priority 0: Ghost Mode
+        if (isGhost) {
+          materialForMesh = this.getOrCreateGhostMaterial();
+        }
+        
         // Priority 1: Color Splash
-        if (this.colorSplashActive && itemCategory) {
+        if (!materialForMesh && this.colorSplashActive && itemCategory) {
           materialForMesh = getColorSplashMaterial(itemCategory);
         }
         
@@ -2935,8 +3046,13 @@ export class WebGPURendererModule {
           // -----------------------------------------------------------------
           let materialForMesh: THREE.MeshStandardMaterial | null = null;
 
+          // Priority 0: Ghost Mode
+          if (isGhost) {
+            materialForMesh = this.getOrCreateGhostMaterial();
+          }
+
           // Priority 1: Color Splash
-          if (this.colorSplashActive && meshCategory) {
+          if (!materialForMesh && this.colorSplashActive && meshCategory) {
             materialForMesh = getColorSplashMaterial(meshCategory);
           }
 
@@ -3054,7 +3170,7 @@ export class WebGPURendererModule {
             const mesh = new THREE.Mesh(geometry, materialForMesh);
             mesh.castShadow = this.shadowsEnabled;
             mesh.receiveShadow = this.shadowsEnabled;
-            mesh.frustumCulled = false; // Disable THREE.js internal culling for clipping stability
+            mesh.frustumCulled = this.frustumCullingEnabled;
 
             modelGroup.add(mesh);
             this.createdGeometries.push(geometry);
@@ -3098,7 +3214,7 @@ export class WebGPURendererModule {
                 const mesh = new THREE.Mesh(merged, material);
                 mesh.castShadow = this.shadowsEnabled;
                 mesh.receiveShadow = this.shadowsEnabled;
-                mesh.frustumCulled = false; // Disable THREE.js internal culling for clipping stability
+                mesh.frustumCulled = this.frustumCullingEnabled;
                 mesh.name = `merged-batch-${matKey}-${mergedMeshCount}`;
                 modelGroup.add(mesh);
                 this.createdGeometries.push(merged);
@@ -3461,6 +3577,12 @@ export class WebGPURendererModule {
         console.warn('Warning during WebGPU cleanup:', e);
       }
       this.webgpuRenderer = null;
+    }
+
+    // Dispose edge material
+    if (this.edgeMaterial) {
+      this.edgeMaterial.dispose();
+      this.edgeMaterial = null;
     }
 
     // Dispose color picker

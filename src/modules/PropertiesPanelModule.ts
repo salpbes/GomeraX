@@ -33,6 +33,7 @@ export class PropertiesPanelModule {
   private treeExpandTab: HTMLDivElement | null = null;
   private propsExpandTab: HTMLDivElement | null = null;
   private clusterModule: ClusterModule | null = null;
+  private webgpuRenderer: any = null;
   private worldManager: WorldManager;
   
   // Store storey data for dashboard
@@ -57,6 +58,13 @@ export class PropertiesPanelModule {
    */
   public setClusterModule(clusterModule: ClusterModule): void {
     this.clusterModule = clusterModule;
+  }
+
+  /**
+   * Set the WebGPU renderer reference
+   */
+  public setWebGPURenderer(renderer: any): void {
+    this.webgpuRenderer = renderer;
   }
 
   /**
@@ -2377,6 +2385,11 @@ export class PropertiesPanelModule {
             } else {
               await model.setVisible(idsToToggle, !isVisible);
             }
+
+            // Sync with WebGPU if enabled
+            if (this.webgpuRenderer?.isEnabled()) {
+              this.webgpuRenderer.setElementVisibility(modelId, idsToToggle, !isVisible);
+            }
           }
         }
       });
@@ -2426,6 +2439,11 @@ export class PropertiesPanelModule {
         if (modelId && idsToIsolate.length > 0 && model && hider) {
            hider.isolate({ [modelId]: new Set(idsToIsolate) });
            this.zoomToElements(model, idsToIsolate);
+
+           // Sync with WebGPU if enabled
+           if (this.webgpuRenderer?.isEnabled()) {
+             this.webgpuRenderer.isolateElements(modelId, idsToIsolate);
+           }
         }
       });
     });
@@ -2582,6 +2600,11 @@ export class PropertiesPanelModule {
             }
             
             this.zoomToElements(model, idsToIsolate);
+
+            // Sync with WebGPU if enabled
+            if (this.webgpuRenderer?.isEnabled()) {
+              this.webgpuRenderer.isolateElements(modelId, idsToIsolate);
+            }
         }
       });
     });
@@ -2631,6 +2654,11 @@ export class PropertiesPanelModule {
     this.ghostModeActive = false;
     this.ghostPrimaryModelId = null;
     this.ghostIdsToIsolate = [];
+
+    // Sync with WebGPU if enabled
+    if (this.webgpuRenderer?.isEnabled()) {
+      this.webgpuRenderer.showAllElements();
+    }
     
     if (!this.fragmentsManager) {
       this.ghostAffectedModels.clear();

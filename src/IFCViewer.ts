@@ -102,6 +102,11 @@ export class IFCViewer {
       this.propertiesPanel = new PropertiesPanelModule(this.worldManager, this.ifcLoader);
       await this.propertiesPanel.initialize(world);
 
+      // Connect WebGPU renderer to properties panel for visibility syncing
+      if (this.webgpuRenderer) {
+        this.propertiesPanel.setWebGPURenderer(this.webgpuRenderer);
+      }
+
       // Create and add properties panel UI
       const propertiesPanelElement = this.propertiesPanel.createPanel();
       document.body.appendChild(propertiesPanelElement);
@@ -535,6 +540,27 @@ export class IFCViewer {
    */
   public debugWebGPUOutline(): void {
     this.webgpuRenderer?.debugOutlineState();
+  }
+
+  /**
+   * Set visibility for specific elements in WebGPU mode
+   */
+  public setWebGPUElementVisibility(modelId: string, localIds: number[], visible: boolean): void {
+    this.webgpuRenderer?.setElementVisibility(modelId, localIds, visible);
+  }
+
+  /**
+   * Isolate specific elements in WebGPU mode
+   */
+  public isolateWebGPUElements(modelId: string, localIds: number[]): void {
+    this.webgpuRenderer?.isolateElements(modelId, localIds);
+  }
+
+  /**
+   * Show all elements in WebGPU mode
+   */
+  public showAllWebGPUElements(): void {
+    this.webgpuRenderer?.showAllElements();
   }
 
   /**
