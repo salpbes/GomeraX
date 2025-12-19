@@ -92,7 +92,22 @@ export class WebGPUColorPicker {
     this.camera = camera;
     this.container = container;
     
+    // Reset state for new scene
+    this.reset();
+    
     console.log('✅ WebGPU Color Picker initialized (CPU raycast mode)');
+  }
+
+  /**
+   * Reset the color picker state
+   */
+  public reset(): void {
+    this.elementIdToInfo.clear();
+    this.localIdToElementId.clear();
+    this.nextElementId = 1;
+    this.selectedElementId = null;
+    this.hoveredElementId = null;
+    console.log('🧹 WebGPU Color Picker state reset');
   }
 
   /**
@@ -194,6 +209,11 @@ export class WebGPUColorPicker {
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
     
+    if (intersects.length === 0) {
+      // console.log('🔍 Raycast hit nothing');
+      return null;
+    }
+    
     // Find first mesh with elementColor attribute
     for (const intersect of intersects) {
       if (!(intersect.object instanceof THREE.Mesh)) continue;
@@ -205,6 +225,8 @@ export class WebGPUColorPicker {
       if (mesh.name.includes('outline-helper') || 
           mesh.name.includes('selection-overlay') ||
           mesh.name.includes('hover-overlay') ||
+          mesh.name.includes('selection-overlay-mesh') ||
+          mesh.name.includes('hover-overlay-mesh') ||
           mesh.name === 'webgpu-ground-plane') {
         continue;
       }
@@ -360,17 +382,6 @@ export class WebGPUColorPicker {
     if (this.onSelect) {
       this.onSelect(null);
     }
-  }
-
-  /**
-   * Reset element ID counter and mappings
-   */
-  public reset(): void {
-    this.elementIdToInfo.clear();
-    this.localIdToElementId.clear();
-    this.nextElementId = 1;
-    this.selectedElementId = null;
-    this.hoveredElementId = null;
   }
 
   /**

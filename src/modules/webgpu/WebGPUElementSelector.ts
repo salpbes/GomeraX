@@ -32,6 +32,12 @@ export interface ElementSelectionInfo {
   category?: string;
 }
 
+export interface ElementLocation {
+  mesh: THREE.Mesh;
+  indexStart: number;
+  indexCount: number;
+}
+
 /**
  * WebGPU Element Selector
  * Provides individual element selection within merged geometries
@@ -45,9 +51,12 @@ export class WebGPUElementSelector {
   private selectedElements: Map<number, ElementSelectionInfo> = new Map();
   private hoveredElement: ElementSelectionInfo | null = null;
   
+  // Element ID to mesh locations mapping (for instant highlighting)
+  private elementLocations: Map<number, ElementLocation[]> = new Map();
+  
   // Highlight overlay meshes (one per selected element)
-  private selectionOverlays: Map<number, THREE.Mesh> = new Map();
-  private hoverOverlay: THREE.Mesh | null = null;
+  private selectionOverlays: Map<number, THREE.Object3D> = new Map();
+  private hoverOverlay: THREE.Object3D | null = null;
   
   // Settings
   private selectionColor: THREE.Color = new THREE.Color(0x00aaff);
@@ -80,7 +89,41 @@ export class WebGPUElementSelector {
     this.camera = camera;
     this.container = container;
     
+    // Reset state for new scene
+    this.reset();
+    
     console.log('🎯 WebGPU Element Selector initialized');
+  }
+
+  /**
+   * Reset the element selector state
+   */
+  public reset(): void {
+    this.clearSelection();
+    this.elementLocations.clear();
+    this.elementIdToColor.clear();
+    this.hoveredElement = null;
+    if (this.hoverOverlay && this.scene) {
+      this.scene.remove(this.hoverOverlay);
+      this.hoverOverlay = null;
+    }
+    console.log('🧹 WebGPU Element Selector state reset');
+  }
+
+  /**
+   * Register an element's location in a mesh
+   * Used for instant highlighting without geometry extraction
+   */
+  public registerElementLocation(
+    elementId: number,
+    mesh: THREE.Mesh,
+    indexStart: number,
+    indexCount: number
+  ): void {
+    if (!this.elementLocations.has(elementId)) {
+      this.elementLocations.set(elementId, []);
+    }
+    this.elementLocations.get(elementId)!.push({ mesh, indexStart, indexCount });
   }
 
   /**
@@ -248,7 +291,56 @@ export class WebGPUElementSelector {
   /**
    * Create selection overlay mesh for an element
    */
-  private createSelectionOverlay(elementId: number): THREE.Mesh | null {
+  private createSelectionOverlay(elementId: number): THREE.Object3D | null {
+    const locations = this.elementLocations.get(elementId);
+    
+    // If we have pre-registered locations, use instant drawRange method
+    if (locations && locations.length > 0) {
+      const group = new THREE.Group();
+      group.name = `selection-overlay-group-${elementId}`;
+      
+      const material = new THREE.MeshBasicMaterial({
+        color: this.selectionColor,
+        transparent: true,
+        opacity: this.selectionOpacity,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      
+      for (const loc of locations) {
+        const overlayGeo = new THREE.BufferGeometry();
+        
+        // Copy attributes safely
+        for (const name in loc.mesh.geometry.attributes) {
+          overlayGeo.setAttribute(name, loc.mesh.geometry.attributes[name]);
+        }
+        
+        // Copy index safely
+        if (loc.mesh.geometry.index) {
+          overlayGeo.setIndex(loc.mesh.geometry.index);
+        }
+        
+        overlayGeo.setDrawRange(loc.indexStart, loc.indexCount);
+        
+        const mesh = new THREE.Mesh(overlayGeo, material);
+        mesh.name = `selection-overlay-mesh-${elementId}`;
+        mesh.matrix.copy(loc.mesh.matrixWorld);
+        mesh.matrixWorld.copy(loc.mesh.matrixWorld);
+        mesh.matrixAutoUpdate = false;
+        mesh.renderOrder = 1000;
+        mesh.frustumCulled = false;
+        
+        group.add(mesh);
+      }
+      
+      return group;
+    }
+    
+    // Fallback: slow geometry extraction
     const geometry = this.extractElementGeometry(elementId);
     if (!geometry) {
       console.warn(`⚠️ No geometry extracted for elementId=${elementId}`);
@@ -282,7 +374,56 @@ export class WebGPUElementSelector {
   /**
    * Create hover overlay mesh for an element
    */
-  private createHoverOverlay(elementId: number): THREE.Mesh | null {
+  private createHoverOverlay(elementId: number): THREE.Object3D | null {
+    const locations = this.elementLocations.get(elementId);
+    
+    // If we have pre-registered locations, use instant drawRange method
+    if (locations && locations.length > 0) {
+      const group = new THREE.Group();
+      group.name = `hover-overlay-group-${elementId}`;
+      
+      const material = new THREE.MeshBasicMaterial({
+        color: this.hoverColor,
+        transparent: true,
+        opacity: this.hoverOpacity,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      
+      for (const loc of locations) {
+        const overlayGeo = new THREE.BufferGeometry();
+        
+        // Copy attributes safely
+        for (const name in loc.mesh.geometry.attributes) {
+          overlayGeo.setAttribute(name, loc.mesh.geometry.attributes[name]);
+        }
+        
+        // Copy index safely
+        if (loc.mesh.geometry.index) {
+          overlayGeo.setIndex(loc.mesh.geometry.index);
+        }
+        
+        overlayGeo.setDrawRange(loc.indexStart, loc.indexCount);
+        
+        const mesh = new THREE.Mesh(overlayGeo, material);
+        mesh.name = `hover-overlay-mesh-${elementId}`;
+        mesh.matrix.copy(loc.mesh.matrixWorld);
+        mesh.matrixWorld.copy(loc.mesh.matrixWorld);
+        mesh.matrixAutoUpdate = false;
+        mesh.renderOrder = 999;
+        mesh.frustumCulled = false;
+        
+        group.add(mesh);
+      }
+      
+      return group;
+    }
+    
+    // Fallback: slow geometry extraction
     const geometry = this.extractElementGeometry(elementId);
     if (!geometry) return null;
     
@@ -375,8 +516,16 @@ export class WebGPUElementSelector {
     const overlay = this.selectionOverlays.get(elementId);
     if (overlay && this.scene) {
       this.scene.remove(overlay);
-      overlay.geometry.dispose();
-      (overlay.material as THREE.Material).dispose();
+      
+      // Dispose resources
+      overlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      });
     }
     this.selectionOverlays.delete(elementId);
     
@@ -398,8 +547,16 @@ export class WebGPUElementSelector {
       if (this.scene) {
         this.scene.remove(overlay);
       }
-      overlay.geometry.dispose();
-      (overlay.material as THREE.Material).dispose();
+      
+      // Dispose resources
+      overlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      });
     }
     this.selectionOverlays.clear();
     this.selectedElements.clear();
@@ -420,8 +577,17 @@ export class WebGPUElementSelector {
     // Remove existing hover overlay
     if (this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      this.hoverOverlay.geometry.dispose();
-      (this.hoverOverlay.material as THREE.Material).dispose();
+      
+      // Dispose resources
+      this.hoverOverlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      });
+      
       this.hoverOverlay = null;
     }
     
@@ -478,7 +644,11 @@ export class WebGPUElementSelector {
     
     // Update existing overlays
     for (const overlay of this.selectionOverlays.values()) {
-      (overlay.material as THREE.MeshBasicMaterial).color.copy(this.selectionColor);
+      overlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshBasicMaterial) {
+          obj.material.color.copy(this.selectionColor);
+        }
+      });
     }
   }
 
@@ -495,7 +665,11 @@ export class WebGPUElementSelector {
     }
     
     if (this.hoverOverlay) {
-      (this.hoverOverlay.material as THREE.MeshBasicMaterial).color.copy(this.hoverColor);
+      this.hoverOverlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshBasicMaterial) {
+          obj.material.color.copy(this.hoverColor);
+        }
+      });
     }
   }
 
@@ -527,8 +701,17 @@ export class WebGPUElementSelector {
     // Remove hover overlay if disabling
     if (!show && this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      this.hoverOverlay.geometry.dispose();
-      (this.hoverOverlay.material as THREE.Material).dispose();
+      
+      // Dispose resources
+      this.hoverOverlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      });
+      
       this.hoverOverlay = null;
       this.hoveredElement = null;
     }
@@ -563,12 +746,22 @@ export class WebGPUElementSelector {
     
     if (this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      this.hoverOverlay.geometry.dispose();
-      (this.hoverOverlay.material as THREE.Material).dispose();
+      
+      // Dispose resources
+      this.hoverOverlay.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      });
+      
       this.hoverOverlay = null;
     }
     
     this.elementIdToColor.clear();
+    this.elementLocations.clear();
     this.selectedElements.clear();
     this.hoveredElement = null;
     this.scene = null;

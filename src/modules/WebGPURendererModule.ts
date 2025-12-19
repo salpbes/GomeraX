@@ -255,6 +255,10 @@ export class WebGPURendererModule {
 
   // Element selector for individual element highlighting in merged geometry
   private elementSelector: WebGPUElementSelector | null = null;
+  private elementSelectionHandlersSet: boolean = false;
+  private selectionClickHandler: ((e: Event) => void) | null = null;
+  private selectionEscHandler: ((e: KeyboardEvent) => void) | null = null;
+  private selectionEventTarget: HTMLElement | null = null;
 
   // NOTE: Ambient Occlusion (GTAO) was removed - see WebGPUAmbientOcclusion.ts for explanation
   // The GTAONode requires non-multisampled depth textures, but our WebGPU renderer uses MSAA
@@ -1215,6 +1219,7 @@ export class WebGPURendererModule {
    */
   private setupElementSelectionHandlers(): void {
     if (!this.container || !this.colorPicker || !this.elementSelector) return;
+    if (this.elementSelectionHandlersSet) return;
 
     // Disable hover for performance (geometry extraction on every mouse move is expensive)
     this.elementSelector.setShowHover(false);
@@ -1266,16 +1271,30 @@ export class WebGPURendererModule {
     };
 
     // Add event listeners (wrapped to handle pointer events)
-    const clickWrapper = (e: Event) => {
+    this.selectionClickHandler = (e: Event) => {
       if (e instanceof PointerEvent || e instanceof MouseEvent) {
-        handleClick(e as MouseEvent);
+        const mouseEvent = e as MouseEvent;
+        // Only trigger selection on left click (button 0)
+        if (mouseEvent.button === 0) {
+          handleClick(mouseEvent);
+        }
+      }
+    };
+    
+    this.selectionEscHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.elementSelector) {
+        this.elementSelector.clearSelection();
+        console.log('🎯 Selection cleared via ESC key');
       }
     };
     
     // Only listen for clicks, not hover (hover is disabled for performance)
-    eventTarget.addEventListener('pointerup', clickWrapper, { capture: true });
+    eventTarget.addEventListener('pointerup', this.selectionClickHandler, { capture: true });
+    window.addEventListener('keydown', this.selectionEscHandler);
 
-    console.log('🎯 Element selection handlers attached (GPU color picking)');
+    this.selectionEventTarget = eventTarget;
+    this.elementSelectionHandlersSet = true;
+    console.log('🎯 Element selection handlers attached (GPU color picking + ESC key)');
   }
 
   /**
@@ -2457,6 +2476,26 @@ export class WebGPURendererModule {
     const bg = originalScene.background as any;
     proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
 
+    // Initialize and build GPU picking scene BEFORE registering elements
+    if (this.colorPicker && this.colorPickingEnabled && this.container && this.webgpuRenderer && this.camera) {
+      // Initialize with renderer, scene, camera, container
+      this.colorPicker.initialize(
+        this.webgpuRenderer,
+        proxy,
+        this.camera,
+        this.container
+      );
+      
+      // Initialize element selector for shader-based highlighting
+      if (!this.elementSelector) {
+        this.elementSelector = new WebGPUElementSelector();
+      }
+      this.elementSelector.initialize(proxy, this.camera, this.container);
+      
+      // Wire up click handling: use color picker to get element, then select in element selector
+      this.setupElementSelectionHandlers();
+    }
+
     // -------------------------------------------------------------------------
     // STEP 1: Copy lights from original scene
     // MeshStandardMaterial requires lights. Since we're rendering a separate
@@ -3134,6 +3173,8 @@ export class WebGPURendererModule {
               category: localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId),
             });
             this.colorPicker.createElementColorAttribute(geometry, elementId);
+            // Store elementId in userData for tracking during merge
+            geometry.userData.elementId = elementId;
           }
 
           // GEOMETRY MERGING OPTIMIZATION:
@@ -3174,6 +3215,13 @@ export class WebGPURendererModule {
 
             modelGroup.add(mesh);
             this.createdGeometries.push(geometry);
+            
+            // Track element location for instant highlighting
+            if (this.elementSelector && geometry.userData.elementId) {
+              const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+              this.elementSelector.registerElementLocation(geometry.userData.elementId, mesh, 0, count);
+            }
+            
             meshCount++;
           }
         }
@@ -3219,6 +3267,25 @@ export class WebGPURendererModule {
                 modelGroup.add(mesh);
                 this.createdGeometries.push(merged);
                 this.mergedMeshes.push(mesh);
+                
+                // Track element locations for instant highlighting
+                if (this.elementSelector) {
+                  let currentOffset = 0;
+                  let registeredCount = 0;
+                  for (const geo of currentBatch) {
+                    const eid = geo.userData.elementId;
+                    const count = geo.index ? geo.index.count : geo.attributes.position.count;
+                    if (eid) {
+                      this.elementSelector.registerElementLocation(eid, mesh, currentOffset, count);
+                      registeredCount++;
+                    }
+                    currentOffset += count;
+                  }
+                  if (registeredCount > 0) {
+                    // console.log(`📍 Registered ${registeredCount} element locations for merged mesh ${mesh.name}`);
+                  }
+                }
+                
                 mergedMeshCount++;
               }
             } catch (e) {
@@ -3285,25 +3352,10 @@ export class WebGPURendererModule {
     // Adjust shadow camera to fit the model
     this.updateShadowBounds();
 
-    // Initialize and build GPU picking scene after all elements are registered
-    if (this.colorPicker && this.colorPickingEnabled && this.container && this.webgpuRenderer && this.camera) {
-      // Initialize with renderer, scene, camera, container
-      this.colorPicker.initialize(
-        this.webgpuRenderer,
-        proxy,
-        this.camera,
-        this.container
-      );
-      // Build the picking scene with cloned meshes using picking material
+    // Build the picking scene with cloned meshes using picking material
+    if (this.colorPicker && this.colorPickingEnabled) {
       this.colorPicker.buildPickingScene();
-      console.log(`🎯 GPU color picker initialized with ${this.colorPicker.getElementCount()} elements`);
-
-      // Initialize element selector for shader-based highlighting
-      this.elementSelector = new WebGPUElementSelector();
-      this.elementSelector.initialize(proxy, this.camera, this.container);
-      
-      // Wire up click handling: use color picker to get element, then select in element selector
-      this.setupElementSelectionHandlers();
+      console.log(`🎯 GPU color picker ready with ${this.colorPicker.getElementCount()} elements`);
     }
 
     return true;
@@ -3584,6 +3636,22 @@ export class WebGPURendererModule {
       this.edgeMaterial.dispose();
       this.edgeMaterial = null;
     }
+
+    if (this.elementSelector) {
+      this.elementSelector.reset();
+    }
+
+    // Remove selection event listeners
+    if (this.selectionEventTarget && this.selectionClickHandler) {
+      this.selectionEventTarget.removeEventListener('pointerup', this.selectionClickHandler, { capture: true });
+    }
+    if (this.selectionEscHandler) {
+      window.removeEventListener('keydown', this.selectionEscHandler);
+    }
+    this.selectionClickHandler = null;
+    this.selectionEscHandler = null;
+    this.selectionEventTarget = null;
+    this.elementSelectionHandlersSet = false;
 
     // Dispose color picker
     if (this.colorPicker) {
