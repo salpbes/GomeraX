@@ -257,6 +257,8 @@ export class WebGPURendererModule {
   private elementSelector: WebGPUElementSelector | null = null;
   private elementSelectionHandlersSet: boolean = false;
   private selectionClickHandler: ((e: Event) => void) | null = null;
+  private selectionPointerDownHandler: ((e: PointerEvent) => void) | null = null;
+  private pointerDownPos = { x: 0, y: 0 };
   private selectionEscHandler: ((e: KeyboardEvent) => void) | null = null;
   private selectionEventTarget: HTMLElement | null = null;
 
@@ -1270,13 +1272,29 @@ export class WebGPURendererModule {
       }
     };
 
+    // Pointer down handler to track start position
+    this.selectionPointerDownHandler = (e: PointerEvent) => {
+      if (e.button === 0) {
+        this.pointerDownPos.x = e.clientX;
+        this.pointerDownPos.y = e.clientY;
+      }
+    };
+
     // Add event listeners (wrapped to handle pointer events)
     this.selectionClickHandler = (e: Event) => {
       if (e instanceof PointerEvent || e instanceof MouseEvent) {
         const mouseEvent = e as MouseEvent;
         // Only trigger selection on left click (button 0)
         if (mouseEvent.button === 0) {
-          handleClick(mouseEvent);
+          // Check distance from pointer down to avoid accidental selection during rotation
+          const dx = mouseEvent.clientX - this.pointerDownPos.x;
+          const dy = mouseEvent.clientY - this.pointerDownPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // If moved more than 5 pixels, consider it a drag/rotate, not a click
+          if (distance < 5) {
+            handleClick(mouseEvent);
+          }
         }
       }
     };
@@ -1289,6 +1307,7 @@ export class WebGPURendererModule {
     };
     
     // Only listen for clicks, not hover (hover is disabled for performance)
+    eventTarget.addEventListener('pointerdown', this.selectionPointerDownHandler, { capture: true });
     eventTarget.addEventListener('pointerup', this.selectionClickHandler, { capture: true });
     window.addEventListener('keydown', this.selectionEscHandler);
 
@@ -2130,33 +2149,48 @@ export class WebGPURendererModule {
     const wasEdgesEnabled = this.edgesEnabled;
     const wasGroundPlaneEnabled = this.groundPlaneEnabled;
     
-    // Sectioning not supported in WebGPU mode - no clipping planes to preserve
+    // PERFORMANCE OPTIMIZATION: Don't dispose old resources until the new scene is ready.
+    // This prevents the "empty screen" or "lost model" effect during long rebuilds.
+    const oldGeometries = [...this.createdGeometries];
+    const oldGroundPlane = this.groundPlane;
+    const oldProxyScene = this.proxyScene;
+    const oldEdgeLines = [...this.edgeLines];
     
-    // Dispose old proxy scene resources
-    this.removeEdges();
-    for (const geo of this.createdGeometries) {
-      geo.dispose();
-    }
+    // Reset tracking arrays for the NEW scene
     this.createdGeometries = [];
     this.mergedMeshes = [];
     this.modelGroups = [];
+    this.edgeLines = []; // Clear this so createEdges() starts fresh
     this.meshCategoryMap.clear();
-    
-    // Remove old ground plane
-    if (this.groundPlane && this.proxyScene) {
-      this.proxyScene.remove(this.groundPlane);
-      this.groundPlane.geometry.dispose();
-      (this.groundPlane.material as THREE.Material).dispose();
-      this.groundPlane = null;
-    }
     
     // Temporarily enable ground plane so it gets created during rebuild
     this.groundPlaneEnabled = wasGroundPlaneEnabled;
     
     // Build new proxy scene (this also sets up ground plane via updateShadowBounds)
+    // This method will set this.proxyScene at the end.
     const success = await this.tryBuildProxySceneFromFragments(this.scene);
     
     if (success && this.proxyScene) {
+      // Dispose old proxy scene resources NOW that the new one is ready
+      
+      // Clean up old edges from the old scene
+      if (oldProxyScene) {
+        for (const line of oldEdgeLines) {
+          oldProxyScene.remove(line);
+          line.geometry.dispose();
+          (line.material as THREE.Material).dispose();
+        }
+      }
+      
+      for (const geo of oldGeometries) {
+        geo.dispose();
+      }
+      
+      if (oldGroundPlane && oldGroundPlane !== this.groundPlane) {
+        oldGroundPlane.geometry.dispose();
+        (oldGroundPlane.material as THREE.Material).dispose();
+      }
+      
       // Restore edges
       if (wasEdgesEnabled) {
         await this.createEdges();
@@ -2167,9 +2201,11 @@ export class WebGPURendererModule {
         this.proxyScene.add(this.clusterGroup);
       }
       
-      // Sectioning not supported in WebGPU mode - no clipping planes to restore
-      
       console.log('✅ WebGPU proxy scene rebuilt');
+    } else {
+      // If failed, restore the old geometries to the tracking array so they can be disposed later
+      this.createdGeometries = oldGeometries;
+      console.error('❌ Failed to rebuild WebGPU proxy scene');
     }
   }
 
@@ -3003,233 +3039,215 @@ export class WebGPURendererModule {
       
       // Track skipped items for hidden categories
       let skippedByCategory = 0;
-      
-      for (const itemId of itemIds) {
-        itemCount++;
-        
-        // Check if this item's category should be hidden
-        const itemCategory = localIdToCategory.get(itemId);
-        if (itemCategory && this.hiddenCategories.has(itemCategory)) {
-          skippedByCategory++;
-          continue; // Skip this item - it's in a hidden category
-        }
 
-        // Check if this item is explicitly hidden
-        const hiddenIds = this.hiddenElements.get(modelId);
-        if (hiddenIds && hiddenIds.has(itemId)) {
+      // PERFORMANCE OPTIMIZATION: Batch getItemsGeometry calls
+      // Instead of calling getItemsGeometry for every single item (which is extremely slow
+      // for large models), we process items in chunks. This dramatically reduces the number
+      // of async calls and allows the browser to stay responsive during the rebuild.
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
+        const chunkIds = itemIds.slice(i, i + CHUNK_SIZE);
+        
+        // Filter out hidden items from the chunk to avoid unnecessary geometry fetching
+        const activeChunkIds = chunkIds.filter(id => {
+          const cat = localIdToCategory.get(id);
+          if (cat && this.hiddenCategories.has(cat)) {
+            skippedByCategory++;
+            return false;
+          }
+          const hidden = this.hiddenElements.get(modelId);
+          if (hidden && hidden.has(id)) return false;
+          return true;
+        });
+
+        if (activeChunkIds.length === 0) {
+          itemCount += chunkIds.length;
           continue;
         }
 
-        let isGhost = false;
-        // Check if isolation is active
-        if (this.isolatedElements) {
-          const isolatedIds = this.isolatedElements.get(modelId);
-          if (!isolatedIds || !isolatedIds.has(itemId)) {
-            isGhost = true; // Mark as ghost instead of skipping
-          }
-        }
-
-        // Determine material for this item
-        let materialForMesh: THREE.MeshStandardMaterial | null = null;
-        
-        // Priority 0: Ghost Mode
-        if (isGhost) {
-          materialForMesh = this.getOrCreateGhostMaterial();
-        }
-        
-        // Priority 1: Color Splash
-        if (!materialForMesh && this.colorSplashActive && itemCategory) {
-          materialForMesh = getColorSplashMaterial(itemCategory);
-        }
-        
-        // Priority 2: Real material colors (if Color Splash not active or no color found)
-        if (!materialForMesh) {
-          // We'll resolve this per-mesh below
-        }
-
-        let geometries: any[] | null = null;
+        let geometriesArray: any[] = [];
         try {
-          const geometriesArray = await model.getItemsGeometry([itemId]);
-          geometries = geometriesArray?.[0] || null;
-        } catch {
-          geometries = null;
-        }
-
-        if (!geometries || geometries.length === 0) {
-          try {
-            const children = await model.getItemsChildren([itemId]);
-            if (children && children.length > 0) {
-              // Ensure children materials are also available
-              await addMaterialDefsForIds(children);
-              const childrenGeometriesArray = await model.getItemsGeometry(children);
-              geometries = childrenGeometriesArray.flat();
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        if (!geometries || geometries.length === 0) {
-          itemsWithNoGeometry++;
+          // Batch fetch geometry for the entire chunk
+          geometriesArray = await model.getItemsGeometry(activeChunkIds);
+        } catch (e) {
+          console.warn(`⚠️ WebGPU: failed to get geometries for chunk in model ${modelId}`, e);
+          itemCount += chunkIds.length;
           continue;
         }
 
-        for (const meshData of geometries) {
-          if (!meshData?.positions) continue;
-
-          const localIdForMesh = typeof meshData.localId === 'number' ? meshData.localId : itemId;
-          const meshCategory = localIdToCategory.get(localIdForMesh) || itemCategory;
+        for (let j = 0; j < activeChunkIds.length; j++) {
+          const itemId = activeChunkIds[j];
+          let geometries = geometriesArray[j];
+          itemCount++;
           
-          // -----------------------------------------------------------------
-          // RESOLVE MATERIAL
-          // -----------------------------------------------------------------
-          let materialForMesh: THREE.MeshStandardMaterial | null = null;
-
-          // Priority 0: Ghost Mode
-          if (isGhost) {
-            materialForMesh = this.getOrCreateGhostMaterial();
-          }
-
-          // Priority 1: Color Splash
-          if (!materialForMesh && this.colorSplashActive && meshCategory) {
-            materialForMesh = getColorSplashMaterial(meshCategory);
-          }
-
-          // Priority 2: Real material colors
-          if (!materialForMesh) {
-            const sampleId = (meshData as any).sampleId;
-            if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
-              materialForMesh = getMaterialFromSampleId(sampleId);
-              if (materialForMesh) coloredMeshesInModel++;
+          const itemCategory = localIdToCategory.get(itemId);
+          let isGhost = false;
+          
+          // Check if isolation is active
+          if (this.isolatedElements) {
+            const isolatedIds = this.isolatedElements.get(modelId);
+            if (!isolatedIds || !isolatedIds.has(itemId)) {
+              isGhost = true;
             }
           }
 
-          // Priority 3: Category colors (fallback)
-          if (!materialForMesh && shouldUseCategoryColors && meshCategory) {
-            materialForMesh = getOrCreateCategoryMaterial(meshCategory);
-            if (materialForMesh) categoryColoredMeshesInModel++;
+          if (!geometries || geometries.length === 0) {
+            try {
+              const children = await model.getItemsChildren([itemId]);
+              if (children && children.length > 0) {
+                // Ensure children materials are also available
+                await addMaterialDefsForIds(children);
+                const childrenGeometriesArray = await model.getItemsGeometry(children);
+                geometries = childrenGeometriesArray.flat();
+              }
+            } catch {
+              // ignore
+            }
           }
 
-          // Priority 4: Shared material (last resort)
-          if (!materialForMesh) {
-            const defForMesh = localIdToMaterialDef.get(localIdForMesh);
-            if (defForMesh) {
-              materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
+          if (!geometries || geometries.length === 0) {
+            itemsWithNoGeometry++;
+            continue;
+          }
+
+          for (const meshData of geometries) {
+            if (!meshData?.positions) continue;
+
+            const localIdForMesh = typeof meshData.localId === 'number' ? meshData.localId : itemId;
+            const meshCategory = localIdToCategory.get(localIdForMesh) || itemCategory;
+            
+            // -----------------------------------------------------------------
+            // RESOLVE MATERIAL
+            // -----------------------------------------------------------------
+            let materialForMesh: THREE.MeshStandardMaterial | null = null;
+
+            // Priority 0: Ghost Mode
+            if (isGhost) {
+              materialForMesh = this.getOrCreateGhostMaterial();
+            }
+
+            // Priority 1: Color Splash
+            if (!materialForMesh && this.colorSplashActive && meshCategory) {
+              materialForMesh = getColorSplashMaterial(meshCategory);
+            }
+
+            // Priority 2: Real material colors
+            if (!materialForMesh) {
+              const sampleId = (meshData as any).sampleId;
+              if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
+                materialForMesh = getMaterialFromSampleId(sampleId);
+                if (materialForMesh) coloredMeshesInModel++;
+              }
+            }
+
+            // Priority 3: Category colors (fallback)
+            if (!materialForMesh && shouldUseCategoryColors && meshCategory) {
+              materialForMesh = getOrCreateCategoryMaterial(meshCategory);
+              if (materialForMesh) categoryColoredMeshesInModel++;
+            }
+
+            // Priority 4: Shared material (last resort)
+            if (!materialForMesh) {
+              const defForMesh = localIdToMaterialDef.get(localIdForMesh);
+              if (defForMesh) {
+                materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
+              } else {
+                missingMaterialDefsInModel++;
+              }
+            }
+
+            // Final fallback
+            if (!materialForMesh) {
+              materialForMesh = sharedMaterial;
+            }
+
+            // -----------------------------------------------------------------
+            // BUILD GEOMETRY
+            // -----------------------------------------------------------------
+            const geometry = new THREE.BufferGeometry();
+            
+            // Positions: ensure Float32 (WebGPU prefers this)
+            const posArray = meshData.positions instanceof Float64Array
+              ? new Float32Array(meshData.positions)
+              : (meshData.positions as Float32Array | Float64Array);
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
+
+            // -----------------------------------------------------------------
+            // NORMALS: Critical WebGPU compatibility fix!
+            // -----------------------------------------------------------------
+            if (meshData.normals && meshData.normals.length > 0) {
+              const n = meshData.normals;
+              const out = new Float32Array(n.length);
+              const scale = 1 / 32767; // Int16 normalized range
+              for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
+              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
             } else {
-              missingMaterialDefsInModel++;
-            }
-          }
-
-          // Final fallback
-          if (!materialForMesh) {
-            materialForMesh = sharedMaterial;
-          }
-
-          // -----------------------------------------------------------------
-          // BUILD GEOMETRY
-          // -----------------------------------------------------------------
-          const geometry = new THREE.BufferGeometry();
-          
-          // Positions: ensure Float32 (WebGPU prefers this)
-          const posArray = meshData.positions instanceof Float64Array
-            ? new Float32Array(meshData.positions)
-            : (meshData.positions as Float32Array | Float64Array);
-          geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
-
-          // -----------------------------------------------------------------
-          // NORMALS: Critical WebGPU compatibility fix!
-          // -----------------------------------------------------------------
-          // OBC stores normals as Int16Array (packed, 6 bytes per vertex).
-          // WebGPU requires vertex buffer stride to be a multiple of 4 bytes.
-          // Int16 vec3 = 6 bytes → INVALID for WebGPU → causes pipeline error!
-          // Solution: Convert to Float32 vec3 = 12 bytes → valid for WebGPU.
-          // -----------------------------------------------------------------
-          if (meshData.normals && meshData.normals.length > 0) {
-            const n = meshData.normals;
-            const out = new Float32Array(n.length);
-            const scale = 1 / 32767; // Int16 normalized range
-            for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
-            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
-          } else {
-            geometry.computeVertexNormals();
-          }
-
-          // Indices
-          if (meshData.indices) {
-            geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
-          }
-
-          // -----------------------------------------------------------------
-          // GPU COLOR PICKING: Add element ID as vertex color attribute
-          // -----------------------------------------------------------------
-          // Register the element with the color picker and encode its ID
-          // as a vertex color attribute. This survives geometry merging and
-          // allows individual element selection in GPU picking pass.
-          // -----------------------------------------------------------------
-          if (this.colorPicker && this.colorPickingEnabled) {
-            const elementId = this.colorPicker.registerElement({
-              localId: localIdForMesh,
-              modelId,
-              category: localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId),
-            });
-            this.colorPicker.createElementColorAttribute(geometry, elementId);
-            // Store elementId in userData for tracking during merge
-            geometry.userData.elementId = elementId;
-          }
-
-          // GEOMETRY MERGING OPTIMIZATION:
-          // Instead of creating a mesh immediately, apply transform to geometry
-          // and collect it for later merging with other geometries using same material.
-          // This reduces draw calls dramatically.
-          if (this.geometryMergingEnabled) {
-            // Apply transform to geometry vertices directly (bake transform)
-            if (meshData.transform) {
-              geometry.applyMatrix4(meshData.transform);
-            }
-            
-            // Compute bounding sphere now for frustum culling later
-            geometry.computeBoundingSphere();
-            
-            // Group by material for later merging
-            const matKey = getMaterialKey(materialForMesh, meshCategory);
-            if (!geometriesByMaterial.has(matKey)) {
-              geometriesByMaterial.set(matKey, { geometries: [], material: materialForMesh });
-            }
-            geometriesByMaterial.get(matKey)!.geometries.push(geometry);
-            meshCount++;
-          } else {
-            // Original path: create individual mesh per item
-            // IMPORTANT: bake transform into geometry (not Object3D.applyMatrix4).
-            // Some fragment transforms are not safely decomposable into TRS, which can
-            // lead to NaNs / invisible meshes if applied to the Object3D.
-            if (meshData.transform) {
-              geometry.applyMatrix4(meshData.transform);
+              geometry.computeVertexNormals();
             }
 
-            geometry.computeBoundingSphere();
-
-            const mesh = new THREE.Mesh(geometry, materialForMesh);
-            mesh.castShadow = this.shadowsEnabled;
-            mesh.receiveShadow = this.shadowsEnabled;
-            mesh.frustumCulled = this.frustumCullingEnabled;
-
-            modelGroup.add(mesh);
-            this.createdGeometries.push(geometry);
-            
-            // Track element location for instant highlighting
-            if (this.elementSelector && geometry.userData.elementId) {
-              const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
-              this.elementSelector.registerElementLocation(geometry.userData.elementId, mesh, 0, count);
+            // Indices
+            if (meshData.indices) {
+              geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
             }
-            
-            meshCount++;
+
+            // -----------------------------------------------------------------
+            // GPU COLOR PICKING: Add element ID as vertex color attribute
+            // -----------------------------------------------------------------
+            // Register the element with the color picker and encode its ID
+            // as a vertex color attribute.
+            // -----------------------------------------------------------------
+            if (this.colorPicker && this.colorPickingEnabled) {
+              const elementId = this.colorPicker.registerElement({
+                localId: localIdForMesh,
+                modelId,
+                category: localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId),
+              });
+              this.colorPicker.createElementColorAttribute(geometry, elementId);
+              // Store elementId in userData for tracking during merge
+              geometry.userData.elementId = elementId;
+            }
+
+            // GEOMETRY MERGING OPTIMIZATION:
+            if (this.geometryMergingEnabled) {
+              if (meshData.transform) {
+                geometry.applyMatrix4(meshData.transform);
+              }
+              
+              geometry.computeBoundingSphere();
+              
+              const matKey = getMaterialKey(materialForMesh, meshCategory);
+              if (!geometriesByMaterial.has(matKey)) {
+                geometriesByMaterial.set(matKey, { geometries: [], material: materialForMesh });
+              }
+              geometriesByMaterial.get(matKey)!.geometries.push(geometry);
+              meshCount++;
+            } else {
+              if (meshData.transform) {
+                geometry.applyMatrix4(meshData.transform);
+              }
+
+              geometry.computeBoundingSphere();
+
+              const mesh = new THREE.Mesh(geometry, materialForMesh);
+              mesh.castShadow = this.shadowsEnabled;
+              mesh.receiveShadow = this.shadowsEnabled;
+              mesh.frustumCulled = this.frustumCullingEnabled;
+
+              modelGroup.add(mesh);
+              this.createdGeometries.push(geometry);
+              
+              if (this.elementSelector && geometry.userData.elementId) {
+                const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+                this.elementSelector.registerElementLocation(geometry.userData.elementId, mesh, 0, count);
+              }
+              
+              meshCount++;
+            }
           }
         }
 
-        // Yield to UI every 200 items to prevent freezing
-        if (itemCount % 200 === 0) {
-          await new Promise<void>((r) => setTimeout(() => r(), 0));
-        }
+        // Yield to UI after each chunk to keep animations (like zoom) smooth
+        await new Promise<void>((r) => setTimeout(() => r(), 0));
       }
       
       // =====================================================================
@@ -3241,10 +3259,14 @@ export class WebGPURendererModule {
       // =====================================================================
       if (this.geometryMergingEnabled && geometriesByMaterial.size > 0) {
         let mergedMeshCount = 0;
-        const MAX_VERTICES_PER_MERGE = 65535 * 3; // ~65K vertices per merged mesh (WebGPU limit friendly)
         
         for (const [matKey, { geometries, material }] of geometriesByMaterial) {
           if (geometries.length === 0) continue;
+          
+          // PERFORMANCE OPTIMIZATION: Use smaller chunks for ghosts to allow better frustum culling.
+          // Also disable shadows for ghosts to save GPU cycles.
+          const isGhost = material === this.ghostMaterial;
+          const maxVertices = isGhost ? 65535 : 65535 * 3;
           
           // Split into chunks if too many vertices (prevent GPU memory issues)
           let currentBatch: THREE.BufferGeometry[] = [];
@@ -3260,8 +3282,11 @@ export class WebGPURendererModule {
               
               if (merged) {
                 const mesh = new THREE.Mesh(merged, material);
-                mesh.castShadow = this.shadowsEnabled;
-                mesh.receiveShadow = this.shadowsEnabled;
+                
+                // PERFORMANCE OPTIMIZATION: Ghosts don't need shadows
+                mesh.castShadow = isGhost ? false : this.shadowsEnabled;
+                mesh.receiveShadow = isGhost ? false : this.shadowsEnabled;
+                
                 mesh.frustumCulled = this.frustumCullingEnabled;
                 mesh.name = `merged-batch-${matKey}-${mergedMeshCount}`;
                 modelGroup.add(mesh);
@@ -3281,9 +3306,6 @@ export class WebGPURendererModule {
                     }
                     currentOffset += count;
                   }
-                  if (registeredCount > 0) {
-                    // console.log(`📍 Registered ${registeredCount} element locations for merged mesh ${mesh.name}`);
-                  }
                 }
                 
                 mergedMeshCount++;
@@ -3293,8 +3315,8 @@ export class WebGPURendererModule {
               console.warn('⚠️ Geometry merge failed, adding individually:', e);
               for (const geo of currentBatch) {
                 const mesh = new THREE.Mesh(geo, material);
-                mesh.castShadow = this.shadowsEnabled;
-                mesh.receiveShadow = this.shadowsEnabled;
+                mesh.castShadow = isGhost ? false : this.shadowsEnabled;
+                mesh.receiveShadow = isGhost ? false : this.shadowsEnabled;
                 modelGroup.add(mesh);
                 this.createdGeometries.push(geo);
                 mergedMeshCount++;
@@ -3308,7 +3330,7 @@ export class WebGPURendererModule {
           for (const geo of geometries) {
             const vertexCount = geo.attributes.position?.count || 0;
             
-            if (currentVertexCount + vertexCount > MAX_VERTICES_PER_MERGE && currentBatch.length > 0) {
+            if (currentVertexCount + vertexCount > maxVertices && currentBatch.length > 0) {
               flushBatch();
             }
             
@@ -3642,13 +3664,19 @@ export class WebGPURendererModule {
     }
 
     // Remove selection event listeners
-    if (this.selectionEventTarget && this.selectionClickHandler) {
-      this.selectionEventTarget.removeEventListener('pointerup', this.selectionClickHandler, { capture: true });
+    if (this.selectionEventTarget) {
+      if (this.selectionClickHandler) {
+        this.selectionEventTarget.removeEventListener('pointerup', this.selectionClickHandler, { capture: true });
+      }
+      if (this.selectionPointerDownHandler) {
+        this.selectionEventTarget.removeEventListener('pointerdown', this.selectionPointerDownHandler, { capture: true });
+      }
     }
     if (this.selectionEscHandler) {
       window.removeEventListener('keydown', this.selectionEscHandler);
     }
     this.selectionClickHandler = null;
+    this.selectionPointerDownHandler = null;
     this.selectionEscHandler = null;
     this.selectionEventTarget = null;
     this.elementSelectionHandlersSet = false;

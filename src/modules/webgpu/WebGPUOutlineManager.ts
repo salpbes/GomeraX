@@ -61,6 +61,7 @@ export class WebGPUOutlineManager {
   private container: HTMLElement | null = null;
   private raycaster: THREE.Raycaster = new THREE.Raycaster();
   private mouse: THREE.Vector2 = new THREE.Vector2();
+  private pointerDownPos = { x: 0, y: 0 };
   
   // Selection state
   private selectedMeshes: Map<string, SelectionInfo> = new Map();
@@ -90,6 +91,8 @@ export class WebGPUOutlineManager {
   // Bound event handlers
   private boundClickHandler: ((event: MouseEvent) => void) | null = null;
   private boundMoveHandler: ((event: MouseEvent) => void) | null = null;
+  private boundDownHandler: ((event: PointerEvent) => void) | null = null;
+  private boundDocHandler: ((event: Event) => void) | null = null;
 
   constructor() {
     // Create outline materials
@@ -162,8 +165,16 @@ export class WebGPUOutlineManager {
     this.boundClickHandler = this.handleClick.bind(this);
     this.boundMoveHandler = this.handleMouseMove.bind(this);
     
+    // Pointer down handler to track start position
+    this.boundDownHandler = (e: PointerEvent) => {
+      if (e.button === 0) {
+        this.pointerDownPos.x = e.clientX;
+        this.pointerDownPos.y = e.clientY;
+      }
+    };
+    
     // Add listener directly to document to ensure we catch all clicks
-    const docHandler = (e: Event) => {
+    this.boundDocHandler = (e: Event) => {
       const mouseEvent = e as MouseEvent;
       // Check if click is within our container
       if (this.container && this.container.contains(e.target as Node)) {
@@ -171,9 +182,11 @@ export class WebGPUOutlineManager {
       }
     };
     
-    document.addEventListener('pointerup', docHandler, { capture: true });
+    document.addEventListener('pointerdown', this.boundDownHandler as EventListener, { capture: true });
+    document.addEventListener('pointerup', this.boundDocHandler as EventListener, { capture: true });
     
     // Also add to the specific event target
+    eventTarget.addEventListener('pointerdown', this.boundDownHandler as EventListener, { capture: true });
     eventTarget.addEventListener('pointerup', this.boundClickHandler as EventListener, { capture: true });
     eventTarget.addEventListener('pointermove', this.boundMoveHandler as EventListener, { capture: true });
     
@@ -185,6 +198,14 @@ export class WebGPUOutlineManager {
    */
   private handleClick(event: MouseEvent): void {
     if (!this.settings.enabled || !this.scene || !this.camera || !this.container) return;
+    
+    // Check distance from pointer down to avoid accidental selection during rotation
+    const dx = event.clientX - this.pointerDownPos.x;
+    const dy = event.clientY - this.pointerDownPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // If moved more than 5 pixels, consider it a drag/rotate, not a click
+    if (distance >= 5) return;
     
     // Check for modifier keys - Shift for multi-select, Ctrl/Cmd to toggle
     const isMultiSelect = event.shiftKey;
@@ -679,15 +700,25 @@ export class WebGPUOutlineManager {
    */
   public dispose(): void {
     // Remove event listeners
+    if (this.boundDownHandler) {
+      document.removeEventListener('pointerdown', this.boundDownHandler as EventListener, { capture: true });
+    }
+    if (this.boundDocHandler) {
+      document.removeEventListener('pointerup', this.boundDocHandler as EventListener, { capture: true });
+    }
+
     if (this.container) {
       const originalCanvas = this.container.querySelector('canvas:not(#webgpu-canvas)') as HTMLElement | null;
       const eventTarget = (originalCanvas || this.container) as HTMLElement;
       
+      if (this.boundDownHandler) {
+        eventTarget.removeEventListener('pointerdown', this.boundDownHandler as EventListener, { capture: true });
+      }
       if (this.boundClickHandler) {
-        eventTarget.removeEventListener('click', this.boundClickHandler as EventListener);
+        eventTarget.removeEventListener('pointerup', this.boundClickHandler as EventListener, { capture: true });
       }
       if (this.boundMoveHandler) {
-        eventTarget.removeEventListener('mousemove', this.boundMoveHandler as EventListener);
+        eventTarget.removeEventListener('pointermove', this.boundMoveHandler as EventListener, { capture: true });
       }
     }
     

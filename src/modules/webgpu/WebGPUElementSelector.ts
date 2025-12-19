@@ -313,6 +313,7 @@ export class WebGPUElementSelector {
       
       for (const loc of locations) {
         const overlayGeo = new THREE.BufferGeometry();
+        overlayGeo.userData.isShared = true; // Mark as sharing attributes
         
         // Copy attributes safely
         for (const name in loc.mesh.geometry.attributes) {
@@ -396,6 +397,7 @@ export class WebGPUElementSelector {
       
       for (const loc of locations) {
         const overlayGeo = new THREE.BufferGeometry();
+        overlayGeo.userData.isShared = true; // Mark as sharing attributes
         
         // Copy attributes safely
         for (const name in loc.mesh.geometry.attributes) {
@@ -507,6 +509,37 @@ export class WebGPUElementSelector {
   }
 
   /**
+   * Safely disposes an overlay object, checking for shared geometries
+   */
+  private disposeOverlay(overlay: THREE.Object3D | null): void {
+    if (!overlay) return;
+    
+    overlay.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        // CRITICAL: Only dispose geometry if it's NOT sharing attributes with the main model.
+        // In the instant drawRange method, we create a new BufferGeometry but share attributes.
+        // Disposing it can sometimes cause the renderer to lose the shared buffers.
+        if (obj.geometry) {
+          if (obj.geometry.userData.isShared) {
+            // Just null it out, don't dispose
+            (obj as any).geometry = null;
+          } else {
+            obj.geometry.dispose();
+          }
+        }
+        
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach(m => m.dispose());
+          } else if (obj.material instanceof THREE.Material) {
+            obj.material.dispose();
+          }
+        }
+      }
+    });
+  }
+
+  /**
    * Deselect an element
    */
   public deselectElement(elementId: number): void {
@@ -516,16 +549,7 @@ export class WebGPUElementSelector {
     const overlay = this.selectionOverlays.get(elementId);
     if (overlay && this.scene) {
       this.scene.remove(overlay);
-      
-      // Dispose resources
-      overlay.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
-          }
-        }
-      });
+      this.disposeOverlay(overlay);
     }
     this.selectionOverlays.delete(elementId);
     
@@ -547,16 +571,7 @@ export class WebGPUElementSelector {
       if (this.scene) {
         this.scene.remove(overlay);
       }
-      
-      // Dispose resources
-      overlay.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
-          }
-        }
-      });
+      this.disposeOverlay(overlay);
     }
     this.selectionOverlays.clear();
     this.selectedElements.clear();
@@ -577,17 +592,7 @@ export class WebGPUElementSelector {
     // Remove existing hover overlay
     if (this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      
-      // Dispose resources
-      this.hoverOverlay.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
-          }
-        }
-      });
-      
+      this.disposeOverlay(this.hoverOverlay);
       this.hoverOverlay = null;
     }
     
@@ -701,16 +706,7 @@ export class WebGPUElementSelector {
     // Remove hover overlay if disabling
     if (!show && this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      
-      // Dispose resources
-      this.hoverOverlay.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
-          }
-        }
-      });
+      this.disposeOverlay(this.hoverOverlay);
       
       this.hoverOverlay = null;
       this.hoveredElement = null;
@@ -746,17 +742,7 @@ export class WebGPUElementSelector {
     
     if (this.hoverOverlay && this.scene) {
       this.scene.remove(this.hoverOverlay);
-      
-      // Dispose resources
-      this.hoverOverlay.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
-          }
-        }
-      });
-      
+      this.disposeOverlay(this.hoverOverlay);
       this.hoverOverlay = null;
     }
     
