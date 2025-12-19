@@ -293,9 +293,9 @@ export function createToolbarHTML(): string {
                     <option value="1">Linear</option>
                     <option value="2">Reinhard</option>
                     <option value="3">Cineon</option>
-                    <option value="4" selected>ACES Filmic</option>
+                    <option value="4">ACES Filmic</option>
                     <option value="6">AgX</option>
-                    <option value="7">Neutral</option>
+                    <option value="7" selected>Neutral</option>
                   </select>
                 </div>
                 
@@ -338,7 +338,7 @@ export function createToolbarHTML(): string {
                 
                 <!-- Ground Plane Toggle -->
                 <label class="checkbox-label">
-                  <input type="checkbox" id="webgpuGroundPlaneToggle" checked>
+                  <input type="checkbox" id="webgpuGroundPlaneToggle">
                   <span>Show Ground Plane</span>
                 </label>
               </div>
@@ -371,33 +371,11 @@ export function createToolbarHTML(): string {
                   <span>Enable Selection Outline</span>
                 </label>
                 
-                <label class="checkbox-label">
-                  <input type="checkbox" id="webgpuHoverToggle" checked>
-                  <span>Enable Hover Highlight</span>
-                </label>
-                
-                <!-- Outline Thickness Slider -->
-                <div id="outlineThicknessControl" class="webgpu-control">
-                  <label>
-                    <span>Outline Thickness:</span>
-                    <span id="outlineThicknessValue">3%</span>
-                  </label>
-                  <input type="range" id="outlineThicknessSlider" min="1" max="20" step="1" value="3">
-                </div>
-                
                 <!-- Selection Color -->
                 <div class="webgpu-control">
                   <label>
                     <span>Selection Color:</span>
                     <input type="color" id="outlineSelectionColor" value="#00aaff">
-                  </label>
-                </div>
-                
-                <!-- Hover Color -->
-                <div class="webgpu-control">
-                  <label>
-                    <span>Hover Color:</span>
-                    <input type="color" id="outlineHoverColor" value="#ffff00">
                   </label>
                 </div>
               </div>

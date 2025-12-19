@@ -80,7 +80,7 @@ export class WebGPUOutlineManager {
     hoverColor: new THREE.Color(0xffff00),     // Yellow
     thickness: 0.03,                            // Outline thickness
     enabled: true,
-    showHover: true
+    showHover: false
   };
   
   // Event callbacks

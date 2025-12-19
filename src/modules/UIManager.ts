@@ -648,11 +648,7 @@ export class UIManager {
     
     // Outline/Selection Highlight controls
     const outlineToggle = document.getElementById('webgpuOutlineToggle') as HTMLInputElement;
-    const hoverToggle = document.getElementById('webgpuHoverToggle') as HTMLInputElement;
-    const outlineThicknessSlider = document.getElementById('outlineThicknessSlider') as HTMLInputElement;
-    const outlineThicknessValue = document.getElementById('outlineThicknessValue');
     const outlineSelectionColor = document.getElementById('outlineSelectionColor') as HTMLInputElement;
-    const outlineHoverColor = document.getElementById('outlineHoverColor') as HTMLInputElement;
     
     if (outlineToggle) {
       outlineToggle.addEventListener('change', () => {
@@ -660,30 +656,9 @@ export class UIManager {
       });
     }
     
-    if (hoverToggle) {
-      hoverToggle.addEventListener('change', () => {
-        this.viewer?.setWebGPUOutlineHoverEnabled(hoverToggle.checked);
-      });
-    }
-    
-    if (outlineThicknessSlider && outlineThicknessValue) {
-      outlineThicknessSlider.addEventListener('input', () => {
-        const value = parseInt(outlineThicknessSlider.value);
-        outlineThicknessValue.textContent = `${value}%`;
-        // Convert percentage to decimal (3% = 0.03)
-        this.viewer?.setWebGPUOutlineThickness(value / 100);
-      });
-    }
-    
     if (outlineSelectionColor) {
       outlineSelectionColor.addEventListener('change', () => {
         this.viewer?.setWebGPUOutlineSelectionColor(outlineSelectionColor.value);
-      });
-    }
-    
-    if (outlineHoverColor) {
-      outlineHoverColor.addEventListener('change', () => {
-        this.viewer?.setWebGPUOutlineHoverColor(outlineHoverColor.value);
       });
     }
     

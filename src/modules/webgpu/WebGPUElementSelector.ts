@@ -55,7 +55,7 @@ export class WebGPUElementSelector {
   private selectionOpacity: number = 0.5;
   private hoverOpacity: number = 0.3;
   private enabled: boolean = true;
-  private showHover: boolean = true;
+  private showHover: boolean = false;
   
   // Callbacks
   private onSelect: ((info: ElementSelectionInfo | null) => void) | null = null;

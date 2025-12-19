@@ -176,7 +176,7 @@ export class WebGPURendererModule {
   private sceneMaxDim: number = 100;
 
   // Ground plane settings
-  private groundPlaneEnabled: boolean = true;
+  private groundPlaneEnabled: boolean = false;
   private groundPlane: THREE.Mesh | null = null;
 
   // Edge/outline rendering settings
@@ -202,7 +202,7 @@ export class WebGPURendererModule {
   private materialCount: number = 0;
   private textureCount: number = 0;
   private frameTimeHistory: number[] = [];
-  private currentToneMapping: number = 4; // ACESFilmic default
+  private currentToneMapping: number = 7; // Neutral default
   private gpuInfo: string = 'Unknown';
   private minFps: number = 999;
   private maxFps: number = 0;
@@ -821,8 +821,6 @@ export class WebGPURendererModule {
    * Positioned below the model based on its bounding box.
    */
   private setupGroundPlane(scene: THREE.Scene, boundingBox: THREE.Box3): void {
-    if (!this.groundPlaneEnabled) return;
-    
     // Remove existing ground plane if any
     if (this.groundPlane) {
       scene.remove(this.groundPlane);
@@ -850,6 +848,9 @@ export class WebGPURendererModule {
     this.groundPlane = new THREE.Mesh(geometry, material);
     this.groundPlane.name = 'webgpu-ground-plane';
     
+    // Set initial visibility based on settings
+    this.groundPlane.visible = this.groundPlaneEnabled;
+    
     // Rotate to be horizontal (PlaneGeometry is vertical by default)
     this.groundPlane.rotation.x = -Math.PI / 2;
     
@@ -863,7 +864,8 @@ export class WebGPURendererModule {
     scene.add(this.groundPlane);
     
     console.log('🏗️ Ground plane added:', {
-      position: `(${center.x.toFixed(1)}, -0.5, ${center.z.toFixed(1)})`,
+      visible: this.groundPlaneEnabled,
+      center: center.toArray().map(v => v.toFixed(1)),
       size: maxDim.toFixed(1)
     });
   }
@@ -3322,8 +3324,8 @@ export class WebGPURendererModule {
       }
 
       // Tone mapping for better color/brightness balance
-      // ACES Filmic gives a cinematic look with natural highlights
-      this.webgpuRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+      // Neutral tone mapping provides a more accurate color representation
+      this.webgpuRenderer.toneMapping = THREE.NeutralToneMapping;
       this.webgpuRenderer.toneMappingExposure = 1.0;
 
       // Enable shadow mapping

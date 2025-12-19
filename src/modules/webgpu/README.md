@@ -4,6 +4,17 @@ This directory contains the modularized WebGPU renderer components. The code has
 
 ## Module Structure
 
+webgpu/
+├── index.ts                    # Re-exports all modules
+├── WebGPUTypes.ts              # Shared types, interfaces, and constants
+├── WebGPUShadowManager.ts      # Shadow light and ground plane management
+├── WebGPUEdgeManager.ts        # Edge/wireframe rendering
+├── WebGPUStatsOverlay.ts       # Performance stats UI overlay
+├── WebGPUOptimizations.ts      # Frustum culling, geometry merging
+├── WebGPUMaterialFactory.ts    # Material creation and caching
+├── WebGPUGeometryUtils.ts      # Geometry conversion utilities
+├── WebGPUSectionManager.ts     # Section planes (clipping) functionality
+└── README.md                   # This file
 ```
 webgpu/
 ├── index.ts                    # Re-exports all modules
