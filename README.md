@@ -119,62 +119,62 @@ OBC-IFCViewer/
 
 ### Core Modules
 
-**WorldManager**
+#### WorldManager
 
 - 3D environment setup (scene, camera, renderer)
 - Grid and visual aids
 - Lighting configuration
 
-**IFCLoaderModule**
+#### IFCLoaderModule
 
 - IFC file conversion to Fragments
 - Direct Fragments loading
 - Model management and export
 
-**ModelTransformModule**
+#### ModelTransformModule
 
 - Automatic site coordinate alignment
 - Preserves multi-discipline coordination
 
-**PropertiesPanelModule**
+#### PropertiesPanelModule
 
 - IFC hierarchical tree view
 - Element property inspection
 - Collapsible side panel
 
-**SpaceVisibilityModule**
+#### SpaceVisibilityModule
 
 - Toggle IfcSpace visibility
 - Selective element filtering
 
-**ViewCubeModule**
+#### ViewCubeModule
 
 - Interactive 3D navigation cube
 - Click-to-orient camera alignment
 - Smooth transitions with auto-framing
 
-**WebGPURendererModule**
+#### WebGPURendererModule
 
 - Experimental high-performance rendering engine
 - GPU-based color picking for instant selection
 - Optimized for massive models with millions of triangles
 - Adaptive quality and shadow management
 
-**ClipperModule**
+#### ClipperModule
 
 - Advanced model sectioning
 - Preset planes (X/Y/Z following AEC conventions)
 - Custom double-click sections
 - Flip and clear functionality
 
-**UIManager**
+#### UIManager
 
 - Modern floating toolbar with glassmorphic styling
 - Expandable submenu system
 - Model count badge with tooltips
 - Event handling and state management
 
-**PerformanceMonitor**
+#### PerformanceMonitor
 
 - Real-time FPS tracking
 - Frame time and memory usage
