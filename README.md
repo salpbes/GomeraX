@@ -89,7 +89,7 @@ npm run preview
 
 ## 📁 Project Structure
 
-```
+```text
 OBC-IFCViewer/
 ├── src/
 │   ├── modules/
@@ -112,11 +112,7 @@ OBC-IFCViewer/
 ├── index.html                         # HTML entry point
 ├── package.json                       # Dependencies and scripts
 ├── tsconfig.json                      # TypeScript configuration
-├── vite.config.ts                     # Vite bundler configuration
-├── DEV_PROGRESS.md                    # Development progress log
-├── ARCHITECTURE.md                    # System architecture details
-├── FILE_TREE.md                       # Complete file structure
-└── GETTING_STARTED.md                 # Quick start guide
+└── vite.config.ts                     # Vite bundler configuration
 ```
 
 ## 🧩 Module Overview
@@ -307,15 +303,7 @@ Models automatically align to their site coordinates when loaded. No manual alig
 5. Click Apply to update position
 6. Drag panel to preferred location, minimize when done
 
-## 📖 Documentation
-
-- **[GETTING_STARTED.md](GETTING_STARTED.md)** - Detailed getting started guide with feature walkthrough
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and module design patterns
-- **[FILE_TREE.md](FILE_TREE.md)** - Complete file structure and dependency graph
-- **[DEV_PROGRESS.md](DEV_PROGRESS.md)** - Development history and implementation phases
-- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Complete project summary
-
-## 🔧 Technologies Used
+## Technologies Used
 
 - **[@thatopen/components](https://www.npmjs.com/package/@thatopen/components)** (3.2.0) - Core BIM components
 - **[@thatopen/components-front](https://www.npmjs.com/package/@thatopen/components-front)** (3.2.0) - Frontend BIM tools
