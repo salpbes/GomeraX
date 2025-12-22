@@ -35,6 +35,7 @@ export class PropertiesPanelModule {
   private clusterModule: ClusterModule | null = null;
   private webgpuRenderer: any = null;
   private worldManager: WorldManager;
+  private pointerDownPos = { x: 0, y: 0 };
   
   // Store storey data for dashboard
   public storeyData: { [storeyName: string]: { [category: string]: number } } = {};
@@ -165,6 +166,12 @@ export class PropertiesPanelModule {
     // Middle mouse double click to fit view
     let lastMiddleClickTime = 0;
     container.addEventListener('mousedown', async (event) => {
+      // Record position for drag threshold
+      if (event.button === 0) {
+        this.pointerDownPos.x = event.clientX;
+        this.pointerDownPos.y = event.clientY;
+      }
+
       if (event.button === 1) { // Middle mouse button
         const currentTime = new Date().getTime();
         const timeDiff = currentTime - lastMiddleClickTime;
@@ -204,6 +211,17 @@ export class PropertiesPanelModule {
     });
 
     container.addEventListener('click', async (event) => {
+      // Check distance from pointer down to avoid accidental selection during rotation
+      const dx = event.clientX - this.pointerDownPos.x;
+      const dy = event.clientY - this.pointerDownPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // If moved more than 5 pixels, consider it a drag/rotate, not a click
+      if (distance >= 5) {
+        console.log('🖱️ Click ignored - drag detected');
+        return;
+      }
+
       // Don't process clicks in floor plan mode to allow camera controls
       if ((window as any).isFloorPlanMode) {
         console.log('🚫 Click ignored - floor plan mode active');

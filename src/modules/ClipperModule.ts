@@ -16,6 +16,7 @@ export class ClipperModule {
   private container: HTMLElement | null = null;
   private isEnabled: boolean = false;
   private clipStyler: ClipStylerModule | null = null;
+  private pointerDownPos = { x: 0, y: 0 };
   
   // 3D Flip button meshes
   private flipButtons: Map<string, THREE.Group> = new Map();
@@ -180,9 +181,25 @@ export class ClipperModule {
   private setupFlipButtonClickHandler(): void {
     if (!this.container || !this.world) return;
 
+    // Track pointer down for drag threshold
+    this.container.addEventListener('mousedown', (event) => {
+      if (event.button === 0) {
+        this.pointerDownPos.x = event.clientX;
+        this.pointerDownPos.y = event.clientY;
+      }
+    });
+
     // Click handler
     this.container.addEventListener('click', (event) => {
       if (!this.world?.camera || this.flipButtons.size === 0) return;
+
+      // Check distance from pointer down to avoid accidental selection during rotation
+      const dx = event.clientX - this.pointerDownPos.x;
+      const dy = event.clientY - this.pointerDownPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // If moved more than 5 pixels, consider it a drag/rotate, not a click
+      if (distance >= 5) return;
 
       const rect = this.container!.getBoundingClientRect();
       const mouse = new THREE.Vector2(
