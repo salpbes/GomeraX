@@ -28,6 +28,12 @@
 - 📏 **Measurement Tools**: Length, Area, and Volume measurements with perpendicular guides
 - 🎯 **Model Alignment Tool**: Drag-and-drop panel for precise multi-model positioning with AEC-standard coordinates
 - 🏢 **Floor Plan Views**: Interactive 2D floor plan views with pan/zoom navigation
+- 🎮 **Experimental WebGPU Mode**: Next-generation rendering for massive models with:
+  - **Instant Highlighting**: Zero-latency selection using GPU-shared buffers
+  - **Chunked Scene Rebuilding**: Smooth isolation/un-isolation without UI freezing
+  - **Adaptive Quality**: Automatic performance scaling based on hardware
+  - **Shadow Optimizations**: High-performance shadows with "ghost mode" support
+  - **Frustum Culling**: Optimized edge rendering for complex geometries
 
 ## 🚀 Quick Start
 
@@ -39,16 +45,33 @@
 ### Installation
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
-2. Start the development server:
+1. Start the development server:
+
 ```bash
 npm run dev
 ```
 
-3. Open your browser and navigate to `http://localhost:3000`
+1. Open your browser and navigate to `http://localhost:3000`
+
+## 👨‍💻 Testing Guide (Layman's Style)
+
+If you are not a developer and just want to test this viewer on your machine, follow these simple steps:
+
+1. **Install Node.js**: Go to [nodejs.org](https://nodejs.org/) and download the **LTS** version (the one on the left). Install it like any other application.
+2. **Download the Code**: Click the green **Code** button at the top of this GitHub page and select **Download ZIP**. Extract the folder to your Desktop or Documents.
+3. **Open your Terminal**:
+    - **Windows**: Press the `Windows` key, type `cmd`, and press Enter.
+    - **Mac**: Press `Command + Space`, type `Terminal`, and press Enter.
+4. **Navigate to the Folder**: Type `cd` (with a space at the end), then drag the folder you extracted into the terminal window. It will automatically fill in the path. Press Enter.
+5. **Install the Viewer**: Type `npm install` and press Enter. Wait a minute for it to download the necessary components.
+6. **Run the Viewer**: Type `npm run dev` and press Enter.
+7. **Open your Browser**: You will see a link in the terminal (usually `http://localhost:3000`). Copy and paste this into **Google Chrome** or **Microsoft Edge**.
+8. **Load a Model**: Click the folder icon at the bottom toolbar, select an IFC file from your computer, and enjoy the performance!
 
 ### Building for Production
 
@@ -101,46 +124,62 @@ OBC-IFCViewer/
 ### Core Modules
 
 **WorldManager**
+
 - 3D environment setup (scene, camera, renderer)
 - Grid and visual aids
 - Lighting configuration
 
 **IFCLoaderModule**
+
 - IFC file conversion to Fragments
 - Direct Fragments loading
 - Model management and export
 
 **ModelTransformModule**
+
 - Automatic site coordinate alignment
 - Preserves multi-discipline coordination
 
 **PropertiesPanelModule**
+
 - IFC hierarchical tree view
 - Element property inspection
 - Collapsible side panel
 
 **SpaceVisibilityModule**
+
 - Toggle IfcSpace visibility
 - Selective element filtering
 
 **ViewCubeModule**
+
 - Interactive 3D navigation cube
 - Click-to-orient camera alignment
 - Smooth transitions with auto-framing
 
+**WebGPURendererModule**
+
+- Experimental high-performance rendering engine
+- GPU-based color picking for instant selection
+- Optimized for massive models with millions of triangles
+- Adaptive quality and shadow management
+
 **ClipperModule**
+
 - Advanced model sectioning
 - Preset planes (X/Y/Z following AEC conventions)
 - Custom double-click sections
 - Flip and clear functionality
 
 **UIManager**
+
 - Modern floating toolbar with glassmorphic styling
 - Expandable submenu system
 - Model count badge with tooltips
 - Event handling and state management
 
 **PerformanceMonitor**
+
 - Real-time FPS tracking
 - Frame time and memory usage
 
@@ -159,6 +198,7 @@ OBC-IFCViewer/
 The application features a modern floating toolbar at the bottom with the following controls:
 
 **Main Actions**:
+
 - 📂 **Load**: Upload IFC/Fragments files or load sample models (expandable)
 - 💾 **Export**: Save current model as Fragments format
 - 👁️ **View**: Camera controls and space visibility (expandable)
@@ -168,14 +208,19 @@ The application features a modern floating toolbar at the bottom with the follow
   - Clear All sections
 - ℹ️ **Info**: Model information and statistics (expandable)
 - 🗑️ **Clear**: Remove all loaded models
-- ⚙️ **Settings**: Scene customization (background, lighting)
+- ⚙️ **Settings**: Scene customization and performance (expandable)
+  - **Renderer Mode**: Switch between WebGL and experimental WebGPU
+  - **Shadow Quality**: Adjust shadow resolution for performance
+  - **Background Color**: Customize the viewer environment
 
 **Model Count Badge**:
+
 - Displays total number of loaded models
 - Hover to see detailed tooltip with model names and UUIDs
 - Positioned on the Load button for easy access
 
 **ViewCube (Top-Right)**:
+
 - Click any face for instant camera orientation
 - Perfect for switching between plan/elevation views
 - Smooth animated transitions
@@ -193,12 +238,14 @@ Models automatically align to their site coordinates when loaded. No manual alig
 ### 3D Navigation
 
 **Mouse Controls**:
+
 - **Rotate**: Left mouse button (or one finger drag on mobile)
 - **Pan**: Right mouse button (or two finger drag on mobile)
 - **Zoom**: Mouse wheel (or pinch on mobile)
 - **Select**: Single-click on elements to view properties
 
 **ViewCube Navigation**:
+
 - Click any face (front/back/left/right/top/bottom) for instant orientation
 - Automatic smooth camera transitions
 - Perfect for reviewing floor plans and elevations
@@ -208,17 +255,20 @@ Models automatically align to their site coordinates when loaded. No manual alig
 **Enable**: Click the scissors icon ✂️ in the toolbar
 
 **Section Methods**:
+
 - **Section X**: Side view cut (perpendicular to X axis)
 - **Section Y**: Horizontal floor plan cut (top view, AEC standard)
 - **Section Z**: Vertical elevation cut (front view, AEC standard)
 - **Custom Sections**: Double-click on model to create plane at that point
 
 **Additional Controls**:
+
 - **Flip Side**: Show opposite side of section cut
 - **Clear All**: Remove all section planes
 - **Delete Key**: Remove sections when clipper is enabled
 
 **Sectioning Tips**:
+
 - Preset sections auto-replace previous ones for cleaner workflow
 - Flip is stable even when moving the mouse
 - Follow AEC conventions (Y=horizontal plan, Z=vertical elevation)
@@ -228,6 +278,7 @@ Models automatically align to their site coordinates when loaded. No manual alig
 **Enable**: Click **View** → **Align Models** in the toolbar
 
 **Features**:
+
 - **Model Selection**: Choose any loaded model from dropdown
 - **Position Display**: Current X, Y, Z coordinates (AEC standard with Z as elevation)
 - **Manual Input**: Type precise coordinate values (0.1m precision)
@@ -241,12 +292,14 @@ Models automatically align to their site coordinates when loaded. No manual alig
 - **Apply/Reset**: Update position or return to origin (0, 0, 0)
 
 **Use Cases**:
+
 - Align models from different coordinate systems
 - Position far-origin models (>100km from origin)
 - Fine-tune multi-discipline model placement
 - Verify model elevations and offsets
 
 **Workflow**:
+
 1. Load multiple IFC models
 2. Open Model Alignment panel from View menu
 3. Select model to reposition from dropdown
