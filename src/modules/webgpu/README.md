@@ -7,18 +7,31 @@ This directory contains the modularized WebGPU renderer components. The code has
 ```text
 webgpu/
 ├── index.ts                    # Re-exports all modules
+├── WebGPURendererModule.ts     # Main entry point and orchestration
 ├── WebGPUTypes.ts              # Shared types, interfaces, and constants
 ├── WebGPUShadowManager.ts      # Shadow light and ground plane management
 ├── WebGPUEdgeManager.ts        # Edge/wireframe rendering
+├── WebGPUOutlineManager.ts     # Selection highlighting and outlines
+├── WebGPUColorPicker.ts        # Individual element picking in merged geometry
+├── WebGPUElementSelector.ts    # Individual element selection and extraction
 ├── WebGPUStatsOverlay.ts       # Performance stats UI overlay
 ├── WebGPUOptimizations.ts      # Frustum culling, geometry merging
+├── WebGPULODManager.ts         # Level of Detail (LOD) system
+├── WebGPUFog.ts                # Atmospheric fog effects
 ├── WebGPUMaterialFactory.ts    # Material creation and caching
-├── WebGPUGeometryUtils.ts      # Geometry conversion utilities
-├── WebGPUSectionManager.ts     # Section planes (clipping) functionality
-└── README.md                   # This file
+└── WebGPUGeometryUtils.ts      # Geometry conversion utilities
 ```
 
 ## Module Descriptions
+
+### WebGPURendererModule.ts
+
+The central hub for WebGPU rendering. It orchestrates all other modules and provides the main interface for the application:
+
+- Renderer initialization and lifecycle management
+- Scene and camera synchronization
+- Integration with all sub-managers (Shadows, Edges, Outlines, etc.)
+- Support for ColorSplash and Cluster modes in WebGPU
 
 ### WebGPUTypes.ts
 
@@ -27,7 +40,7 @@ Shared type definitions and constants used across all WebGPU modules:
 - `RendererMode`, `WebGPUStatus`, `PerformancePreset`
 - `SceneStats`, `PerformanceStats` interfaces
 - `ShadowConfig`, `EdgeConfig`, `GroundPlaneConfig`
-- `SectionConfig`, `SectionPlaneData` - Section plane configuration
+- `OutlineSettings`, `FogSettings`, `LODSettings`
 - `CATEGORY_COLORS` - IFC element color palette
 - `TONE_MAPPING_MODES` - Available tone mapping options
 - Utility functions: `formatNumber`, `getToneMappingName`
@@ -51,6 +64,31 @@ Manages edge/wireframe rendering:
 - Enable/disable at runtime
 - Proper cleanup and disposal
 
+### WebGPUOutlineManager.ts
+
+Provides selection highlighting and outlines:
+
+- Multi-pass rendering for selected objects
+- Scaled-up back-face rendering for clean outlines
+- Configurable outline color and thickness
+- Hover effect support
+
+### WebGPUColorPicker.ts
+
+Enables individual element picking within merged geometries:
+
+- Uses element ID encoding in vertex attributes
+- CPU raycasting combined with attribute lookup
+- RGB-to-ID decoding for fast element identification
+
+### WebGPUElementSelector.ts
+
+Handles individual element selection and extraction:
+
+- Extracts specific element geometry from merged meshes
+- Creates overlay meshes for highlighted elements
+- Avoids ShaderMaterial for maximum WebGPU compatibility
+
 ### WebGPUStatsOverlay.ts
 
 Real-time performance metrics display:
@@ -70,6 +108,22 @@ Performance optimization utilities:
 - Geometry merging by material
 - Visible mesh counting
 
+### WebGPULODManager.ts
+
+Automatic Level of Detail (LOD) system:
+
+- Distance-based geometry switching
+- Full and Simplified detail levels
+- Real-time LOD statistics and performance gains
+
+### WebGPUFog.ts
+
+Atmospheric fog effects:
+
+- Linear and Exponential fog types
+- Configurable density and falloff
+- Works perfectly with MSAA (anti-aliasing)
+
 ### WebGPUMaterialFactory.ts
 
 Material creation and caching:
@@ -88,44 +142,11 @@ Geometry manipulation utilities:
 - Int16 normals to Float32 conversion (WebGPU requirement)
 - Geometry sanitization for WebGPU compatibility
 
-### WebGPUSectionManager.ts
+## Limitations & Future Work
 
-Section planes (clipping) functionality for WebGPU mode:
-
-- Create section planes along X, Y, Z axes
-- Double-click on surfaces to create planes at that point
-- Interactive 3D flip buttons to reverse clipping direction
-- Drag plane helpers to reposition planes
-- Delete key to remove all planes
-- Visibility and enabled state toggling
-- Serialization/deserialization of plane data
-
-**Key Features:**
-
-- Visual plane helpers with configurable size and color
-- Real-time flip button positioning that scales with camera distance
-- Mouse hover effects on flip buttons
-- Raycasting for plane creation at surface hit points
-
-**Usage:**
-
-```typescript
-const sectionManager = new WebGPUSectionManager();
-sectionManager.initialize(scene, camera, container, (planes) => {
-  // Callback when planes change
-  renderer.clippingPlanes = planes;
-});
-
-// Create preset planes
-sectionManager.createXAxisPlane(center);
-sectionManager.createYAxisPlane(center);
-sectionManager.createZAxisPlane(center);
-
-// Flip, toggle, delete
-sectionManager.flipAllPlanes();
-sectionManager.toggleAllPlanesVisibility();
-sectionManager.deleteAllPlanes();
-```
+- **Ambient Occlusion (SSAO/GTAO)**: Currently not implemented due to compatibility issues between Three.js GTAONode and MSAA in WebGPU.
+- **Sectioning/Clipping**: Not supported in WebGPU mode due to `ClippingGroup` compatibility issues.
+- **Post-processing**: Limited support when MSAA is enabled.
 
 ## Usage
 
@@ -133,12 +154,17 @@ Import from the main index:
 
 ```typescript
 import {
+  WebGPURendererModule,
   WebGPUShadowManager,
   WebGPUEdgeManager,
+  WebGPUOutlineManager,
+  WebGPUColorPicker,
+  WebGPUElementSelector,
   WebGPUStatsOverlay,
   WebGPUOptimizations,
+  WebGPULODManager,
+  WebGPUFog,
   WebGPUMaterialFactory,
-  WebGPUSectionManager,
   CATEGORY_COLORS,
   formatNumber,
   sanitizeGeometryForWebGPU,
@@ -147,14 +173,19 @@ import {
 
 ## Integration with Main Module
 
-The main `WebGPURendererModule.ts` can use these sub-modules through composition:
+The main `WebGPURendererModule.ts` uses these sub-modules through composition:
 
 ```typescript
 class WebGPURendererModule {
   private shadowManager = new WebGPUShadowManager();
   private edgeManager = new WebGPUEdgeManager();
+  private outlineManager = new WebGPUOutlineManager();
+  private colorPicker = new WebGPUColorPicker();
+  private elementSelector = new WebGPUElementSelector();
   private statsOverlay = new WebGPUStatsOverlay();
   private optimizations = new WebGPUOptimizations();
+  private lodManager = new WebGPULODManager();
+  private fogManager = new WebGPUFog();
   private materialFactory = new WebGPUMaterialFactory();
   
   // Delegate to sub-modules...

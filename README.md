@@ -28,12 +28,18 @@
 - 📏 **Measurement Tools**: Length, Area, and Volume measurements with perpendicular guides
 - 🎯 **Model Alignment Tool**: Drag-and-drop panel for precise multi-model positioning with AEC-standard coordinates
 - 🏢 **Floor Plan Views**: Interactive 2D floor plan views with pan/zoom navigation
+- 📊 **Property Table**: Excel-like interactive table for bulk property inspection and filtering
 - 🎮 **Experimental WebGPU Mode**: Next-generation rendering for massive models with:
   - **Instant Highlighting**: Zero-latency selection using GPU-shared buffers
+  - **LOD (Level of Detail)**: Automatic geometry simplification for distant objects
+  - **Atmospheric Fog**: Linear and exponential fog for enhanced depth perception
+  - **Professional Outlines**: Clean selection highlighting using multi-pass rendering
+  - **GPU Color Picking**: Instant element identification in merged geometries
   - **Chunked Scene Rebuilding**: Smooth isolation/un-isolation without UI freezing
   - **Adaptive Quality**: Automatic performance scaling based on hardware
   - **Shadow Optimizations**: High-performance shadows with "ghost mode" support
   - **Frustum Culling**: Optimized edge rendering for complex geometries
+  - **Performance Stats Overlay**: Detailed hardware, memory, and rendering metrics
 
 ## 🚀 Quick Start
 
@@ -93,91 +99,111 @@ npm run preview
 OBC-IFCViewer/
 ├── src/
 │   ├── modules/
-│   │   ├── WorldManager.ts            # 3D world setup (scene, camera, renderer)
-│   │   ├── IFCLoaderModule.ts         # IFC & Fragments loading logic
-│   │   ├── ModelTransformModule.ts    # Automatic site alignment
-│   │   ├── PropertiesPanelModule.ts   # IFC tree and properties panel
-│   │   ├── SpaceVisibilityModule.ts   # IfcSpace toggle functionality
-│   │   ├── ViewCubeModule.ts          # Interactive navigation cube
-│   │   ├── ClipperModule.ts           # Advanced sectioning tool
-│   │   ├── UIManager.ts               # User interface controls
-│   │   ├── PerformanceMonitor.ts      # Performance tracking
-│   │   └── ui/
-│   │       ├── ToolbarBuilder.ts      # Toolbar structure and elements
-│   │       ├── ToolbarHandlers.ts     # Event handlers for toolbar actions
-│   │       └── UIStyles.ts            # Shared UI styling utilities
+│   │   ├── core/                      # Core Application Modules
+│   │   │   ├── IFCLoaderModule.ts     # IFC & Fragments loading logic
+│   │   │   ├── PropertiesPanelModule.ts # IFC tree and properties panel
+│   │   │   ├── PropertyTableModule.ts # Excel-like property table
+│   │   │   └── PerformanceMonitor.ts  # Performance tracking
+│   │   ├── webgl/                     # WebGL Feature Modules (Tools)
+│   │   │   ├── WorldManager.ts        # 3D world setup (scene, camera, renderer)
+│   │   │   ├── ClipperModule.ts       # Advanced sectioning tool
+│   │   │   ├── MeasurementModule.ts   # Measurement tools
+│   │   │   ├── FloorPlanModule.ts     # 2D Floor plan navigation
+│   │   │   └── ...
+│   │   ├── webgpu/                    # WebGPU Feature Modules
+│   │   │   ├── WebGPURendererModule.ts # Main WebGPU entry point
+│   │   │   ├── WebGPULODManager.ts    # Level of Detail system
+│   │   │   ├── WebGPUFog.ts           # Atmospheric fog effects
+│   │   │   ├── WebGPUOutlineManager.ts # Selection highlighting
+│   │   │   └── ...
+│   │   ├── ui/                        # UI Components & Styles
+│   │   │   ├── ToolbarBuilder.ts      # Toolbar structure
+│   │   │   ├── ToolbarHandlers.ts     # Event handlers
+│   │   │   └── UIStyles.ts            # Shared styling
+│   │   └── UIManager.ts               # UI Orchestration
 │   ├── IFCViewer.ts                   # Main viewer orchestration class
 │   ├── main.ts                        # Application entry point
 │   └── styles.css                     # Global styles
 ├── index.html                         # HTML entry point
 ├── package.json                       # Dependencies and scripts
-├── tsconfig.json                      # TypeScript configuration
 └── vite.config.ts                     # Vite bundler configuration
 ```
 
 ## 🧩 Module Overview
 
-### Core Modules
-
-#### WorldManager
-
-- 3D environment setup (scene, camera, renderer)
-- Grid and visual aids
-- Lighting configuration
+### Core Modules (src/modules/core)
 
 #### IFCLoaderModule
-
 - IFC file conversion to Fragments
 - Direct Fragments loading
 - Model management and export
 
-#### ModelTransformModule
-
-- Automatic site coordinate alignment
-- Preserves multi-discipline coordination
-
 #### PropertiesPanelModule
-
 - IFC hierarchical tree view
 - Element property inspection
 - Collapsible side panel
 
-#### SpaceVisibilityModule
+#### PropertyTableModule
+- Excel-like interactive table
+- Bulk property inspection
+- Advanced filtering and sorting
 
-- Toggle IfcSpace visibility
-- Selective element filtering
+#### PerformanceMonitor
+- Real-time FPS tracking
+- Frame time and memory usage
 
-#### ViewCubeModule
+### WebGL Feature Modules (src/modules/webgl)
 
-- Interactive 3D navigation cube
-- Click-to-orient camera alignment
-- Smooth transitions with auto-framing
-
-#### WebGPURendererModule
-
-- Experimental high-performance rendering engine
-- GPU-based color picking for instant selection
-- Optimized for massive models with millions of triangles
-- Adaptive quality and shadow management
+#### WorldManager
+- 3D environment setup (scene, camera, renderer)
+- Grid and visual aids
+- Lighting configuration
 
 #### ClipperModule
-
 - Advanced model sectioning
 - Preset planes (X/Y/Z following AEC conventions)
 - Custom double-click sections
 - Flip and clear functionality
 
-#### UIManager
+#### MeasurementModule
+- Length, Area, and Volume measurements
+- Perpendicular guides and snapping
+- Professional dimensioning
 
+#### FloorPlanModule
+- Interactive 2D floor plan views
+- Automatic camera positioning
+- Pan/zoom navigation
+
+### WebGPU Feature Modules (src/modules/webgpu)
+
+#### WebGPURendererModule
+- Experimental high-performance rendering engine
+- Orchestrates all WebGPU sub-managers
+- Optimized for massive models with millions of triangles
+
+#### WebGPULODManager
+- Automatic Level of Detail (LOD) system
+- Distance-based geometry simplification
+- Significant performance gains for large scenes
+
+#### WebGPUFog
+- Atmospheric fog effects (Linear/Exponential)
+- Enhanced depth perception
+- Works with MSAA anti-aliasing
+
+#### WebGPUOutlineManager
+- Professional selection highlighting
+- Multi-pass outline rendering
+- Configurable colors and thickness
+
+### UI Modules (src/modules/ui & UIManager)
+
+#### UIManager
 - Modern floating toolbar with glassmorphic styling
 - Expandable submenu system
 - Model count badge with tooltips
 - Event handling and state management
-
-#### PerformanceMonitor
-
-- Real-time FPS tracking
-- Frame time and memory usage
 
 ## 🎮 Usage
 
