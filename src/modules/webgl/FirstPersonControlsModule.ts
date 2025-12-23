@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
-import { NotificationHelper } from './ui/NotificationHelper';
+import { NotificationHelper } from '../ui/NotificationHelper';
 
 export class FirstPersonControlsModule {
   private world: OBC.World | null = null;

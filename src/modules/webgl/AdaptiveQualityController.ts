@@ -12,7 +12,7 @@
  * - Ultra Performance: Maximum performance (4 samples, minimal shadows) - Very Light
  */
 
-import { PerformanceMonitor } from './PerformanceMonitor';
+import { PerformanceMonitor } from '../core/PerformanceMonitor';
 import { WorldManager } from './WorldManager';
 import { ClipStylerModule } from './ClipStylerModule';
 

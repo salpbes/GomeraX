@@ -3,6 +3,9 @@
  * Re-exports all WebGPU-related modules for easy importing
  */
 
+// Core renderer
+export { WebGPURendererModule, type RendererMode, type WebGPUStatus } from './WebGPURendererModule';
+
 // Core managers
 export { WebGPUShadowManager } from './WebGPUShadowManager';
 export { WebGPUEdgeManager } from './WebGPUEdgeManager';

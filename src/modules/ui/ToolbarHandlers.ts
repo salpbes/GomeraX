@@ -3,14 +3,17 @@
  * Contains all toolbar action handler functions
  */
 
-import { IFCLoaderModule } from '../IFCLoaderModule';
-import { ModelTransformModule } from '../ModelTransformModule';
-import { MeasurementModule, MeasurementMode } from '../MeasurementModule';
-import { FloorPlanModule } from '../FloorPlanModule';
-import { MinimapModule } from '../MinimapModule';
-import { ClusterModule } from '../ClusterModule';
-import { ColorSplashModule } from '../ColorSplashModule';
-import { PropertiesPanelModule } from '../PropertiesPanelModule';
+import { 
+  MeasurementModule, 
+  MeasurementMode, 
+  FloorPlanModule, 
+  MinimapModule, 
+  ModelTransformModule, 
+  ClusterModule, 
+  ColorSplashModule 
+} from '../webgl';
+import { IFCLoaderModule } from '../core/IFCLoaderModule';
+import { PropertiesPanelModule } from '../core/PropertiesPanelModule';
 import { NotificationHelper } from './NotificationHelper';
 import { ModelDashboard } from './ModelDashboard';
 import { SlicerDashboard } from './SlicerDashboard';

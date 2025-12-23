@@ -7,8 +7,8 @@ import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
 import type { WorldManager } from './WorldManager';
-import { PropertyTableModule } from './PropertyTableModule';
-import type { WebGPURendererModule } from './WebGPURendererModule';
+import { PropertyTableModule } from '../core/PropertyTableModule';
+import type { WebGPURendererModule } from '../webgpu/WebGPURendererModule';
 
 export class ColorSplashModule {
   private components: OBC.Components;

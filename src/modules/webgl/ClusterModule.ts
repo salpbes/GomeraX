@@ -47,7 +47,7 @@ import * as THREE from 'three';
 import { WorldManager } from './WorldManager';
 import { ModelTransformModule } from './ModelTransformModule';
 import type { ClipperModule } from './ClipperModule';
-import type { WebGPURendererModule } from './WebGPURendererModule';
+import type { WebGPURendererModule } from '../webgpu/WebGPURendererModule';
 
 // ==================================================================================
 // 1. CLUSTER DATA CLASS

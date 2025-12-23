@@ -14,7 +14,7 @@
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
-import { WorldManager } from './WorldManager';
+import { WorldManager } from '../webgl/WorldManager';
 
 /**
  * Coordinate system mode for loaded models

@@ -125,11 +125,11 @@ import * as THREE from 'three';
 // ClippingGroup removed - sectioning not supported in WebGPU mode
 import * as OBC from '@thatopen/components';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WebGPUOutlineManager, type SelectionInfo } from './webgpu/WebGPUOutlineManager';
-import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './webgpu/WebGPUColorPicker';
-import { WebGPUElementSelector, type ElementSelectionInfo } from './webgpu/WebGPUElementSelector';
-import { WebGPUFog, type FogSettings, type FogType } from './webgpu/WebGPUFog';
-import { WebGPULODManager, type LODSettings, type LODStats } from './webgpu/WebGPULODManager';
+import { WebGPUOutlineManager, type SelectionInfo } from './WebGPUOutlineManager';
+import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './WebGPUColorPicker';
+import { WebGPUElementSelector, type ElementSelectionInfo } from './WebGPUElementSelector';
+import { WebGPUFog, type FogSettings, type FogType } from './WebGPUFog';
+import { WebGPULODManager, type LODSettings, type LODStats } from './WebGPULODManager';
 // NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 

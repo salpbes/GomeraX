@@ -15,9 +15,8 @@ import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
 import * as FRAGS from '@thatopen/fragments';
 import * as THREE from 'three';
-import { WorldManager } from './WorldManager';
+import { WorldManager, ClusterModule } from '../webgl';
 import { IFCLoaderModule } from './IFCLoaderModule';
-import { ClusterModule } from './ClusterModule';
 
 export class PropertiesPanelModule {
   private components: OBC.Components;
@@ -116,7 +115,6 @@ export class PropertiesPanelModule {
         transparent: true,
         opacity: 0.5, // Higher opacity to ensure visibility
         depthTest: true,
-        depthWrite: false,
         renderedFaces: FRAGS.RenderedFaces.TWO // Ensure double-sided rendering
       });
       
@@ -1363,8 +1361,8 @@ export class PropertiesPanelModule {
       searchTimeout = window.setTimeout(() => {
         if (query.length > 0 && query.length < 3) {
           this.clearTreeSearch(searchResultsDiv);
-          resultsDiv.innerHTML = '<span class="search-no-results" style="color: #888;">Type at least 3 characters</span>';
-          resultsDiv.style.display = 'block';
+          searchResultsDiv.innerHTML = '<span class="search-no-results" style="color: #888;">Type at least 3 characters</span>';
+          searchResultsDiv.style.display = 'block';
         } else {
           this.performTreeSearch(query, searchResultsDiv);
         }

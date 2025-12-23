@@ -12,7 +12,7 @@
  */
 
 import Stats from 'stats.js';
-import { WorldManager } from './WorldManager';
+import { WorldManager } from '../webgl/WorldManager';
 
 export class PerformanceMonitor {
   private stats: Stats | null = null;

@@ -1,23 +1,36 @@
+/**
+ * UIManager class handles all UI-related functionality
+ * Refactored into modular components for better maintainability
+ * 
+ * Layman's terms:
+ * Think of this as the "Remote Control" or "Dashboard" of the viewer.
+ * It manages everything you see on the screen that isn't the 3D model itself—
+ * like buttons, menus, search bars, and loading screens. It connects your 
+ * clicks and settings to the 3D engine so you can interact with the 
+ * building data.
+ * 
+*/
+
 import * as BUI from "@thatopen/ui";
 import * as CUI from "@thatopen/ui-obc";
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
-import { WorldManager } from "./WorldManager";
-import { IFCLoaderModule } from "./IFCLoaderModule";
-import { ModelTransformModule } from "./ModelTransformModule";
-import { MeasurementModule } from "./MeasurementModule";
-import { FloorPlanModule } from "./FloorPlanModule";
-import { MinimapModule } from "./MinimapModule";
-import { ClusterModule } from "./ClusterModule";
-import { ColorSplashModule } from "./ColorSplashModule";
+import { 
+  WorldManager, 
+  MeasurementModule, 
+  FloorPlanModule, 
+  MinimapModule, 
+  ModelTransformModule, 
+  ClusterModule, 
+  ColorSplashModule 
+} from "./webgl";
+import { IFCLoaderModule } from "./core/IFCLoaderModule";
 import { getToolbarStyles, getLoadingIndicatorStyles, getLoadingScreenStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
 import { createToolbarHTML, createLoadingIndicatorHTML } from "./ui/ToolbarBuilder";
 import { ToolbarHandlers } from "./ui/ToolbarHandlers";
+import { NotificationHelper } from "./ui/NotificationHelper";
 
-/**
- * UIManager class handles all UI-related functionality
- * Refactored into modular components for better maintainability
- */
+
 export class UIManager {
   private worldManager: WorldManager;
   private ifcLoader: IFCLoaderModule;
@@ -482,8 +495,7 @@ export class UIManager {
       toggle.checked = false;
     }
     
-    // Store reference to notificationHelper for use in async callback
-    const notificationHelper = this.notificationHelper;
+    // Store reference to viewer for use in async callback
     const viewer = this.viewer;
     
     // Setup WebGPU options handlers
@@ -512,11 +524,12 @@ export class UIManager {
             // Show WebGPU options
             if (webgpuOptions) webgpuOptions.style.display = 'block';
             console.log('🚀 WebGPU renderer enabled');
-            notificationHelper?.showNotification(
-              '🚀 WebGPU Mode Active',
-              'Experimental WebGPU. Some materials may not render correctly.',
-              'info'
-            );
+            NotificationHelper.show({
+              title: '🚀 WebGPU Mode Active',
+              message: 'Experimental WebGPU. Some materials may not render correctly.',
+              type: 'info',
+              duration: 5000
+            });
           } else {
             statusIcon.textContent = '✅';
             statusText.textContent = 'Available';
@@ -524,11 +537,12 @@ export class UIManager {
             // Hide WebGPU options
             if (webgpuOptions) webgpuOptions.style.display = 'none';
             console.log('🔄 Switched back to WebGL');
-            notificationHelper?.showNotification(
-              '🔄 WebGL Mode Active',
-              'Switched back to WebGL renderer with full effects.',
-              'success'
-            );
+            NotificationHelper.show({
+              title: '🔄 WebGL Mode Active',
+              message: 'Switched back to WebGL renderer with full effects.',
+              type: 'success',
+              duration: 4000
+            });
           }
         } else {
           toggle.checked = false;
@@ -537,11 +551,12 @@ export class UIManager {
           statusText.style.color = '#f87171';
           // Hide WebGPU options
           if (webgpuOptions) webgpuOptions.style.display = 'none';
-          notificationHelper?.showNotification(
-            '❌ WebGPU Failed',
-            'Could not initialize WebGPU. Your browser may not support it.',
-            'error'
-          );
+          NotificationHelper.show({
+            title: '❌ WebGPU Failed',
+            message: 'Could not initialize WebGPU. Your browser may not support it.',
+            type: 'error',
+            duration: 5000
+          });
         }
       } catch (error) {
         console.error('WebGPU toggle error:', error);
@@ -551,6 +566,13 @@ export class UIManager {
         statusText.style.color = '#f87171';
         // Hide WebGPU options
         if (webgpuOptions) webgpuOptions.style.display = 'none';
+
+        NotificationHelper.show({
+          title: '❌ Error',
+          message: 'An unexpected error occurred while switching renderers.',
+          type: 'error',
+          duration: 5000
+        });
       }
       
       toggle.disabled = false;

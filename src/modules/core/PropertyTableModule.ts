@@ -6,7 +6,7 @@
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
-import type { WorldManager } from './WorldManager';
+import type { WorldManager } from '../webgl';
 
 interface PropertyRow {
   expressID: number;
@@ -1417,8 +1417,7 @@ export class PropertyTableModule {
       `;
       loadMoreCell.textContent = `Load ${this.currentFilteredProperties.length - MAX_INITIAL_ROWS} more rows...`;
       loadMoreCell.addEventListener('click', () => {
-        this.loadRemainingRows(tbody, this.currentFilteredProperties, initialColumns, MAX_INITIAL_ROWS, hasMoreColumns);
-        loadMoreRow.remove();
+        this.loadRemainingRows(MAX_INITIAL_ROWS);
       });
       loadMoreRow.appendChild(loadMoreCell);
       tbody.appendChild(loadMoreRow);

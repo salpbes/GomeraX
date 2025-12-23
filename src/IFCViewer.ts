@@ -11,25 +11,28 @@
  * This is the entry point that brings everything together.
  */
 
-import { WorldManager } from './modules/WorldManager';
-import { IFCLoaderModule } from './modules/IFCLoaderModule';
+import { 
+  WorldManager, 
+  ViewCubeModule, 
+  ClipperModule, 
+  ClipStylerModule, 
+  MeasurementModule, 
+  FloorPlanModule, 
+  MinimapModule, 
+  AdaptiveQualityController,
+  ModelTransformModule,
+  SpaceVisibilityModule,
+  FirstPersonControlsModule,
+  ClusterModule,
+  ColorSplashModule
+} from './modules/webgl';
+import { IFCLoaderModule } from './modules/core/IFCLoaderModule';
 import { UIManager } from './modules/UIManager';
-import { PerformanceMonitor } from './modules/PerformanceMonitor';
-import { ModelTransformModule } from './modules/ModelTransformModule';
-import { PropertiesPanelModule } from './modules/PropertiesPanelModule';
-import { SpaceVisibilityModule } from './modules/SpaceVisibilityModule';
-import { ViewCubeModule } from './modules/ViewCubeModule';
-import { ClipperModule } from './modules/ClipperModule';
-import { ClipStylerModule } from './modules/ClipStylerModule';
-import { FirstPersonControlsModule } from './modules/FirstPersonControlsModule';
-import { MeasurementModule } from './modules/MeasurementModule';
-import { FloorPlanModule } from './modules/FloorPlanModule';
-import { MinimapModule } from './modules/MinimapModule';
-import { ClusterModule } from './modules/ClusterModule';
-import { ColorSplashModule } from './modules/ColorSplashModule';
-import { AdaptiveQualityController } from './modules/AdaptiveQualityController';
-import { WebGPURendererModule } from './modules/WebGPURendererModule';
+import { PerformanceMonitor } from './modules/core/PerformanceMonitor';
+import { PropertiesPanelModule } from './modules/core/PropertiesPanelModule';
+import { WebGPURendererModule } from './modules/webgpu';
 import * as OBC from '@thatopen/components';
+import * as THREE from 'three';
 
 export class IFCViewer {
   private worldManager: WorldManager;
@@ -424,7 +427,7 @@ export class IFCViewer {
    * @param type - THREE.ToneMapping value (0=None, 1=Linear, 2=Reinhard, 3=Cineon, 4=ACESFilmic, 6=AgX, 7=Neutral)
    */
   public setWebGPUToneMapping(type: number): void {
-    this.webgpuRenderer?.setToneMapping(type);
+    this.webgpuRenderer?.setToneMapping(type as THREE.ToneMapping);
   }
 
   /**
