@@ -1,6 +1,16 @@
 /**
- * ToolbarBuilder module
- * Contains functions to generate HTML for toolbar components
+ * TOOLBAR BUILDER (The "Architect")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This file builds the visual skeleton of the bottom menu bar. It defines 
+ * what the buttons look like, which icons they use (like the folder icon 
+ * for loading), and how they are grouped together.
+ * 
+ * HOW IT CONNECTS:
+ * - ToolbarHandlers: This builder creates the buttons, and the Handlers 
+ *   tell them what to do when clicked.
+ * - UIStyles: Uses the styles defined there to make the buttons look pretty.
+ * --------------------------------------------------------------------------------
  */
 
 /**

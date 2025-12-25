@@ -1,6 +1,15 @@
 /**
- * UIStyles module
- * Contains all CSS styles for the toolbar and UI components
+ * UI STYLES (The "Stylist")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This file contains all the CSS "makeup" for the app. It defines the colors, 
+ * fonts, shadows, and animations that make the toolbar and dashboards look 
+ * professional and consistent.
+ * 
+ * HOW IT CONNECTS:
+ * - Used by all UI components to ensure they all share the same "Dark Mode" 
+ *   look and feel.
+ * --------------------------------------------------------------------------------
  */
 
 export function getToolbarStyles(): string {

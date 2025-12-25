@@ -1,16 +1,15 @@
 /**
- * First Person Controls Module
+ * FIRST PERSON CONTROLS (The "Walking Mode")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This lets you walk through the building like a video game. You use the 
+ * WASD keys to move and the mouse to look around, allowing you to explore 
+ * the interior of the model at eye level.
  * 
- * Handles keyboard controls (WASD and Arrow keys) for first-person navigation.
- * Works in conjunction with the OrthoPerspectiveCamera's FirstPerson mode.
- * 
- * Controls:
- * - W / Arrow Up: Move forward
- * - S / Arrow Down: Move backward
- * - A / Arrow Left: Strafe left
- * - D / Arrow Right: Strafe right
- * - Space: Move up (increase height)
- * - Shift: Move down (decrease height)
+ * HOW IT CONNECTS:
+ * - WorldManager: Takes control of the camera to move it around the scene.
+ * - MinimapModule: Updates your position on the map as you walk.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

@@ -163,6 +163,14 @@ export class UIManager {
   }
 
   /**
+   * Sets the WebGPU renderer module
+   */
+  public setWebGPURenderer(webgpu: any): void {
+    this.toolbarHandlers.setWebGPURenderer(webgpu);
+    console.log('✅ WebGPU renderer set in UI');
+  }
+
+  /**
    * Sets the color splash module for toolbar handlers
    */
   public setColorSplashModule(colorSplash: ColorSplashModule): void {

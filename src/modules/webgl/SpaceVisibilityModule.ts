@@ -1,8 +1,16 @@
 /**
- * Space Visibility Module
+ * SPACE VISIBILITY (The "X-Ray Vision")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * IFC models often contain "Spaces" (invisible boxes representing rooms). 
+ * These can sometimes block your view or make it hard to click on actual 
+ * walls. This module lets you hide those invisible room boxes so you can 
+ * see the actual building clearly.
  * 
- * Handles hiding/showing IFC Space geometry to improve model clarity
- * and prevent spaces from being selectable when hidden.
+ * HOW IT CONNECTS:
+ * - WorldManager: Finds the "Space" objects in the 3D scene and hides them.
+ * - ToolbarHandlers: Provides the toggle button to show/hide spaces.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

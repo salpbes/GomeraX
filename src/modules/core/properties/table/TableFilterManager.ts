@@ -240,15 +240,21 @@ export class TableFilterManager {
   }
 
   private updateOpacityInClusterScene(visibleIds: Set<number>): void {
-    if (!this.context.clusterScene) {
-      console.warn('⚠️ No cluster scene found for opacity update');
-      return;
-    }
-
     // If no filters are active AND no isolation, restore full opacity to everything
     const isFilteringActive = this.context.columnFilters.size > 0;
     const isIsolationActive = this.isolatedId !== null;
+
+    if (!this.context.clusterScene) {
+      // If no cluster scene, ensure WebGPU isolation is cleared if no filters are active
+      if (this.context.webgpu && !isFilteringActive && !isIsolationActive) {
+        this.context.webgpu.setIsolatedElements(null);
+      }
+      return;
+    }
     
+    // WebGPU isolation collection
+    const webgpuIsolated = new Set<number>();
+
     let updatedCount = 0;
 
     this.context.clusterScene.traverse((obj) => {
@@ -269,14 +275,18 @@ export class TableFilterManager {
             isVisible = visibleIds.has(id);
           }
 
+          if (isVisible) {
+            webgpuIsolated.add(id);
+          }
+
           updatedCount++;
           
           // If it's a mesh, update its material
           if (obj instanceof THREE.Mesh && obj.material) {
             const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
             materials.forEach((mat: any) => {
-              mat.transparent = true; 
-              mat.opacity = isVisible ? 1.0 : 0.1;
+              mat.transparent = !isVisible; 
+              mat.opacity = isVisible ? 1.0 : 0.35;
               mat.depthWrite = isVisible;
               
               if (mat.alphaToCoverage !== undefined) {
@@ -295,8 +305,8 @@ export class TableFilterManager {
               if (child instanceof THREE.Mesh && child.material) {
                 const materials = Array.isArray(child.material) ? child.material : [child.material];
                 materials.forEach((mat: any) => {
-                  mat.transparent = true; 
-                  mat.opacity = isVisible ? 1.0 : 0.1;
+                  mat.transparent = !isVisible; 
+                  mat.opacity = isVisible ? 1.0 : 0.35;
                   mat.depthWrite = isVisible;
                   
                   if (mat.alphaToCoverage !== undefined) {
@@ -313,6 +323,18 @@ export class TableFilterManager {
         }
       }
     });
+
+    // Update WebGPU if active
+    if (this.context.webgpu) {
+      if (isFilteringActive || isIsolationActive) {
+        const modelId = this.context.clusterScene.userData.modelId || 'default';
+        const isolatedMap = new Map<string, Set<number>>();
+        isolatedMap.set(modelId, webgpuIsolated);
+        this.context.webgpu.setIsolatedElements(isolatedMap);
+      } else {
+        this.context.webgpu.setIsolatedElements(null);
+      }
+    }
   }
 
   public clearAllFilters(): void {

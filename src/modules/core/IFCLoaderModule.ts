@@ -152,6 +152,7 @@ export class IFCLoaderModule {
 
     // Setup the Fragments Manager (handles converted IFC data)
     // Use local worker file to avoid CORS issues
+    // In Layman terms: This is the "engine" that makes IFC files fast to load and render
     const workerUrl = '/worker.mjs';
     this.fragments = this.components.get(OBC.FragmentsManager);
     this.fragments.init(workerUrl);

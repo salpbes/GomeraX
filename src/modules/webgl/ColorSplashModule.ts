@@ -1,6 +1,15 @@
 /**
- * ColorSplashModule - Colors IFC elements by their types
- * Works with multiple loaded models
+ * COLOR SPLASH (The "Highlighter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module automatically colors the whole building based on object types. 
+ * For example, it can make all walls blue, all doors red, and all windows 
+ * green instantly, making it easy to see how the building is organized.
+ * 
+ * HOW IT CONNECTS:
+ * - ClusterModule: Often used together to group and color objects.
+ * - PropertyTable: Provides the data used to decide which color goes where.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';
@@ -62,6 +71,9 @@ export class ColorSplashModule {
    */
   public setWebGPURenderer(webgpu: WebGPURendererModule): void {
     this.webgpu = webgpu;
+    if (this.propertyTable) {
+      this.propertyTable.setWebGPURenderer(webgpu);
+    }
   }
 
   /**

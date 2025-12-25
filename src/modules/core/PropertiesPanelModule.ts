@@ -117,10 +117,12 @@ export class PropertiesPanelModule implements PropertiesContext {
       this.highlighter.styles.set('translucent', {
         color: new THREE.Color(0x888888),
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.7,
         depthTest: true,
-        renderedFaces: FRAGS.RenderedFaces.TWO
-      });
+        renderedFaces: FRAGS.RenderedFaces.TWO,
+        alphaToCoverage: true,
+        depthWrite: false
+      } as any);
       
       this.highlighter.events.select.onHighlight.add(async () => {
         if (this.ghostModeManager.ghostModeActive) {

@@ -1,6 +1,16 @@
 /**
- * WebGPU Optimizations
- * Handles frustum culling, geometry merging, and performance optimizations
+ * WEBGPU OPTIMIZATIONS (The "Speed Booster")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module contains several "under the hood" tricks to make WebGPU even 
+ * faster. It merges thousands of small objects into a few large ones and 
+ * stops the computer from drawing things that are behind your back or 
+ * hidden behind walls.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Prepares the model data before it gets sent to 
+ *   the graphics card.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

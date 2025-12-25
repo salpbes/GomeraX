@@ -1,6 +1,15 @@
 /**
- * WebGPU Shadow Manager
- * Handles shadow light setup, ground plane, and shadow-related operations
+ * WEBGPU SHADOW MANAGER (The "Sun")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module controls the lighting and shadows in WebGPU mode. It creates 
+ * a "virtual sun" that casts realistic shadows on the ground and walls, 
+ * giving the building a sense of depth and realism.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Adds the lights and shadow-casting ground to the 
+ *   high-performance scene.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

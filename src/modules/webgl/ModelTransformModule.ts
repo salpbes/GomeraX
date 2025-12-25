@@ -1,15 +1,15 @@
 /**
- * Model Transform Module
+ * MODEL TRANSFORM (The "Mover")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module handles the position of the building in 3D space. If you load 
+ * multiple buildings and they are floating in the wrong places, this tool 
+ * helps align them or center them so they are easy to view.
  * 
- * This module handles model positioning, alignment, and transformations.
- * Useful when loading multiple IFC files that may have different coordinate systems.
- * 
- * Features:
- * - Reset model position to origin
- * - Align models to each other
- * - Center model in scene
- * - Adjust model height (move up/down)
- * - Auto-fit camera to model bounds
+ * HOW IT CONNECTS:
+ * - WorldManager: Moves the objects around inside the 3D scene.
+ * - ToolbarHandlers: Provides the "Center Model" and "Reset View" actions.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

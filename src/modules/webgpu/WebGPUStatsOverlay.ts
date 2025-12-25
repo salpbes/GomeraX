@@ -1,6 +1,15 @@
 /**
- * WebGPU Stats Overlay
- * Displays real-time performance and scene statistics
+ * WEBGPU STATS OVERLAY (The "Dashboard")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the small info box that shows you how hard the computer is 
+ * working. It displays the "FPS" (frames per second), how many triangles 
+ * are being drawn, and how much memory the WebGPU engine is using.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Listens to the engine's performance to update 
+ *   the numbers in real-time.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

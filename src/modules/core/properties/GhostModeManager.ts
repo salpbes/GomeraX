@@ -21,10 +21,12 @@ export class GhostModeManager {
     try {
       const translucentMaterial: FRAGS.MaterialDefinition = {
         color: new THREE.Color(0x888888),
-        opacity: 0.3,
+        opacity: 0.6,
         transparent: true,
-        renderedFaces: FRAGS.RenderedFaces.TWO
-      };
+        renderedFaces: FRAGS.RenderedFaces.TWO,
+        alphaToCoverage: true,
+        depthWrite: false
+      } as any;
       
       const solidMaterial: FRAGS.MaterialDefinition = {
         color: new THREE.Color(0xb0e322),

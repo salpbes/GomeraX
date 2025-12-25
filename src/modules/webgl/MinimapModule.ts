@@ -1,7 +1,16 @@
 /**
- * MinimapModule
- * Provides a minimap overlay for first-person walking mode
- * Shows the user's position and viewing direction on a 2D floor plan
+ * MINIMAP MODULE (The "GPS")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This creates the small map in the corner of the screen. It shows you a 
+ * top-down view of the floor you are on and a little arrow that shows 
+ * exactly where you are standing and which way you are looking.
+ * 
+ * HOW IT CONNECTS:
+ * - FloorPlanModule: Gets the 2D floor plan images from this module.
+ * - FirstPersonControls: Listens to your movement to update the arrow's 
+ *   position on the map.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

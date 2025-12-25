@@ -1,14 +1,15 @@
 /**
- * World Manager Module
+ * WORLD MANAGER (The "Engine Room")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the heart of the 3D viewer. It sets up the "world" where the 
+ * building lives—including the lights, the floor grid, the camera, and 
+ * the background. Without this, there would be no 3D view at all.
  * 
- * This module handles the creation and management of the 3D world environment.
- * It sets up:
- * - Scene: The 3D container where all objects live
- * - Camera: The viewpoint from which we see the scene (Orthographic/Perspective)
- * - Renderer: The engine that draws the 3D scene to the canvas (with postproduction effects)
- * - Grid: Visual reference grid in the scene
- * - Lights: Illumination for the 3D objects
- * - Postproduction: Advanced rendering effects (AO, outlines, etc.)
+ * HOW IT CONNECTS:
+ * - Every other module: Almost every tool (Slicers, Measurements, etc.) 
+ *   needs to talk to the WorldManager to show things in the 3D scene.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

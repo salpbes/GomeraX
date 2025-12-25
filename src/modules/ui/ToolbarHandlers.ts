@@ -1,6 +1,16 @@
 /**
- * ToolbarHandlers module
- * Contains all toolbar action handler functions
+ * TOOLBAR HANDLERS (The "Brain")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the logic center for the menu bar. While the Builder creates the 
+ * buttons, this file decides what happens when you click them—like opening 
+ * a file, starting a measurement, or switching to the Slicer view.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGL/WebGPU Modules: Triggers 3D actions (like "Fit to View").
+ * - Dashboards: Opens and closes the Slicer or Model dashboards.
+ * - IFC Loader: Starts the process of importing a new 3D file.
+ * --------------------------------------------------------------------------------
  */
 
 import { 
@@ -19,6 +29,7 @@ import { ModelDashboard } from './ModelDashboard';
 import { SlicerDashboard } from './SlicerDashboard';
 import { UIManager } from '../UIManager';
 import * as OBC from '@thatopen/components';
+import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';
 
 export class ToolbarHandlers {
@@ -99,6 +110,18 @@ export class ToolbarHandlers {
    */
   setColorSplashModule(colorSplash: ColorSplashModule): void {
     this.colorSplash = colorSplash;
+  }
+
+  /**
+   * Sets the WebGPU renderer module
+   */
+  setWebGPURenderer(webgpu: any): void {
+    if (this.slicerDashboard) {
+      this.slicerDashboard.setWebGPURenderer(webgpu);
+    }
+    if (this.colorSplash) {
+      this.colorSplash.setWebGPURenderer(webgpu);
+    }
   }
 
   /**
@@ -2529,6 +2552,25 @@ export class ToolbarHandlers {
           
           if (this.colorSplash) {
             this.colorSplash.hidePropertyTable();
+          }
+
+          // Ensure all highlights are cleared when exiting cluster view
+          try {
+            const highlighter = this.components.get(OBF.Highlighter);
+            if (highlighter) {
+              highlighter.clear('select');
+              highlighter.clear('translucent');
+              highlighter.clear('slicer-transparent');
+              
+              // Clear any slicer-specific styles
+              for (const styleName of Object.keys(highlighter.styles)) {
+                if (styleName.startsWith('slicer-')) {
+                  highlighter.clear(styleName);
+                }
+              }
+            }
+          } catch (e) {
+            // Highlighter might not be initialized
           }
           
           const countSpan = document.getElementById('selectedCount');

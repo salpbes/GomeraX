@@ -1,32 +1,17 @@
 /**
- * =============================================================================
- * WebGPU Color Picker (CPU Raycast + Element Lookup)
- * =============================================================================
+ * WEBGPU COLOR PICKER (The "Eye")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is what allows the computer to "see" what you are clicking 
+ * on. It uses a clever trick to identify which specific object is under 
+ * your mouse cursor, even when thousands of objects are visible at once.
  * 
- * This module provides element picking for individual IFC element selection
- * within merged geometries using CPU raycasting + element ID vertex attribute lookup.
- * 
- * HOW IT WORKS:
- * -------------
- * 1. ELEMENT ID ENCODING: During geometry creation, each vertex stores an
- *    element ID as a vertex attribute (elementColor). This ID survives merging.
- * 
- * 2. CPU RAYCAST: On click, perform a standard THREE.js raycast against meshes.
- * 
- * 3. VERTEX LOOKUP: For the hit triangle, read the elementColor attribute
- *    from the geometry to get the element ID.
- * 
- * 4. ID DECODING: Convert the RGB color back to the original element ID.
- * 
- * PERFORMANCE:
- * -----------
- * - Uses standard THREE.js raycasting (fast for typical model sizes)
- * - Element IDs are stored as vertex attributes (survives merging)
- * - No GPU render pass needed (avoids WebGPU material compatibility issues)
- * 
- * @see https://threejs.org/docs/#api/en/core/Raycaster
- * =============================================================================
+ * HOW IT CONNECTS:
+ * - WebGPUElementSelector: Provides the "ID" of the object you clicked 
+ *   so it can be selected.
+ * --------------------------------------------------------------------------------
  */
+
 
 import * as THREE from 'three';
 

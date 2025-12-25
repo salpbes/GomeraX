@@ -1,4 +1,19 @@
 /**
+ * WEBGPU RENDERER (The "Supercharger")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is a high-performance 3D engine that uses the latest "WebGPU" technology. 
+ * It's like putting a racing engine into the viewer—it can handle much larger 
+ * buildings and more complex details than the standard WebGL engine.
+ * 
+ * HOW IT CONNECTS:
+ * - WorldManager: It can take over the rendering duties from the standard engine.
+ * - All WebGPU Sub-modules: It coordinates the shadows, outlines, and 
+ *   optimizations specifically for WebGPU mode.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Renderer Module (Experimental)
  * =============================================================================
@@ -277,6 +292,10 @@ export class WebGPURendererModule {
   private colorSplashActive: boolean = false;
   private colorSplashColors: Map<string, THREE.Color> = new Map();
 
+  // Slicer coloring
+  private slicerActive: boolean = false;
+  private slicerColors: Map<string, Map<number, THREE.Color>> = new Map(); // modelId -> expressId -> color
+
   // Cluster support
   private clusterGroup: THREE.Group | null = null;
   private modelsVisible: boolean = true;
@@ -309,12 +328,31 @@ export class WebGPURendererModule {
   }
 
   /**
+   * Set Slicer Colors for WebGPU
+   */
+  public async setSlicerColors(active: boolean, colors?: Map<string, Map<number, THREE.Color>>): Promise<void> {
+    this.slicerActive = active;
+    if (colors) {
+      this.slicerColors = colors;
+    } else {
+      this.slicerColors.clear();
+    }
+    
+    console.log(`📊 WebGPU Slicer Colors ${active ? 'enabled' : 'disabled'}`);
+    
+    // Rebuild scene to apply colors
+    if (this.isActive) {
+      await this.rebuildProxyScene();
+    }
+  }
+
+  /**
    * Set Cluster Group for WebGPU
    */
   public setClusterGroup(group: THREE.Group | null): void {
     // Remove old group if exists
-    if (this.clusterGroup && this.proxyScene) {
-      this.proxyScene.remove(this.clusterGroup);
+    if (this.clusterGroup) {
+      this.clusterGroup.removeFromParent();
     }
     
     this.clusterGroup = group;
@@ -329,7 +367,10 @@ export class WebGPURendererModule {
         }
       });
       
-      this.proxyScene.add(this.clusterGroup);
+      // Add to proxy scene
+      if (this.proxyScene) {
+        this.proxyScene.add(this.clusterGroup);
+      }
       console.log('🔷 WebGPU Cluster Group added to scene');
     }
   }
@@ -935,6 +976,16 @@ export class WebGPURendererModule {
   }
 
   /**
+   * Set isolated elements for multiple models
+   */
+  public setIsolatedElements(isolated: Map<string, Set<number>> | null): void {
+    this.isolatedElements = isolated;
+    
+    // Rebuild proxy scene to reflect changes
+    this.rebuildProxyScene();
+  }
+
+  /**
    * Show all elements in WebGPU mode (clear isolation and hidden elements)
    */
   public showAllElements(): void {
@@ -952,12 +1003,13 @@ export class WebGPURendererModule {
     if (!this.ghostMaterial) {
       this.ghostMaterial = new THREE.MeshStandardMaterial({
         color: 0xcccccc,
-        opacity: 0.15,
+        opacity: 0.4,
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
         roughness: 1,
-        metalness: 0
+        metalness: 0,
+        alphaToCoverage: true
       });
     }
     return this.ghostMaterial;
@@ -2320,6 +2372,8 @@ export class WebGPURendererModule {
         opacity,
         transparent,
         side,
+        alphaToCoverage: transparent,
+        depthWrite: !transparent
       });
       materialCache.set(key, newMat);
       return newMat;
@@ -2626,6 +2680,8 @@ export class WebGPURendererModule {
         opacity,
         transparent,
         side,
+        alphaToCoverage: transparent,
+        depthWrite: !transparent
       });
       materialCache.set(key, mat);
       return mat;
@@ -2972,6 +3028,8 @@ export class WebGPURendererModule {
           opacity,
           transparent,
           side: THREE.DoubleSide,
+          alphaToCoverage: transparent,
+          depthWrite: !transparent
         });
         realMaterialCache.set(key, mat);
         return mat;
@@ -3000,6 +3058,26 @@ export class WebGPURendererModule {
           roughness: 1,
           metalness: 0,
           side: THREE.DoubleSide,
+        });
+        realMaterialCache.set(key, mat);
+        return mat;
+      };
+
+      // Helper to get Slicer material for a specific color
+      const getOrCreateSlicerMaterial = (color: THREE.Color): THREE.MeshStandardMaterial => {
+        const key = `slicer_${color.getHexString()}`;
+        const cached = realMaterialCache.get(key);
+        if (cached) return cached;
+        
+        const mat = new THREE.MeshStandardMaterial({
+          color: color.clone(),
+          roughness: 1,
+          metalness: 0,
+          side: THREE.DoubleSide,
+          opacity: 0.85,
+          transparent: true,
+          alphaToCoverage: true,
+          depthWrite: false
         });
         realMaterialCache.set(key, mat);
         return mat;
@@ -3129,6 +3207,17 @@ export class WebGPURendererModule {
             // Priority 1: Color Splash
             if (!materialForMesh && this.colorSplashActive && meshCategory) {
               materialForMesh = getColorSplashMaterial(meshCategory);
+            }
+
+            // Priority 1.5: Slicer Colors
+            if (!materialForMesh && this.slicerActive) {
+              const modelSlicerColors = this.slicerColors.get(modelId);
+              if (modelSlicerColors) {
+                const customColor = modelSlicerColors.get(localIdForMesh);
+                if (customColor) {
+                  materialForMesh = getOrCreateSlicerMaterial(customColor);
+                }
+              }
             }
 
             // Priority 2: Real material colors

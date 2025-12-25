@@ -125,6 +125,11 @@ export class IFCViewer {
       );
       this.uiManager.initialize();
 
+      // Connect WebGPU renderer to UI manager
+      if (this.webgpuRenderer) {
+        this.uiManager.setWebGPURenderer(this.webgpuRenderer);
+      }
+
       // Step 4.5: Initialize space visibility module
       console.log('🏢 Initializing space visibility module...');
       this.spaceVisibility = new SpaceVisibilityModule(this.worldManager);

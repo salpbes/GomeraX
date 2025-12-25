@@ -1,4 +1,19 @@
 /**
+ * WEBGPU ELEMENT SELECTOR (The "Precision Tool")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * In WebGPU mode, the building is often merged into one big piece for speed. 
+ * This module is what allows you to still click on a single window or door 
+ * and select it. It "extracts" that one piece so you can interact with it.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Works inside the high-performance engine to handle 
+ *   your mouse clicks.
+ * - WebGPUOutlineManager: Tells the outliner which object you just clicked on.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Element Selector
  * =============================================================================

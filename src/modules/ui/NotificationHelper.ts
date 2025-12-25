@@ -1,6 +1,15 @@
 /**
- * Notification Helper
- * Creates professional-looking popup notifications for user messages
+ * NOTIFICATION HELPER (The "Messenger")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This creates the little popup boxes you see in the corner of the screen. 
+ * It tells you when something is loading, if a task was successful, or if 
+ * something went wrong (errors).
+ * 
+ * HOW IT CONNECTS:
+ * - Used by almost every other module (Loaders, Slicers, Measurements) to 
+ *   send quick status updates to the user.
+ * --------------------------------------------------------------------------------
  */
 
 export class NotificationHelper {

@@ -25,6 +25,7 @@ export class PropertyTableModule implements PropertyTableContext {
   public isCollapsed = false;
   public allElementIds: number[] = [];
   public clusterScene: THREE.Group | null = null;
+  public webgpu: any = null;
   
   public readonly INITIAL_ROWS = 100;
   public readonly INITIAL_COLUMNS = 20;
@@ -100,10 +101,17 @@ export class PropertyTableModule implements PropertyTableContext {
   }
 
   /**
-   * Hide the property table
+   * Set WebGPU renderer module
+   */
+  public setWebGPURenderer(webgpu: any): void {
+    this.webgpu = webgpu;
+  }
+
+  /**
+   * Hide the property table and restore opacity
    */
   public hideTable(): void {
-    this.uiManager.hideTable();
+    this.restoreAllOpacity();
   }
 
   /**
@@ -200,6 +208,9 @@ export class PropertyTableModule implements PropertyTableContext {
   }
 
   public restoreAllOpacity(): void {
+    // Clear any active filters and isolation
+    this.filterManager.clearAllFilters();
+
     if (this.clusterScene) {
       this.clusterScene.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material) {
@@ -219,9 +230,35 @@ export class PropertyTableModule implements PropertyTableContext {
       });
     }
     
+    // Clear highlighter selection and any other styles that might cause ghosting
+    if (this.highlighter) {
+      this.highlighter.clear('select');
+      this.highlighter.clear('translucent');
+      this.highlighter.clear('slicer-transparent');
+      
+      // Also clear any slicer-specific styles if they exist
+      for (const styleName of Object.keys(this.highlighter.styles)) {
+        if (styleName.startsWith('slicer-')) {
+          this.highlighter.clear(styleName);
+        }
+      }
+    }
+
+    // Reset WebGPU isolation if active
+    if (this.webgpu) {
+      this.webgpu.setIsolatedElements(null);
+      this.webgpu.setSlicerColors(false);
+    }
+    
     this.uiManager.hideTable();
+    
+    // Trigger exit callback if provided (this restores main model view)
     if (this.onExitClusterCallback) {
       this.onExitClusterCallback();
+      this.onExitClusterCallback = null;
     }
+
+    // Clear cluster scene reference
+    this.clusterScene = null;
   }
 }

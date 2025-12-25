@@ -1,6 +1,15 @@
 /**
- * WebGPU Material Factory
- * Handles material creation and caching for WebGPU rendering
+ * WEBGPU MATERIAL FACTORY (The "Material Lab")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is responsible for creating the "skin" of the 3D objects. 
+ * It takes the colors and textures from the IFC model and turns them into 
+ * materials that the WebGPU engine can understand and render beautifully.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Provides the materials for every piece of 
+ *   geometry in the proxy scene.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';
@@ -50,6 +59,8 @@ export class WebGPUMaterialFactory {
       opacity,
       transparent,
       side,
+      alphaToCoverage: transparent,
+      depthWrite: !transparent
     });
     this.materialCache.set(key, mat);
     return mat;
@@ -102,6 +113,8 @@ export class WebGPUMaterialFactory {
       opacity,
       transparent,
       side: THREE.DoubleSide,
+      alphaToCoverage: transparent,
+      depthWrite: !transparent
     });
     this.materialCache.set(key, mat);
     return mat;
@@ -141,6 +154,8 @@ export class WebGPUMaterialFactory {
       opacity,
       transparent,
       side,
+      alphaToCoverage: transparent,
+      depthWrite: !transparent
     });
     this.materialCache.set(key, newMat);
     return newMat;

@@ -1,4 +1,19 @@
 /**
+ * WEBGPU LOD MANAGER (The "Detail Optimizer")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * "LOD" stands for Level of Detail. This module is a performance trick: 
+ * it shows high-quality details for objects close to the camera, but 
+ * switches to simpler, "cheaper" versions for objects far away where you 
+ * can't see the difference anyway.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Manages which version of each object is currently 
+ *   being drawn to keep the frame rate high.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Level of Detail (LOD) Manager
  * =============================================================================

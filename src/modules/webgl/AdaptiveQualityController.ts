@@ -1,15 +1,16 @@
 /**
- * Adaptive Quality Controller
+ * ADAPTIVE QUALITY CONTROLLER (The "Auto-Pilot")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module watches your computer's performance (FPS). If the viewer starts 
+ * to lag, it automatically lowers the graphics quality (like shadows or 
+ * sharpness) to keep things smooth. If your computer is fast, it turns the 
+ * quality back up to "Ultra."
  * 
- * Automatically adjusts rendering quality based on real-time FPS performance.
- * Balances visual quality with performance by switching between preset configurations.
- * 
- * Quality Levels:
- * - Ultra: Maximum quality (32 samples, full shadows) - Heavy
- * - High: High quality (16 samples, good shadows) - Medium-Heavy
- * - Balanced: Balanced quality (12 samples, moderate shadows) - Medium
- * - Performance: Performance mode (8 samples, light shadows) - Light
- * - Ultra Performance: Maximum performance (4 samples, minimal shadows) - Very Light
+ * HOW IT CONNECTS:
+ * - WorldManager: It tells the 3D engine which quality settings to use.
+ * - PerformanceMonitor: It listens to the frame rate to make decisions.
+ * --------------------------------------------------------------------------------
  */
 
 import { PerformanceMonitor } from '../core/PerformanceMonitor';

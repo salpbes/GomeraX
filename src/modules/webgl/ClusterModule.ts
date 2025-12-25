@@ -1,45 +1,17 @@
 /**
- * ==================================================================================
- * IFC ELEMENT TYPE CLUSTERING FOR OPEN BIM COMPONENTS (OBC)
- * ==================================================================================
+ * CLUSTER MODULE (The "Organizer")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is one of the most advanced tools. It takes all the objects in the 
+ * building and physically moves them into separate groups (clusters) based 
+ * on their type. It's like taking a LEGO castle apart and putting all the 
+ * red bricks in one pile and all the blue bricks in another.
  * 
- * WHAT WE'RE TRYING TO DO:
- * ------------------------
- * We want to group (cluster) IFC elements by their IFC types (e.g., all IfcWall objects
- * together, all IfcDoor objects together, etc.) and visualize these clusters with 
- * bounding boxes in a 3D viewer. This is similar to Autodesk Tandem's 3D cluster feature.
- * 
- * WHAT WE FOUND IN OBC DOCUMENTATION:
- * -----------------------------------
- * 1. OBC uses a worker-based architecture where most data operations happen in a 
- *    separate thread for performance.
- * 
- * 2. Models are stored in a Map accessed via: fragmentsManager.list
- *    - Key: modelId (string)
- *    - Value: FragmentsModel instance
- * 
- * 3. FragmentsModel provides these key methods:
- *    - getAllItemsWithGeometry(): Returns array of local IDs for items with geometry
- *    - getItemsOfCategories(category): Returns items of a specific IFC category
- *    - getBoundingBoxes(itemIds): Returns bounding boxes for specified items
- *    - getMergedBoundingBox(itemIds): Returns single box encompassing all items
- *    - getCategories(): Returns all IFC categories in the model
- * 
- * 4. Items are referenced by "local IDs" (numbers) internally, not IFC express IDs
- * 
- * 5. IFC categories are uppercase strings like: 
- *    'IFCWALL', 'IFCDOOR', 'IFCWINDOW', 'IFCSLAB', 'IFCCOLUMN', etc.
- * 
- * KEY ARCHITECTURE DECISIONS:
- * ---------------------------
- * - We use a modular design with separate classes for cluster data, management, 
- *   and visualization
- * - Clustering is done per-model (each loaded IFC file is processed separately)
- * - All operations are async because OBC uses web workers
- * - Visualization uses Three.js primitives (boxes, edges) added to the scene
- * - Elements are temporarily moved to cluster positions and restored on toggle off
- * 
- * ==================================================================================
+ * HOW IT CONNECTS:
+ * - ColorSplashModule: Often used to color the piles so they are easy to identify.
+ * - PropertyTable: Shows the data for the objects in the currently selected pile.
+ * - WorldManager: Moves the objects around in the 3D scene.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

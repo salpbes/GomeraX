@@ -1,7 +1,14 @@
 /**
- * View Cube Module
+ * VIEW CUBE (The "Compass")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the small 3D cube in the corner of the screen. You can click on 
+ * its faces (like "Top", "Front", or "Left") to instantly rotate the 
+ * building to that exact view. It helps you stay oriented in 3D space.
  * 
- * Provides a 3D navigation cube for easy camera orientation
+ * HOW IT CONNECTS:
+ * - WorldManager: Rotates the main camera when you click the cube.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

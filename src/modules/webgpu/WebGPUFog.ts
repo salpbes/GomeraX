@@ -1,4 +1,17 @@
 /**
+ * WEBGPU FOG (The "Atmosphere")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This adds a subtle "fog" effect to the distance in WebGPU mode. It makes 
+ * far-away parts of the building fade out slightly, which helps your eyes 
+ * understand the scale and depth of the model.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Applies the fog settings to the entire 3D scene.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Fog Effect
  * =============================================================================

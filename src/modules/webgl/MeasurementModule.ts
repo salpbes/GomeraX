@@ -1,19 +1,15 @@
 /**
- * Measurement Module
+ * MEASUREMENT MODULE (The "Tape Measure")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is your digital toolbox for measuring things. You can click two 
+ * points to see the distance, click multiple points to find an area, or 
+ * even calculate the volume of a space.
  * 
- * Provides measurement tools for the IFC viewer:
- * - Length Measurement: Measure distances between two points
- * - Area Measurement: Measure areas by defining polygons
- * - Volume Measurement: Measure volumes by defining 3D shapes
- * 
- * Features:
- * - Interactive measurement creation via double-click
- * - Delete measurements with Delete/Backspace key
- * - Switch between measurement modes (Length, Area, Volume)
- * - Change units (meters, feet, inches, etc.)
- * - Display all measurements with labels
- * - Clear all measurements
- * - Export measurement data
+ * HOW IT CONNECTS:
+ * - WorldManager: Uses the 3D scene to detect where you are clicking.
+ * - ToolbarHandlers: Activated when you click the ruler icon on the menu.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';
@@ -67,7 +63,8 @@ export class MeasurementModule {
       transparent: true,
       opacity: 0.9,
       depthTest: false,
-      depthWrite: false
+      depthWrite: false,
+      alphaToCoverage: true
     });
     
     this.snapIndicator = new THREE.Mesh(geometry, material);
@@ -93,7 +90,8 @@ export class MeasurementModule {
       opacity: 0.7,
       depthTest: false,
       depthWrite: false,
-      linewidth: 3
+      linewidth: 3,
+      alphaToCoverage: true
     });
     const xLine = new THREE.Line(xGeometry, xMaterial);
     xLine.renderOrder = 9998;
@@ -109,7 +107,8 @@ export class MeasurementModule {
       opacity: 0.7,
       depthTest: false,
       depthWrite: false,
-      linewidth: 3
+      linewidth: 3,
+      alphaToCoverage: true
     });
     const yLine = new THREE.Line(yGeometry, yMaterial);
     yLine.renderOrder = 9998;
@@ -125,7 +124,8 @@ export class MeasurementModule {
       opacity: 0.7,
       depthTest: false,
       depthWrite: false,
-      linewidth: 3
+      linewidth: 3,
+      alphaToCoverage: true
     });
     const zLine = new THREE.Line(zGeometry, zMaterial);
     zLine.renderOrder = 9998;

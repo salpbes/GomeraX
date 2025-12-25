@@ -1,8 +1,15 @@
 /**
- * Clipper Module
+ * CLIPPER MODULE (The "Slicer")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the tool that lets you "cut" through the building. You can place 
+ * horizontal or vertical planes to see inside rooms, floors, or complex 
+ * structures that are normally hidden behind walls.
  * 
- * Provides sectioning/clipping functionality to cut through the model
- * and view the interior of the BIM model
+ * HOW IT CONNECTS:
+ * - ClipStyler: Tells the styler where the cuts are so it can color them.
+ * - ToolbarHandlers: Responds to the "Section" button on the menu.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

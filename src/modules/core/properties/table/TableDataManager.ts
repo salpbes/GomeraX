@@ -25,6 +25,7 @@ export interface PropertyTableContext {
   isCollapsed: boolean;
   allElementIds: number[];
   clusterScene: THREE.Group | null;
+  webgpu?: any;
   
   // Constants
   INITIAL_ROWS: number;

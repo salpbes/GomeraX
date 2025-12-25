@@ -1,11 +1,16 @@
 /**
- * ClipStyler Module
+ * CLIP STYLER (The "Section Painter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * When you cut through a model using the Slicer/Clipper, this module makes 
+ * the "cut" surfaces look solid and professional. It fills the inside of 
+ * walls and floors with color so they don't look like hollow shells.
  * 
- * Provides clean section fills for clipping planes WITHOUT hatch lines.
- * 
- * NOTE: LineMaterial hatch lines have a known bug where they appear on both sides
- * of the clipping plane (black rectangle artifact). This is a THREE.js limitation.
- * Solution: Use ONLY fill material for clean, professional section cuts.
+ * HOW IT CONNECTS:
+ * - ClipperModule: It works together with the section planes to style the 
+ *   resulting cuts.
+ * - WorldManager: It adds the special "fill" materials to the 3D scene.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';
@@ -62,6 +67,7 @@ export class ClipStylerModule {
       vertexColors: false, // Don't use vertex colors
       fog: false,         // Not affected by fog
       toneMapped: false,  // Disable tone mapping to preserve exact color
+      alphaToCoverage: true,
     });
 
     material.needsUpdate = true;

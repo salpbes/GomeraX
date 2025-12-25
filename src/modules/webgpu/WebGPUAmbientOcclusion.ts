@@ -1,4 +1,20 @@
 /**
+ * NOTES FOR FUTURE DEVELOPMENT
+ * WEBGPU AMBIENT OCCLUSION (The "Shadow Detailer")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module was intended to add "soft shadows" in corners and cracks to 
+ * make the building look more solid. However, it is currently disabled 
+ * because it doesn't play well with the high-speed anti-aliasing (MSAA) 
+ * we use for smooth edges.
+ * 
+ * HOW IT CONNECTS:
+ * - Currently a standalone document explaining why this feature is 
+ *   on hold for WebGPU mode.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Ambient Occlusion (GTAO) - NOT IMPLEMENTED
  * =============================================================================

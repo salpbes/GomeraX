@@ -1,6 +1,15 @@
 /**
- * WebGPU Edge Manager
- * Handles edge/wireframe rendering for meshes
+ * WEBGPU EDGE MANAGER (The "Wireframe Artist")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module draws the thin black lines on the edges of walls and floors. 
+ * Without these lines, 3D models can look like "blobs" of color; the edges 
+ * add definition and make the building look like a real architectural drawing.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPURendererModule: Adds the edge lines as a separate layer on top 
+ *   of the solid building.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

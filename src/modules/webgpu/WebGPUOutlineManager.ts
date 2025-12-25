@@ -1,4 +1,18 @@
 /**
+ * WEBGPU OUTLINE MANAGER (The "Highlighter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module draws the glowing lines around objects when you select them 
+ * in WebGPU mode. It makes it clear which part of the building you are 
+ * currently looking at or editing.
+ * 
+ * HOW IT CONNECTS:
+ * - WebGPUElementSelector: Receives the "selected" object and draws the 
+ *   outline around it.
+ * --------------------------------------------------------------------------------
+ */
+
+/**
  * =============================================================================
  * WebGPU Outline Manager
  * =============================================================================

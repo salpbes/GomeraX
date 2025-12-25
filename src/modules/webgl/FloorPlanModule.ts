@@ -1,6 +1,15 @@
 /**
- * FloorPlanModule
- * Manages creation and display of 2D floor plan views from IFC building storeys
+ * FLOOR PLAN MODULE (The "Blueprint Maker")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module takes the complex 3D building and flattens it into 2D floor 
+ * plans. It automatically finds the different levels (storeys) of the 
+ * building and creates a top-down view for each one.
+ * 
+ * HOW IT CONNECTS:
+ * - MinimapModule: Provides the 2D map used for the small navigation window.
+ * - WorldManager: Switches the camera to a flat "top-down" view.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';
