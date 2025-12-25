@@ -732,7 +732,10 @@ class ClusterManager {
       color: categoryColor,
       metalness: 0.1,
       roughness: 0.8,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      transparent: true, // Enable transparency by default for WebGPU compatibility
+      opacity: 1.0,
+      alphaToCoverage: false // Initial state is opaque
     });
     
     // Determine if this is a horizontal element (slabs, roofs, footings)
@@ -818,8 +821,8 @@ class ClusterManager {
           
           geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
           
-          // Create mesh
-          const mesh = new THREE.Mesh(geometry, sharedMaterial);
+          // Create mesh - Clone material to allow independent opacity/visibility control
+          const mesh = new THREE.Mesh(geometry, sharedMaterial.clone());
           mesh.frustumCulled = false;
           
           // Apply the transform from IFC (this preserves the original positioning of parts)

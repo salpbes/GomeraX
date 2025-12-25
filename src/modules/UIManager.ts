@@ -471,7 +471,7 @@ export class UIManager {
   /**
    * Sets up WebGPU toggle with support detection
    */
-  private setupWebGPUToggle(): void {
+  private async setupWebGPUToggle(): Promise<void> {
     const toggle = document.getElementById('webgpuToggle') as HTMLInputElement;
     const statusIcon = document.getElementById('webgpuStatusIcon');
     const statusText = document.getElementById('webgpuStatusText');
@@ -480,7 +480,8 @@ export class UIManager {
     if (!toggle || !statusIcon || !statusText) return;
     
     // Check WebGPU support
-    const isSupported = this.viewer?.checkWebGPUSupport() ?? false;
+    const support = await this.viewer?.checkWebGPUSupport();
+    const isSupported = support?.available ?? false;
     
     if (isSupported) {
       statusIcon.textContent = '✅';
@@ -493,6 +494,9 @@ export class UIManager {
       statusText.style.color = '#f87171';
       toggle.disabled = true;
       toggle.checked = false;
+      if (support?.reason) {
+        statusText.title = support.reason;
+      }
     }
     
     // Store reference to viewer for use in async callback
@@ -545,6 +549,7 @@ export class UIManager {
             });
           }
         } else {
+          // This block is now only reached if ENABLING fails
           toggle.checked = false;
           statusIcon.textContent = '❌';
           statusText.textContent = 'Failed';

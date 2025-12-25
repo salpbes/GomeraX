@@ -380,18 +380,28 @@ export class IFCViewer {
 
   /**
    * Toggle WebGPU rendering mode (experimental)
-   * @returns Whether WebGPU is now enabled
+   * @param force - Optional force state (true to enable, false to disable)
+   * @returns Whether the operation was successful
    */
-  public async toggleWebGPU(): Promise<boolean> {
+  public async toggleWebGPU(force?: boolean): Promise<boolean> {
     if (!this.webgpuRenderer || !this.worldManager.world || !this.container) {
       console.warn('⚠️ WebGPU toggle: Missing required components');
       return false;
     }
 
-    if (this.webgpuRenderer.isEnabled()) {
-      this.webgpuRenderer.disable();
-      return false;
+    const currentlyEnabled = this.webgpuRenderer.isEnabled();
+    const targetState = force !== undefined ? force : !currentlyEnabled;
+
+    if (!targetState) {
+      // Disabling WebGPU
+      if (currentlyEnabled) {
+        this.webgpuRenderer.disable();
+      }
+      return true; // Successfully disabled (or already disabled)
     } else {
+      // Enabling WebGPU
+      if (currentlyEnabled) return true; // Already enabled
+      
       const success = await this.webgpuRenderer.enable(
         this.worldManager.world,
         this.container,

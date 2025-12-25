@@ -2219,9 +2219,7 @@ export class ToolbarHandlers {
       }
       
       // Fit view to show all models
-      if (this.components.camera) {
-        this.components.camera.fit();
-      }
+      await this.modelTransform.fitCameraToModels();
       
       console.log('✅ Exited cluster mode and fit view');
     } catch (error) {
@@ -2257,9 +2255,7 @@ export class ToolbarHandlers {
       this.hideColorPickerPanel();
       
       // Fit view to show all models
-      if (this.components.camera) {
-        this.components.camera.fit();
-      }
+      await this.modelTransform.fitCameraToModels();
       
       console.log('✅ Exited color splash mode and fit view');
     } catch (error) {

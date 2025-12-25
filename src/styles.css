@@ -926,3 +926,339 @@ canvas {
   margin-left: 4px;
 }
 
+/* Property Table Styles */
+.hidden {
+  display: none !important;
+}
+
+.property-table-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  background: rgba(20, 20, 30, 0.98);
+  border-top: 2px solid #4a90e2;
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+  transition: height 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.property-table-container.collapsed {
+  height: 45px !important;
+}
+
+.property-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(30, 30, 40, 0.98);
+  border-bottom: 1px solid rgba(74, 144, 226, 0.3);
+  user-select: none;
+}
+
+.property-table-title {
+  color: #4a90e2;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.property-table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.property-table-btn {
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.property-table-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.property-table-btn.close-btn:hover {
+  color: #ef4444;
+}
+
+.property-table-wrapper {
+  flex: 1;
+  overflow: auto;
+  background: rgba(15, 15, 20, 0.95);
+}
+
+.property-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #fff;
+}
+
+.property-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(40, 40, 50, 0.98);
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid #4a90e2;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 600;
+  color: #4a90e2;
+  white-space: nowrap;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sort-indicator {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #fff;
+}
+
+.filter-icon {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.filter-icon:hover {
+  opacity: 1;
+  color: #fff;
+}
+
+.filter-icon.active i {
+  color: #00ff00 !important;
+  opacity: 1 !important;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+}
+
+.filter-icon.active {
+  opacity: 1 !important;
+}
+
+.property-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff !important;
+}
+
+.property-table tr:nth-child(even) {
+  background: rgba(25, 25, 35, 0.5);
+}
+
+.property-table tr:hover {
+  background: rgba(74, 144, 226, 0.15) !important;
+  cursor: pointer;
+}
+
+.property-table tr.selected {
+  background: rgba(74, 144, 226, 0.3) !important;
+}
+
+/* Filter Dropdown */
+.filter-dropdown {
+  position: fixed;
+  background: rgba(37, 37, 48, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid #4a90e2;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 10001;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+}
+
+.filter-search {
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  border-bottom: 1px solid rgba(74, 144, 226, 0.3);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+}
+
+.filter-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.filter-item {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.filter-item:hover {
+  background: rgba(74, 144, 226, 0.1);
+  color: #fff;
+}
+
+.filter-item.select-all {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
+.filter-actions {
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.filter-actions button {
+  background: transparent;
+  border: 1px solid #4a90e2;
+  color: #4a90e2;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* Loading Overlay */
+.property-table-loading-overlay {
+  position: absolute;
+  top: 45px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(20, 20, 30, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.loading-content {
+  text-align: center;
+  width: 250px;
+}
+
+.loading-text {
+  color: #4a90e2;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.progress-container {
+  height: 4px;
+  background: rgba(74, 144, 226, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #4a90e2;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+/* Filter Dropdown */
+
+.pause-content {
+  text-align: center;
+  background: #252535;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(74, 144, 226, 0.3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.pause-info {
+  color: #ccc;
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.pause-info b {
+  color: #4a90e2;
+}
+
+.continue-btn {
+  background: #4a90e2;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  transition: all 0.2s;
+}
+
+.continue-btn:hover {
+  background: #357abd;
+  transform: translateY(-1px);
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.filter-icon {
+  font-size: 16px !important;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.filter-icon:hover {
+  opacity: 1;
+  color: #fff;
+}
+
+.load-more-columns {
+  background: rgba(255, 152, 0, 0.1) !important;
+  color: #ff9800 !important;
+  border-bottom: 2px solid #ff9800 !important;
+  cursor: pointer;
+}
+
+.load-more-columns:hover {
+  background: rgba(255, 152, 0, 0.2) !important;
+}
+
