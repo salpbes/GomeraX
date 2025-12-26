@@ -5,6 +5,7 @@
 
 // Core renderer
 export { WebGPURendererModule, type RendererMode, type WebGPUStatus } from './WebGPURendererModule';
+export { ViewerWebGPUAPI } from './ViewerWebGPUAPI';
 
 // Core managers
 export { WebGPUShadowManager } from './WebGPUShadowManager';
