@@ -389,15 +389,22 @@ export function getToolbarStyles(): string {
       gap: 4px;
       min-width: 140px;
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
-      transition: all 0.3s ease;
+      transition: opacity 0.3s ease, transform 0.3s ease;
       z-index: 1001;
     }
     
     .toolbar-submenu.visible {
       opacity: 1;
-      pointer-events: all;
+      visibility: visible;
+      pointer-events: auto;
       transform: translateX(-50%) scale(1);
+    }
+    
+    .toolbar-submenu.visible .submenu-btn {
+      pointer-events: auto;
+      cursor: pointer;
     }
     
     .submenu-btn {
@@ -676,9 +683,9 @@ export function getToolbarStyles(): string {
     }
 
     .settings-panel {
-      position: absolute;
+      position: fixed;
       bottom: 80px;
-      right: 0;
+      right: 20px;
       background: rgba(40, 40, 70, 0.98);
       backdrop-filter: blur(10px);
       padding: 20px;
@@ -691,6 +698,8 @@ export function getToolbarStyles(): string {
       max-height: calc(100vh - 120px);
       overflow-y: auto;
       animation: slideUp 0.3s ease;
+      z-index: 1002;
+      pointer-events: auto;
     }
     
     /* Custom scrollbar for settings panel */
@@ -712,6 +721,10 @@ export function getToolbarStyles(): string {
       background: rgba(255, 255, 255, 0.5);
     }
     
+    .settings-content {
+      pointer-events: auto;
+    }
+    
     .settings-content h3 {
       margin: 0 0 16px 0;
       font-size: 16px;
@@ -727,6 +740,8 @@ export function getToolbarStyles(): string {
       font-size: 13px;
       font-weight: 500;
       color: rgba(255, 255, 255, 0.9);
+      pointer-events: auto;
+      cursor: pointer;
     }
     
     .settings-content input[type="color"],
@@ -737,6 +752,7 @@ export function getToolbarStyles(): string {
       border: 1px solid rgba(255, 255, 255, 0.2);
       cursor: pointer;
       background: rgba(255, 255, 255, 0.1);
+      pointer-events: auto;
     }
     
     .settings-content input[type="range"] {
@@ -779,6 +795,7 @@ export function getToolbarStyles(): string {
       height: 20px;
       cursor: pointer;
       accent-color: rgb(102, 126, 234);
+      pointer-events: auto;
     }
     
     .settings-content .checkbox-label span {
