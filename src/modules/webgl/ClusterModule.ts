@@ -283,6 +283,8 @@ class ClusterManager {
   private components: OBC.Components;
   private colorOverrides: Map<string, THREE.Color> = new Map(); // category -> custom color
   private webgpu: WebGPURendererModule | null = null;
+  /** Flag to cancel pending animation callbacks */
+  private animationCancelled: boolean = false;
 
   constructor(components: OBC.Components, scene: THREE.Scene) {
     this.components = components;
@@ -1188,13 +1190,11 @@ class ClusterManager {
     this.visualizer.toggleVisibility(true); // Ensure visible
     this.visualizer.animateEntry();
 
-    // Update WebGPU if active
-    if (this.webgpu) {
+    // Update WebGPU if active and enabled
+    if (this.webgpu?.isEnabled()) {
       console.log('🎮 ClusterManager: Passing cluster group to WebGPU:', this.visualizer.clusterGroup.children.length, 'children');
       this.webgpu.setClusterGroup(this.visualizer.clusterGroup);
       this.webgpu.setModelsVisible(false);
-    } else {
-      console.log('🎮 ClusterManager: No WebGPU reference available');
     }
 
     console.log('✅ Cluster visualization complete');
@@ -1224,8 +1224,8 @@ class ClusterManager {
         }
         this.clusters.clear(); // Actually clear the map
 
-        // Update WebGPU if active
-        if (this.webgpu) {
+        // Update WebGPU if active and enabled
+        if (this.webgpu?.isEnabled()) {
           this.webgpu.setClusterGroup(null);
           this.webgpu.setModelsVisible(true);
         }
@@ -1241,6 +1241,9 @@ class ClusterManager {
    */
   async clearClustersInstant(): Promise<void> {
     console.log('🧹 Clearing clusters instantly...');
+    
+    // Cancel any pending hide animation to prevent race condition
+    this.cancelPendingAnimations();
     
     // Restore original positions
     await this.restoreOriginalPositions();
@@ -1269,19 +1272,39 @@ class ClusterManager {
 
   /**
    * Hide clusters without destroying them (fast toggle)
+   * Returns a Promise that resolves when the animation is complete
    */
-  hideClusters(): void {
+  hideClusters(): Promise<void> {
     console.log('🙈 Hiding clusters...');
-    this.visualizer.animateExit(400, () => {
-      this.visualizer.toggleVisibility(false);
-      this.visualizer.restoreAllModels();
-      
-      // Update WebGPU if active
-      if (this.webgpu) {
-        this.webgpu.setClusterGroup(null);
-        this.webgpu.setModelsVisible(true);
-      }
+    this.animationCancelled = false;
+    
+    return new Promise<void>((resolve) => {
+      this.visualizer.animateExit(400, () => {
+        // Check if animation was cancelled (e.g., by clearClustersInstant)
+        if (this.animationCancelled) {
+          console.log('🙈 Hide animation cancelled');
+          resolve();
+          return;
+        }
+        
+        this.visualizer.toggleVisibility(false);
+        this.visualizer.restoreAllModels();
+        
+        // Update WebGPU if active and enabled
+        if (this.webgpu?.isEnabled()) {
+          this.webgpu.setClusterGroup(null);
+          this.webgpu.setModelsVisible(true);
+        }
+        resolve();
+      });
     });
+  }
+
+  /**
+   * Cancel any pending hide animation
+   */
+  cancelPendingAnimations(): void {
+    this.animationCancelled = true;
   }
 
   /**
@@ -1308,8 +1331,8 @@ class ClusterManager {
     this.visualizer.toggleVisibility(true);
     this.visualizer.animateEntry();
     
-    // Update WebGPU if active
-    if (this.webgpu) {
+    // Update WebGPU if active and enabled
+    if (this.webgpu?.isEnabled()) {
       this.webgpu.setClusterGroup(this.visualizer.clusterGroup);
       this.webgpu.setModelsVisible(false);
     }
@@ -1623,7 +1646,8 @@ export class ClusterModule {
 
     if (this.isActive) {
       // Hide clusters instead of clearing to allow fast re-entry
-      this.clusterManager.hideClusters();
+      // Await the animation to complete before proceeding
+      await this.clusterManager.hideClusters();
       this.isActive = false;
       
       // Re-enable sectioning if it was enabled before cluster mode

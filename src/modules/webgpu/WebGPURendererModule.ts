@@ -368,9 +368,7 @@ export class WebGPURendererModule {
       });
       
       // Add to proxy scene
-      if (this.proxyScene) {
-        this.proxyScene.add(this.clusterGroup);
-      }
+      this.proxyScene.add(this.clusterGroup);
       console.log('🔷 WebGPU Cluster Group added to scene');
     }
   }
