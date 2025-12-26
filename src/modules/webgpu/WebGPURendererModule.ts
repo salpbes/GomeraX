@@ -148,6 +148,14 @@ import { WebGPULODManager, type LODSettings, type LODStats } from './WebGPULODMa
 // NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
+// Import modular managers for better code organization
+import { 
+  WebGPUStatsManager,
+  WebGPUMaterialFactory,
+  IFC_CATEGORY_COLORS,
+  getOrCreateCategoryMaterial 
+} from './managers';
+
 export type RendererMode = 'webgl' | 'webgpu';
 
 export interface WebGPUStatus {
@@ -308,7 +316,17 @@ export class WebGPURendererModule {
   // Sectioning-related state removed (sectioning not supported in WebGPU mode)
   // originalMaterialSides, isClippingActive, originalAlphaToCoverage, edgesWereVisibleBeforeClipping removed
 
-  constructor() {}
+  // =========================================================================
+  // MODULAR MANAGERS
+  // =========================================================================
+  // These managers were extracted from this class for better maintainability
+  private statsManager: WebGPUStatsManager | null = null;
+  private materialFactory: WebGPUMaterialFactory | null = null;
+
+  constructor() {
+    // Initialize modular managers
+    this.materialFactory = new WebGPUMaterialFactory();
+  }
 
   /**
    * Set Color Splash state for WebGPU
@@ -996,21 +1014,13 @@ export class WebGPURendererModule {
 
   /**
    * Get or create a ghost material for non-isolated elements
+   * Delegates to material factory for better code organization
    */
   private getOrCreateGhostMaterial(): THREE.MeshStandardMaterial {
-    if (!this.ghostMaterial) {
-      this.ghostMaterial = new THREE.MeshStandardMaterial({
-        color: 0xcccccc,
-        opacity: 0.4,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        roughness: 1,
-        metalness: 0,
-        alphaToCoverage: true
-      });
+    if (!this.ghostMaterial && this.materialFactory) {
+      this.ghostMaterial = this.materialFactory.getOrCreateGhostMaterial();
     }
-    return this.ghostMaterial;
+    return this.ghostMaterial!;
   }
 
   /**
@@ -1874,6 +1884,47 @@ export class WebGPURendererModule {
     this.lodManager = new WebGPULODManager();
     this.lodManager.initialize(this.proxyScene, this.camera);
     console.log('📐 LOD system initialized (disabled by default)');
+  }
+
+  /**
+   * Initialize the stats manager for performance monitoring
+   */
+  private initializeStatsManager(): void {
+    if (!this.container) {
+      console.log('⚠️ Cannot initialize stats manager: container not ready');
+      return;
+    }
+    
+    this.statsManager = new WebGPUStatsManager();
+    this.statsManager.initialize({
+      container: this.container,
+      getRenderer: () => this.webgpuRenderer,
+      getCamera: () => this.camera,
+      getScene: () => this.proxyScene,
+      getSettings: () => ({
+        frustumCullingEnabled: this.frustumCullingEnabled,
+        geometryMergingEnabled: this.geometryMergingEnabled,
+        shadowsEnabled: this.shadowsEnabled,
+        edgesEnabled: this.edgesEnabled,
+        groundPlaneEnabled: this.groundPlaneEnabled,
+        hiddenCategories: this.hiddenCategories,
+        currentToneMapping: this.currentToneMapping,
+        lodEnabled: this.lodEnabled,
+        shadowLight: this.shadowLight,
+        mergedMeshes: this.mergedMeshes,
+        lodManager: this.lodManager,
+      }),
+    });
+    
+    // Transfer GPU info if available
+    if (this.gpuInfo && this.gpuInfo !== 'Unknown') {
+      this.statsManager.setGPUInfo(this.gpuInfo);
+    }
+    
+    // Set scene center for distance calculations
+    this.statsManager.setSceneCenter(this.sceneCenter);
+    
+    console.log('📊 Stats manager initialized');
   }
 
   /**
@@ -3688,6 +3739,9 @@ export class WebGPURendererModule {
       // Initialize LOD system
       this.initializeLOD();
 
+      // Initialize stats manager for performance monitoring
+      this.initializeStatsManager();
+
       // NOTE: Ambient Occlusion initialization removed - see comment in FOG EFFECT section
 
       // Sectioning is NOT supported in WebGPU mode (ClippingGroup has compatibility issues)
@@ -3792,6 +3846,18 @@ export class WebGPURendererModule {
       this.lodManager = null;
     }
 
+    // Dispose stats manager
+    if (this.statsManager) {
+      this.statsManager.dispose();
+      this.statsManager = null;
+    }
+
+    // Dispose material factory
+    if (this.materialFactory) {
+      this.materialFactory.dispose();
+      this.materialFactory = null;
+    }
+
     // Show original canvas
     if (this.container) {
       const originalCanvas = this.container.querySelector('canvas:not(#webgpu-canvas)');
@@ -3891,8 +3957,10 @@ export class WebGPURendererModule {
         return;
       }
 
-      // Track frame time for stats
-      if (this.statsEnabled) {
+      // Track frame time for stats - use stats manager if available
+      if (this.statsManager) {
+        this.statsManager.updateFrame(currentTime);
+      } else if (this.statsEnabled) {
         const delta = currentTime - this.lastFrameTime;
         this.lastFrameTime = currentTime;
         this.frameTime = delta;
@@ -4273,10 +4341,19 @@ export class WebGPURendererModule {
 
   /**
    * Enable or disable performance stats overlay
+   * Note: Uses WebGPUStatsManager for modular stats handling when available
    */
   public setStatsEnabled(enabled: boolean): void {
     this.statsEnabled = enabled;
     
+    // Use modular stats manager if available
+    if (this.statsManager) {
+      this.statsManager.setEnabled(enabled);
+      console.log(`📊 Stats ${enabled ? 'enabled' : 'disabled'} (using StatsManager)`);
+      return;
+    }
+    
+    // Fallback to inline stats implementation
     if (enabled) {
       this.createStatsOverlay();
       this.countSceneObjects();
@@ -4294,6 +4371,9 @@ export class WebGPURendererModule {
    * Get current stats enabled state
    */
   public isStatsEnabled(): boolean {
+    if (this.statsManager) {
+      return this.statsManager.isEnabled();
+    }
     return this.statsEnabled;
   }
 
