@@ -1,14 +1,15 @@
 /**
- * Performance Monitor Module (The "Athletic Performance Analyst")
+ * PERFORMANCE MONITOR (The "Athletic Performance Analyst")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Heart Rate Monitor" for the app. It watches how fast the 
+ * screen is updating (FPS) and how much memory the computer is using.
  * 
- * This module handles performance monitoring using Stats.js
- * It displays:
- * - FPS (Frames Per Second)
- * - MS (Milliseconds per frame)
- * - MB (Memory usage)
- * 
- * Essential for ensuring the viewer runs smoothly,
- * especially with large IFC models.
+ * WHY IT MATTERS: 
+ * If the app starts to lag, this module tells us why. It helps us ensure 
+ * that the experience stays smooth and responsive, even when you're 
+ * looking at a massive, complex building.
+ * --------------------------------------------------------------------------------
  */
 
 import Stats from 'stats.js';

@@ -1,3 +1,17 @@
+/**
+ * TABLE SORT MANAGER (The "Organizer")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module lets you sort the table by any column. You can click "Name" 
+ * to see everything in alphabetical order, or "Value" to see things 
+ * from smallest to largest.
+ * 
+ * WHY IT MATTERS: 
+ * It helps you find patterns in your data. By sorting, you can quickly 
+ * see all the objects of the same type or find the largest elements 
+ * in your building model.
+ * --------------------------------------------------------------------------------
+ */
 import { PropertyTableContext, PropertyRow } from './TableDataManager';
 
 export class TableSortManager {

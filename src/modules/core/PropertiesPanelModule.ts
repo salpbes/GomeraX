@@ -1,14 +1,16 @@
 /**
- * Properties Panel Module (The "Building Inspector")
+ * PROPERTIES PANEL MODULE (The "Building Inspector")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Information Center" for the building. It manages the 
+ * selection of objects, the tree view of the building structure, and 
+ * the display of all the technical data for whatever you've clicked.
  * 
- * Provides:
- * - Simple model tree view
- * - Entity selection via click
- * - Basic properties display
- * - Visual highlighting
- * 
- * Uses Three.js raycasting for object picking and displays
- * basic geometry/material information for selected objects.
+ * WHY IT MATTERS: 
+ * A 3D model is just a picture without its data. This module connects 
+ * the visual shapes to their real-world information, allowing you to 
+ * inspect every nut, bolt, and wall in the project.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

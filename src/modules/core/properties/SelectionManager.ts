@@ -1,3 +1,17 @@
+/**
+ * SELECTION MANAGER (The "Highlighter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module handles the logic of clicking on things. It keeps track 
+ * of what you've selected, highlights it in the 3D view, and tells 
+ * other modules (like the Property Table) what to show.
+ * 
+ * WHY IT MATTERS: 
+ * Selection is the most basic interaction. This module ensures that 
+ * when you click something, the app knows exactly what you meant 
+ * and provides the visual feedback you expect.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
 import * as THREE from 'three';

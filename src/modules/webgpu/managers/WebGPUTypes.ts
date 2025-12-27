@@ -1,7 +1,15 @@
 /**
  * WebGPU Types and Interfaces (The "Not My Type Library")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Dictionary" for the WebGPU module. It defines the shapes of 
+ * data, settings, and objects that the renderer uses.
  * 
- * Shared type definitions for the WebGPU renderer module
+ * WHY IT MATTERS: 
+ * It ensures that all parts of the WebGPU system speak the same language. 
+ * If one part expects a "Color" and gets a "Number", this file helps catch 
+ * that mistake before the app crashes.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

@@ -1,3 +1,17 @@
+/**
+ * TREE MANAGER (The "Family Tree Builder")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module builds the hierarchical "Tree View" of the building. It 
+ * shows how the building is broken down into Sites, Buildings, Storeys, 
+ * and finally individual Elements.
+ * 
+ * WHY IT MATTERS: 
+ * It's like a file explorer for your building. It allows you to navigate 
+ * the model's structure logically, making it easy to find a specific 
+ * room or a specific piece of equipment within a large project.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import * as THREE from 'three';

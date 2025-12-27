@@ -1,7 +1,16 @@
-/** LoadingUIManager (The "Loading Maestro")
- * This handles all UI-related functionality for loading indicators.
- * It manages the display and updates of loading progress,
- * including tips, jokes, and model count updates.
+/**
+ * LOADING UI MANAGER (The "Loading Maestro")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module manages the loading screens and progress bars. It keeps 
+ * you entertained with tips and jokes while the heavy building models 
+ * are being downloaded and processed.
+ * 
+ * WHY IT MATTERS: 
+ * Loading large BIM models can take time. This module ensures that the 
+ * user knows exactly what's happening, how much is left, and makes the 
+ * wait feel shorter with helpful information.
+ * --------------------------------------------------------------------------------
  */
 import { IFCLoaderModule } from '../core/IFCLoaderModule';
 

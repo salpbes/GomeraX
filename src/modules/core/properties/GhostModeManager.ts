@@ -1,3 +1,16 @@
+/**
+ * GHOST MODE MANAGER (The "Casper")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module handles the "Ghosting" effect. When you isolate an object, 
+ * it makes everything else semi-transparent and grey, like a ghost.
+ * 
+ * WHY IT MATTERS: 
+ * It helps you focus on specific parts of the building without losing 
+ * the context of where they are. It's like having X-ray vision that 
+ * lets you see through the building to find exactly what you need.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import * as THREE from 'three';

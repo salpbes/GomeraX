@@ -1,3 +1,17 @@
+/**
+ * STOREY DATA MANAGER (The "Floor Planner")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module understands the vertical structure of the building. It 
+ * identifies which objects belong to which floor (storey) and allows 
+ * you to filter the model by level.
+ * 
+ * WHY IT MATTERS: 
+ * Buildings are complex. Being able to see just the "First Floor" or 
+ * "Roof" is essential for understanding the design. This module 
+ * provides the data needed to slice the building horizontally.
+ * --------------------------------------------------------------------------------
+ */
 import { PropertiesContext } from './SelectionManager';
 
 export class StoreyDataManager {

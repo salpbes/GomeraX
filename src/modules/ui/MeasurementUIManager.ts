@@ -1,8 +1,16 @@
 /**
- * MeasurementUIManager (The "Measurement Maestro")
- * This handles all UI-related functionality for measurements.
- * It manages user interactions with the measurement buttons
- * and ensures safe operation when measurements are active.
+ * MEASUREMENT UI MANAGER (The "Measurement Maestro")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module manages the UI for the measurement tools. It handles the 
+ * buttons that let you measure distances between walls, heights of 
+ * ceilings, and clear all measurements when you're done.
+ * 
+ * WHY IT MATTERS: 
+ * Precision is key in construction. This module makes it easy for users 
+ * to get exact dimensions from the 3D model, helping with everything 
+ * from space planning to verifying site conditions.
+ * --------------------------------------------------------------------------------
  */
 import { NotificationHelper } from './NotificationHelper';
 import { ClusterModule } from '../webgl/ClusterModule';

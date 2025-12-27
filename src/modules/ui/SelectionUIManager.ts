@@ -1,6 +1,16 @@
 /**
- * SelectionUIManager (The "Army Recruiter")
- * This handles all UI-related functionality for selection and visibility.
+ * SELECTION UI MANAGER (The "Army Recruiter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module manages the UI controls for selecting and hiding objects. 
+ * It provides the buttons for "Isolate", "Hide", and "Show All", 
+ * allowing you to control what's visible in the 3D scene.
+ * 
+ * WHY IT MATTERS: 
+ * When working with complex buildings, you often need to hide the walls 
+ * to see the pipes inside. This module gives you the tools to peel back 
+ * the layers of the building and focus on what's important.
+ * --------------------------------------------------------------------------------
  */
 import { NotificationHelper } from './NotificationHelper';
 import { WorldManager } from '../webgl/WorldManager';

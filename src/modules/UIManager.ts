@@ -1,17 +1,17 @@
 /**
  * UIManager (The "Director of Screenplay")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "User Interface" boss. It manages all the buttons, menus, 
+ * sidebars, and popups that you see on the screen. It makes sure that 
+ * the right panels open when you click something.
  * 
- * This class handles all UI-related functionality
- * Refactored into modular components for better maintainability
- * 
- * Layman's terms:
- * Think of this as the "Remote Control" or "Dashboard" of the viewer.
- * It manages everything you see on the screen that isn't the 3D model itself—
- * like buttons, menus, search bars, and loading screens. It connects your 
- * clicks and settings to the 3D engine so you can interact with the 
- * building data.
- * 
-*/
+ * WHY IT MATTERS: 
+ * A 3D model is useless if you can't interact with it. The UIManager 
+ * provides the controls that let you load files, change views, and 
+ * see information about the building.
+ * --------------------------------------------------------------------------------
+ */
 
 import * as BUI from "@thatopen/ui";
 import * as CUI from "@thatopen/ui-obc";

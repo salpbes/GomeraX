@@ -1,3 +1,17 @@
+/**
+ * TABLE SELECTION MANAGER (The "Sync Master")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module makes sure the 3D view and the table are always in sync. 
+ * If you click a wall in 3D, the table highlights that wall's data. 
+ * If you click a row in the table, the 3D view zooms to that object.
+ * 
+ * WHY IT MATTERS: 
+ * It connects the "Visual" world with the "Data" world. It makes the 
+ * experience seamless, so you always know exactly which object's 
+ * information you are looking at.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import { PropertyTableContext, PropertyRow } from './TableDataManager';

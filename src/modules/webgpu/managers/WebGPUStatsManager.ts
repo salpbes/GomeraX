@@ -1,10 +1,15 @@
 /**
  * WebGPU Stats Manager (The "Stat Bullshit Detector")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Check Engine" light for the renderer. It watches how many 
+ * triangles are being drawn, how much memory is being used, and how fast 
+ * the frames are rendering.
  * 
- * Handles the performance statistics overlay for WebGPU rendering.
- * Displays FPS, frame time, scene statistics, memory usage, and hardware info.
- * 
- * Extracted from WebGPURendererModule for better maintainability.
+ * WHY IT MATTERS: 
+ * It helps developers find performance bottlenecks. If the "FPS" is low or 
+ * "Draw Calls" are high, this module tells us exactly where the problem is.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

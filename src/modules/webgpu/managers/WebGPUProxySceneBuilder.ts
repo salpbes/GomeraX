@@ -1,8 +1,16 @@
 /**
  * WebGPUProxySceneBuilder (The "Scene Sculptor")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the translator. It takes the building models (which are in a format 
+ * WebGPU doesn't understand) and converts them into a "Proxy Scene" that 
+ * WebGPU can render at lightning speed.
  * 
- * Responsible for translating OBC Fragment models into WebGPU-compatible THREE.Scene.
- * Handles geometry sanitization, material conversion, and performance optimizations like merging.
+ * WHY IT MATTERS: 
+ * Without this, WebGPU wouldn't know what to draw. It handles the heavy lifting 
+ * of geometry conversion, material setup, and merging objects together to 
+ * keep the performance high.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

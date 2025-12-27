@@ -1,14 +1,16 @@
 /**
  * Properties Table Module (The "Tabular Analyst")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module creates the "Excel-like" table that shows all the data for 
+ * the objects you've selected. It lists things like dimensions, materials, 
+ * and categories in a clean, searchable list.
  * 
- * Provides a tabular view of properties for selected elements,
- * with features like:
- * - Sorting
- * - Filtering
- * - Selection
- * - Exporting
- * 
- * Integrates with cluster views to show properties of clustered elements.
+ * WHY IT MATTERS: 
+ * BIM is all about data. This module makes that data accessible. It allows 
+ * you to see the "DNA" of the building elements and even export that 
+ * information to a CSV file for use in other programs.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

@@ -1,3 +1,17 @@
+/**
+ * TABLE FILTER MANAGER (The "Search Specialist")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is like the "Search Bar" for your data. It lets you type in 
+ * a word (like "Concrete") and instantly hides everything in the table 
+ * that doesn't match.
+ * 
+ * WHY IT MATTERS: 
+ * When you have hundreds of properties, finding the one you want is hard. 
+ * This module makes it instant, helping you find exactly the information 
+ * you're looking for without scrolling forever.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as THREE from 'three';
 import { PropertyTableContext, PropertyRow } from './TableDataManager';

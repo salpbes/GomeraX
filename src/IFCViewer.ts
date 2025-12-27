@@ -1,14 +1,16 @@
 /**
  * IFC Viewer Application (The "Concrete Master Builder")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Brain" of the entire application. It's the main coordinator 
+ * that brings together the 3D scene, the user interface, the model loading, 
+ * and all the specialized tools (like the Slicer or the Property Table).
  * 
- * Main application class that orchestrates all modules:
- * - WorldManager: Handles the 3D scene setup
- * - IFCLoaderModule: Manages IFC file loading and conversion
- * - UIManager: Provides user interface controls
- * - PerformanceMonitor: Tracks performance metrics
- * - PropertiesPanelModule: Handles entity selection and properties display
- * 
- * This is the entry point that brings everything together.
+ * WHY IT MATTERS: 
+ * Without this, the app would just be a collection of disconnected parts. 
+ * The Master Builder ensures that when you click a button, the right tool 
+ * responds and the 3D view updates correctly.
+ * --------------------------------------------------------------------------------
  */
 
 import { 

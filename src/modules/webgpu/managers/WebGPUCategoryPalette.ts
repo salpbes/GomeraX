@@ -1,11 +1,15 @@
 /**
  * WebGPU Category Palette (The "Enigma Color Coder")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Paint Box" for the building. It assigns specific colors to 
+ * different parts of the building (like Walls being blue, Windows being cyan).
  * 
- * Centralized color palette for IFC categories used in WebGPU rendering.
- * This provides consistent category coloring across Color Splash mode
- * and category-based material assignments.
- * 
- * Extracted from WebGPURendererModule for better maintainability.
+ * WHY IT MATTERS: 
+ * It makes the "Color Splash" mode work. It ensures that every time you 
+ * look at a Wall, it's the same color, making the model much easier to 
+ * understand at a glance.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';

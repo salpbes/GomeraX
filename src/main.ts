@@ -1,8 +1,16 @@
 /**
  * Main Entry Point (The "Pandora's Box")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Start" button of the application. It's the very first file 
+ * that runs when you open the website. It sets up the basic environment 
+ * and kicks off the IFC Viewer.
  * 
- * This file initializes the IFC Viewer application
- * It's the starting point that gets executed when the page loads
+ * WHY IT MATTERS: 
+ * Every app needs a beginning. This file ensures that the styles are loaded, 
+ * the 3D viewer is initialized, and the user interface is ready for you 
+ * to start working.
+ * --------------------------------------------------------------------------------
  */
 
 import { IFCViewer } from './IFCViewer';

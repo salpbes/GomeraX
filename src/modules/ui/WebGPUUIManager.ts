@@ -1,6 +1,16 @@
 /**
- * WebGPUUIManager (The "WebGPU Toggle Wizard")
- * This handles all UI-related functionality for the experimental WebGPU renderer.
+ * WebGPU UI MANAGER (The "WebGPU Toggle Wizard")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module manages the controls for the experimental WebGPU renderer. 
+ * It handles the toggle switch, the performance stats overlay, and the 
+ * settings for the high-performance rendering mode.
+ * 
+ * WHY IT MATTERS: 
+ * WebGPU is the future of web graphics. This module makes it easy for 
+ * users to switch between the standard WebGL mode and the new, faster 
+ * WebGPU mode, while providing feedback on how well it's performing.
+ * --------------------------------------------------------------------------------
  */
 
 import { NotificationHelper } from './NotificationHelper';

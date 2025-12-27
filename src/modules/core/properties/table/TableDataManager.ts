@@ -1,3 +1,17 @@
+/**
+ * TABLE DATA MANAGER (The "Data Librarian")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the brain of the property table. It goes into the building model, 
+ * finds all the technical details (like height, volume, or material), 
+ * and organizes them so they can be displayed in a list.
+ * 
+ * WHY IT MATTERS: 
+ * Models have thousands of pieces of information. This module makes sure 
+ * we only fetch what we need, when we need it, and keeps it all organized 
+ * so the table doesn't get confused or slow down.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';

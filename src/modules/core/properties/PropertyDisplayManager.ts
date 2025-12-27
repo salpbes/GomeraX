@@ -1,3 +1,17 @@
+/**
+ * PROPERTY DISPLAY MANAGER (The "Information Desk")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is responsible for showing the properties of a single 
+ * selected object in the side panel. It handles the layout and 
+ * formatting of the data.
+ * 
+ * WHY IT MATTERS: 
+ * It's the primary way users see the details of what they've clicked. 
+ * It ensures that the information is presented clearly and that 
+ * the user can easily find the specific property they are looking for.
+ * --------------------------------------------------------------------------------
+ */
 import * as THREE from 'three';
 import { PropertiesContext } from './SelectionManager';
 

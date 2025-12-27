@@ -1,3 +1,16 @@
+/**
+ * TABLE UI MANAGER (The "Table Decorator")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is responsible for the "Look and Feel" of the property table. 
+ * It creates the actual rows, columns, and buttons that you see on the screen.
+ * 
+ * WHY IT MATTERS: 
+ * Data is boring if it's just text. This module makes the data pretty and 
+ * easy to read, ensuring that the table fits perfectly into the side panel 
+ * and responds quickly when you scroll.
+ * --------------------------------------------------------------------------------
+ */
 import * as OBC from '@thatopen/components';
 import { PropertyTableContext, PropertyRow } from './TableDataManager';
 

@@ -1,3 +1,17 @@
+/**
+ * TABLE EXPORT MANAGER (The "Data Exporter")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module is the "Save As" button for your data. It takes all the 
+ * information currently in the table and turns it into a CSV file that 
+ * you can open in Excel or Google Sheets.
+ * 
+ * WHY IT MATTERS: 
+ * Sometimes you need to work with the data outside of the viewer. This 
+ * module makes it easy to take your building information with you, 
+ * allowing for further analysis or reporting in other tools.
+ * --------------------------------------------------------------------------------
+ */
 import { PropertyRow } from './TableDataManager';
 
 export class TableExportManager {

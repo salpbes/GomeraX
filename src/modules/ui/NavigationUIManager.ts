@@ -1,7 +1,16 @@
 /**
- * NavigationUIManager (The "Navigation Navigator Navigates")
- * This handles all UI-related functionality for navigation, 
- * including auto-rotate, walk mode, first-person mode, and minimap.
+ * NAVIGATION UI MANAGER (The "Navigation Navigator")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This module manages the controls for moving around the 3D model. 
+ * It handles the buttons for "Walk Mode", "First Person Mode", 
+ * "Auto-Rotate", and the "Minimap".
+ * 
+ * WHY IT MATTERS: 
+ * Navigating a 3D building can be tricky. This module provides different 
+ * ways to explore the space, whether you want to fly around like a bird 
+ * or walk through the corridors like a person.
+ * --------------------------------------------------------------------------------
  */
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';

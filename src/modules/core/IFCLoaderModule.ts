@@ -1,14 +1,16 @@
 /**
- * IFC Loader Module (The "BIM Maestro")
+ * IFC LOADER MODULE (The "BIM Maestro")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is the "Translator" and "Importer". It takes the raw building files 
+ * (IFC) and converts them into a super-fast format (Fragments) that the 
+ * browser can handle easily.
  * 
- * This module handles:
- * - Loading IFC files (Industry Foundation Classes - standard BIM format)
- * - Converting IFC to Fragments (efficient binary format)
- * - Managing fragment models in the scene
- * - Exporting fragments for faster future loading
- * 
- * IFC files are large and complex. The conversion to Fragments makes
- * them much faster to load and work with in the browser.
+ * WHY IT MATTERS: 
+ * BIM files are huge and slow. This module makes them small and fast, 
+ * ensuring that you can open a massive skyscraper on your laptop 
+ * without it crashing.
+ * --------------------------------------------------------------------------------
  */
 
 import * as OBC from '@thatopen/components';

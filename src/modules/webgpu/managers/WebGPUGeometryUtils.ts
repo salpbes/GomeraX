@@ -1,6 +1,16 @@
 /**
  * WebGPU Geometry Utilities (The "Geometry Doctor")
- * Helper functions for geometry manipulation and conversion
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This is a toolbox for fixing and changing 3D shapes. It helps clean up 
+ * messy geometry, merge small pieces together, and prepare everything 
+ * for the WebGPU renderer.
+ * 
+ * WHY IT MATTERS: 
+ * 3D models can be messy. This module acts like a "Geometry Doctor" that 
+ * sanitizes and optimizes the shapes so the computer doesn't have to 
+ * work too hard to draw them.
+ * --------------------------------------------------------------------------------
  */
 
 import * as THREE from 'three';
