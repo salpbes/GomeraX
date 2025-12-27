@@ -131,7 +131,7 @@ export function createToolbarHTML(): string {
       <!-- Color Splash Button (main toolbar button) -->
       <div class="toolbar-group">
         <button class="toolbar-btn" data-action="toggleColorSplash" title="Color Elements by Type" id="colorSplashMainBtn">
-          <span class="icon"><i class="fas fa-paint-brush"></i></span>
+          <span class="icon"><i class="fas fa-layer-group"></i></span>
         </button>
         <div class="toolbar-submenu" id="colorSplashSubmenu">
           <button class="submenu-btn" data-action="cancelColorSplashMode" title="Exit Color Splash & Fit View">
