@@ -41,6 +41,8 @@ import { ClusterUIManager } from './ui/ClusterUIManager';
 import { NotificationUIManager } from './ui/NotificationUIManager';
 import { LoadingUIManager } from './ui/LoadingUIManager';
 import { ModelAlignmentManager } from './ui/ModelAlignmentManager';
+import { AIAssistantModule } from './core/AIAssistantModule';
+import { AIAssistantUIManager } from './ui/AIAssistantUIManager';
 
 
 export class UIManager {
@@ -66,6 +68,8 @@ export class UIManager {
   private notificationUI: NotificationUIManager;
   private loadingUI: LoadingUIManager;
   private alignmentManager: ModelAlignmentManager;
+  private aiAssistantUI: AIAssistantUIManager;
+  private aiAssistantModule: AIAssistantModule;
   
   constructor(
     worldManager: WorldManager,
@@ -90,6 +94,10 @@ export class UIManager {
     this.notificationUI = new NotificationUIManager(this);
     this.loadingUI = new LoadingUIManager(this.ifcLoader);
     this.alignmentManager = new ModelAlignmentManager(this.worldManager.getComponents(), this.ifcLoader);
+    
+    // Initialize AI Assistant
+    this.aiAssistantModule = new AIAssistantModule(this.viewer);
+    this.aiAssistantUI = new AIAssistantUIManager(this.aiAssistantModule);
     
     // Initialize handlers with callbacks and components
     const components = worldManager.getComponents();
@@ -122,6 +130,10 @@ export class UIManager {
 
     // Create loading indicator
     this.createLoadingIndicator();
+    
+    // Initialize AI Assistant UI
+    this.aiAssistantUI.createUI();
+    this.aiAssistantUI.addStyles();
     
     // Set up callback to update model count when metadata is ready
     this.ifcLoader.setMetadataUpdateCallback(() => {
@@ -555,6 +567,9 @@ export class UIManager {
    */
   private handleToolbarAction(action: string): void {
     switch(action) {
+      case 'toggleAI':
+        this.aiAssistantUI.toggle();
+        break;
       case 'upload':
         this.toolbarHandlers.handleFileUpload();
         break;

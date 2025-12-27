@@ -554,6 +554,13 @@ export function createToolbarHTML(): string {
           </div>
         </div>
       </div>
+
+      <!-- AI Assistant Group -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleAI" title="AI Assistant">
+          <span class="icon"><i class="fas fa-robot"></i></span>
+        </button>
+      </div>
     </div>
     
     <!-- Settings Panel (hidden by default) -->
