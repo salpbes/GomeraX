@@ -1,5 +1,5 @@
 /**
- * WebGPU Stats Manager
+ * WebGPU Stats Manager (The "Stat Bullshit Detector")
  * 
  * Handles the performance statistics overlay for WebGPU rendering.
  * Displays FPS, frame time, scene statistics, memory usage, and hardware info.
@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import type { WebGPULODManager } from '../WebGPULODManager';
+import type { WebGPULODManager } from './WebGPULODManager';
 
 // WebGPURenderer is dynamically imported at runtime, so we use 'any' type here
 type WebGPURendererType = any;

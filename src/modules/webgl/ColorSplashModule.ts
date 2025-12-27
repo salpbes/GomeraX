@@ -1,5 +1,5 @@
 /**
- * COLOR SPLASH (The "Highlighter")
+ * COLOR SPLASH (The "Splash Highlighter")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module automatically colors the whole building based on object types. 
@@ -237,7 +237,7 @@ export class ColorSplashModule {
     if (this.webgpu) {
       const categoryColors = new Map<string, THREE.Color>();
       for (const info of this.categoryInfo.values()) {
-        categoryColors.set(info.category, info.color);
+        categoryColors.set(info.category.toUpperCase(), info.color);
       }
       this.webgpu.setColorSplash(true, categoryColors);
     }

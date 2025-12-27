@@ -1,11 +1,15 @@
+/**
+ * FloorPlanUIManager (The "Floor Plan Facilitator")
+ * This handles all UI-related functionality for floor plans.
+ * It manages user interactions with the floor plan buttons
+ * and ensures safe operation when floor plans are active.
+ */
 import { NotificationHelper } from './NotificationHelper';
 import { WorldManager } from '../webgl/WorldManager';
 import { ClusterModule } from '../webgl/ClusterModule';
 import { FloorPlanModule } from '../webgl/FloorPlanModule';
 
-/**
- * FloorPlanUIManager handles all UI-related functionality for floor plans.
- */
+
 export class FloorPlanUIManager {
   private floorPlanModule: FloorPlanModule | null = null;
 

@@ -1,13 +1,15 @@
+/**
+ * NavigationUIManager (The "Navigation Navigator Navigates")
+ * This handles all UI-related functionality for navigation, 
+ * including auto-rotate, walk mode, first-person mode, and minimap.
+ */
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import { NotificationHelper } from './NotificationHelper';
 import { WorldManager } from '../webgl/WorldManager';
 import { MinimapModule } from '../webgl/MinimapModule';
 
-/**
- * NavigationUIManager handles all UI-related functionality for navigation, 
- * including auto-rotate, walk mode, first-person mode, and minimap.
- */
+
 export class NavigationUIManager {
   private isAutoRotating: boolean = false;
   private autoRotateAnimationId: number | null = null;

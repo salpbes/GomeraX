@@ -1,5 +1,7 @@
 /**
- * ViewerWebGPUAPI handles all WebGPU-related operations for the IFCViewer.
+ * ViewerWebGPUAPI (The "Command Center for Extreme Graphics")
+ * 
+ * This handles all WebGPU-related operations for the IFCViewer.
  * This separates the experimental WebGPU API from the core viewer logic.
  */
 

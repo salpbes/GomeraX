@@ -1,5 +1,5 @@
 /**
- * SPACE VISIBILITY (The "X-Ray Vision")
+ * SPACE VISIBILITY (The "Hide and Seek")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * IFC models often contain "Spaces" (invisible boxes representing rooms). 

@@ -1,9 +1,14 @@
+/**
+ * 
+ * ClusterUIManager (The "Clustering Coordinator")
+ * This handles all UI-related functionality for clustering.
+ * It manages user interactions with the clustering buttons
+ * and ensures safe operation when clustering is active.
+ */
 import { NotificationHelper } from './NotificationHelper';
 import { ClusterModule } from '../webgl/ClusterModule';
 
-/**
- * ClusterUIManager handles all UI-related functionality for clustering.
- */
+
 export class ClusterUIManager {
   constructor(
     private viewer: any,

@@ -1,9 +1,10 @@
+/** ModelAlignmentManager (The "Alignment Architect")
+ * This handles all functionality for misaligned or not aligned IFC model alignment and coordinate extraction.
+ */
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
 
-/**
- * Manager for IFC model alignment and coordinate extraction
- */
+
 export class ModelAlignmentManager {
   private components: OBC.Components;
   private ifcLoader: any;

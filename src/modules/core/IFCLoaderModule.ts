@@ -1,5 +1,5 @@
 /**
- * IFC Loader Module
+ * IFC Loader Module (The "BIM Maestro")
  * 
  * This module handles:
  * - Loading IFC files (Industry Foundation Classes - standard BIM format)

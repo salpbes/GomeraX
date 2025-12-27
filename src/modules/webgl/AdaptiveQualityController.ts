@@ -1,5 +1,5 @@
 /**
- * ADAPTIVE QUALITY CONTROLLER (The "Auto-Pilot")
+ * ADAPTIVE QUALITY CONTROLLER (The "FPS Auto-Pilot")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module watches your computer's performance (FPS). If the viewer starts 

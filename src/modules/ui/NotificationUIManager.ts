@@ -1,9 +1,11 @@
-import { NotificationHelper } from './NotificationHelper';
-
 /**
- * NotificationUIManager handles specialized notifications like coordinate warnings
+ * NotificationUIManager (The "Unwanted Notifier")
+ * This handles specialized notifications like coordinate warnings
  * and error notifications with action buttons.
  */
+import { NotificationHelper } from './NotificationHelper';
+
+
 export class NotificationUIManager {
   constructor(private uiManager: any) {}
 

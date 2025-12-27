@@ -1,5 +1,5 @@
 /**
- * TOOLBAR BUILDER (The "Architect")
+ * TOOLBAR BUILDER (The "Senior Architect")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This file builds the visual skeleton of the bottom menu bar. It defines 

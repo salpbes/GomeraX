@@ -1,5 +1,5 @@
 /**
- * DASHBOARD UI MANAGER (The "Layout Designer")
+ * DASHBOARD UI MANAGER (The "Interior Designer")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module builds the actual "window" that the dashboard lives in. 

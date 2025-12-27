@@ -1,5 +1,5 @@
 /**
- * SLICER DATA MANAGER (The "Slicer Accountant")
+ * SLICER DATA MANAGER (The "Slicer Account Department")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module is the brain of the filtering system. It keeps track of 

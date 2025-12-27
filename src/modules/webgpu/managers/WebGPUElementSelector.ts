@@ -1,5 +1,5 @@
 /**
- * WEBGPU ELEMENT SELECTOR (The "Precision Tool")
+ * WEBGPU ELEMENT SELECTOR (The "Precision Laser Tool")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * In WebGPU mode, the building is often merged into one big piece for speed. 
@@ -176,8 +176,6 @@ export class WebGPUElementSelector {
     // Tolerance must be less than 1/255 ≈ 0.0039 to avoid matching adjacent IDs
     const tolerance = 0.002;
     
-    console.log(`🔍 Extracting geometry for elementId=${elementId}, targetColor=RGB(${(targetColor.r*255).toFixed(0)}, ${(targetColor.g*255).toFixed(0)}, ${(targetColor.b*255).toFixed(0)})`);
-    
     const positions: number[] = [];
     const normals: number[] = [];
     let matchedTriangles = 0;
@@ -286,8 +284,6 @@ export class WebGPUElementSelector {
       }
     });
     
-    console.log(`🔍 Extraction complete: ${matchedTriangles} triangles matched out of ${totalTriangles} checked`);
-    
     if (positions.length === 0) {
       return null;
     }
@@ -347,7 +343,7 @@ export class WebGPUElementSelector {
         mesh.matrix.copy(loc.mesh.matrixWorld);
         mesh.matrixWorld.copy(loc.mesh.matrixWorld);
         mesh.matrixAutoUpdate = false;
-        mesh.renderOrder = 1000;
+        mesh.renderOrder = 9999; // FORCE HIGH RENDER ORDER
         mesh.frustumCulled = false;
         
         group.add(mesh);
@@ -359,13 +355,8 @@ export class WebGPUElementSelector {
     // Fallback: slow geometry extraction
     const geometry = this.extractElementGeometry(elementId);
     if (!geometry) {
-      console.warn(`⚠️ No geometry extracted for elementId=${elementId}`);
       return null;
     }
-    
-    const posAttr = geometry.getAttribute('position');
-    const triangleCount = posAttr ? posAttr.count / 3 : 0;
-    console.log(`📐 Extracted ${triangleCount} triangles for elementId=${elementId}`);
     
     const material = new THREE.MeshBasicMaterial({
       color: this.selectionColor,
@@ -381,7 +372,7 @@ export class WebGPUElementSelector {
     
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = `selection-overlay-${elementId}`;
-    mesh.renderOrder = 1000;
+    mesh.renderOrder = 9999;
     mesh.frustumCulled = false;
     
     return mesh;
@@ -431,7 +422,7 @@ export class WebGPUElementSelector {
         mesh.matrix.copy(loc.mesh.matrixWorld);
         mesh.matrixWorld.copy(loc.mesh.matrixWorld);
         mesh.matrixAutoUpdate = false;
-        mesh.renderOrder = 999;
+        mesh.renderOrder = 9999;
         mesh.frustumCulled = false;
         
         group.add(mesh);
@@ -458,7 +449,7 @@ export class WebGPUElementSelector {
     
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = `hover-overlay-${elementId}`;
-    mesh.renderOrder = 999;
+    mesh.renderOrder = 9999;
     mesh.frustumCulled = false;
     
     return mesh;
@@ -531,24 +522,30 @@ export class WebGPUElementSelector {
     
     overlay.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        // CRITICAL: Only dispose geometry if it's NOT sharing attributes with the main model.
-        // In the instant drawRange method, we create a new BufferGeometry but share attributes.
-        // Disposing it can sometimes cause the renderer to lose the shared buffers.
-        if (obj.geometry) {
-          if (obj.geometry.userData.isShared) {
-            // Just null it out, don't dispose
-            (obj as any).geometry = null;
-          } else {
-            obj.geometry.dispose();
+        try {
+          // CRITICAL: Only dispose geometry if it's NOT sharing attributes with the main model.
+          // In the instant drawRange method, we create a new BufferGeometry but share attributes.
+          // Disposing it can sometimes cause the renderer to lose the shared buffers.
+          if (obj.geometry) {
+            if (obj.geometry.userData.isShared) {
+              // Just null it out, don't dispose
+              (obj as any).geometry = null;
+            } else {
+              obj.geometry.dispose();
+            }
           }
-        }
-        
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach(m => m.dispose());
-          } else if (obj.material instanceof THREE.Material) {
-            obj.material.dispose();
+          
+          if (obj.material) {
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach(m => {
+                try { m.dispose(); } catch (e) {}
+              });
+            } else if (obj.material instanceof THREE.Material) {
+              obj.material.dispose();
+            }
           }
+        } catch (e) {
+          console.warn('Error disposing overlay resources:', e);
         }
       }
     });

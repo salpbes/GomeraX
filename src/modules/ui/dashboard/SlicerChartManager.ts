@@ -1,5 +1,5 @@
 /**
- * SLICER CHART MANAGER (The "Slicer Artist")
+ * SLICER CHART MANAGER (The "Slicer Art Department")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module draws the charts specifically for the Slicer tool. When you 

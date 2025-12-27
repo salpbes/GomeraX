@@ -1,6 +1,6 @@
 /**
  * NOTES FOR FUTURE DEVELOPMENT
- * WEBGPU AMBIENT OCCLUSION (The "Shadow Detailer")
+ * WEBGPU AMBIENT OCCLUSION (The "Feature Shadow Detailer")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module was intended to add "soft shadows" in corners and cracks to 

@@ -1,9 +1,11 @@
+/**
+ * SelectionUIManager (The "Army Recruiter")
+ * This handles all UI-related functionality for selection and visibility.
+ */
 import { NotificationHelper } from './NotificationHelper';
 import { WorldManager } from '../webgl/WorldManager';
 
-/**
- * SelectionUIManager handles all UI-related functionality for selection and visibility.
- */
+
 export class SelectionUIManager {
   constructor(
     private viewer: any,

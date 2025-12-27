@@ -1,8 +1,11 @@
+/**
+ * WebGPUUIManager (The "WebGPU Toggle Wizard")
+ * This handles all UI-related functionality for the experimental WebGPU renderer.
+ */
+
 import { NotificationHelper } from './NotificationHelper';
 
-/**
- * WebGPUUIManager handles all UI-related functionality for the experimental WebGPU renderer.
- */
+
 export class WebGPUUIManager {
   constructor(private viewer: any) {}
 

@@ -1,3 +1,16 @@
+/**
+ * Properties Table Module (The "Tabular Analyst")
+ * 
+ * Provides a tabular view of properties for selected elements,
+ * with features like:
+ * - Sorting
+ * - Filtering
+ * - Selection
+ * - Exporting
+ * 
+ * Integrates with cluster views to show properties of clustered elements.
+ */
+
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as THREE from 'three';

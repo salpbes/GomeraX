@@ -1,5 +1,5 @@
 /**
- * SLICER DASHBOARD (The "Remote Control")
+ * SLICER DASHBOARD (The "Pizza Slicer Pro")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is the main tool for filtering your 3D model. It lets you click on 
@@ -407,7 +407,7 @@ export class SlicerDashboard {
       if (Object.keys(trans).length > 0) {
         this.highlighter.styles.set('slicer-transparent', { 
           color: new THREE.Color(0x888888), 
-          opacity: 0.4, 
+          opacity: 0.6, 
           transparent: true, 
           renderedFaces: 1,
           alphaToCoverage: true,

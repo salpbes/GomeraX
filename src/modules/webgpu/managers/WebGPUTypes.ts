@@ -1,5 +1,6 @@
 /**
- * WebGPU Types and Interfaces
+ * WebGPU Types and Interfaces (The "Not My Type Library")
+ * 
  * Shared type definitions for the WebGPU renderer module
  */
 
@@ -90,6 +91,18 @@ export interface OptimizationConfig {
   geometryMergingEnabled: boolean;
   shadowCachingEnabled: boolean;
   cameraMovedThreshold: number;
+}
+
+/**
+ * Options for in-place proxy scene building
+ */
+export interface WebGPUInPlaceOptions {
+  frustumCulling: boolean;
+  materialBackup: Map<string, THREE.Material | THREE.Material[]>;
+  visibilityBackup: Map<string, boolean>;
+  geometryBackup: Map<string, THREE.BufferGeometry>;
+  onBeforeRenderBackup: Map<string, THREE.Object3D['onBeforeRender']>;
+  onAfterRenderBackup: Map<string, THREE.Object3D['onAfterRender']>;
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * MODEL TRANSFORM (The "Mover")
+ * MODEL TRANSFORM (The "House Movers")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module handles the position of the building in 3D space. If you load 

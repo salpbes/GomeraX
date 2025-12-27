@@ -1,5 +1,5 @@
 /**
- * WebGPU Category Palette
+ * WebGPU Category Palette (The "Enigma Color Coder")
  * 
  * Centralized color palette for IFC categories used in WebGPU rendering.
  * This provides consistent category coloring across Color Splash mode
@@ -9,6 +9,56 @@
  */
 
 import * as THREE from 'three';
+
+/**
+ * WebGPU Category Palette
+ * 
+ * Centralized color palette for IFC categories used in WebGPU rendering.
+ * This provides consistent category coloring across Color Splash mode
+ * and category-based material assignments.
+ */
+export class WebGPUCategoryPalette {
+  /**
+   * Get the color for an IFC category
+   * @param category The IFC category name (e.g., 'IFCWALL')
+   * @returns Hex color value
+   */
+  public getColor(category: string): number {
+    return getCategoryColor(category);
+  }
+
+  /**
+   * Get the color for an IFC category as a THREE.Color
+   * @param category The IFC category name
+   * @returns THREE.Color instance
+   */
+  public getColorAsThree(category: string): THREE.Color {
+    return getCategoryColorAsThree(category);
+  }
+
+  /**
+   * Get or create a MeshStandardMaterial for a category
+   * @param category The IFC category name
+   * @returns MeshStandardMaterial with the category color
+   */
+  public getMaterial(category: string): THREE.MeshStandardMaterial {
+    return getOrCreateCategoryMaterial(category);
+  }
+
+  /**
+   * Clear the material cache
+   */
+  public dispose(): void {
+    clearCategoryMaterialCache();
+  }
+
+  /**
+   * Get all available IFC categories
+   */
+  public getAllCategories(): string[] {
+    return getAllCategories();
+  }
+}
 
 /**
  * IFC Category color palette mapping

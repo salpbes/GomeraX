@@ -1,5 +1,5 @@
 /**
- * TOOLBAR HANDLERS (The "Brain")
+ * TOOLBAR HANDLERS (The "Brain Behind the Buttons")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is the logic center for the menu bar. While the Builder creates the 

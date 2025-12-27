@@ -1,5 +1,7 @@
 /**
- * UIManager class handles all UI-related functionality
+ * UIManager (The "Director of Screenplay")
+ * 
+ * This class handles all UI-related functionality
  * Refactored into modular components for better maintainability
  * 
  * Layman's terms:

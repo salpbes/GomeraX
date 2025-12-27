@@ -1,5 +1,5 @@
 /**
- * SLICER UI MANAGER (The "Slicer Layout Designer")
+ * SLICER UI MANAGER (The "Slicer Layout Department")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module builds the visual panel for the Slicer tool. It creates the 

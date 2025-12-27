@@ -1,5 +1,5 @@
 /**
- * WEBGPU OUTLINE MANAGER (The "Highlighter")
+ * WEBGPU OUTLINE MANAGER (The "Lighthouse Highlighter")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module draws the glowing lines around objects when you select them 
@@ -12,36 +12,6 @@
  * --------------------------------------------------------------------------------
  */
 
-/**
- * =============================================================================
- * WebGPU Outline Manager
- * =============================================================================
- * 
- * This module provides outline/selection highlighting for WebGPU mode.
- * 
- * HOW IT WORKS:
- * -------------
- * The outline effect is achieved using a multi-pass rendering approach:
- * 
- * 1. SELECTION TRACKING: Track which objects are currently "selected" by the user
- *    via raycasting clicks on the proxy scene.
- * 
- * 2. OUTLINE RENDERING: For selected objects, we:
- *    - Render selected meshes with a special outline material
- *    - Use scaled-up back-face rendering to create an outline effect
- *    - The outline color is configurable (default: blue)
- * 
- * 3. HOVER EFFECT: Objects under mouse cursor get a subtle highlight
- * 
- * INTEGRATION:
- * -----------
- * - Listens for click events to select objects
- * - Provides methods to programmatically select/deselect objects
- * - Integrates with WebGPURendererModule's render loop
- * 
- * @see https://threejs.org/docs/#api/en/renderers/WebGPURenderer
- * =============================================================================
- */
 
 import * as THREE from 'three';
 
@@ -402,10 +372,7 @@ export class WebGPUOutlineManager {
       transparent: true,
       opacity: 0.5,
       depthWrite: false,
-      depthTest: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
+      depthTest: false, // Always render on top
     });
     
     // Clone geometry for outline
@@ -443,7 +410,8 @@ export class WebGPUOutlineManager {
     const outlineMesh = this.outlineMeshes.get(meshId);
     if (outlineMesh && this.scene) {
       this.scene.remove(outlineMesh);
-      outlineMesh.geometry.dispose();
+      // DO NOT dispose geometry as it is shared with the original mesh
+      // outlineMesh.geometry.dispose(); 
       this.outlineMeshes.delete(meshId);
     }
   }
@@ -461,10 +429,7 @@ export class WebGPUOutlineManager {
       transparent: true,
       opacity: 0.3,
       depthWrite: false,
-      depthTest: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1
+      depthTest: false, // Always render on top
     });
     
     // Use same geometry (no clone needed)
@@ -495,7 +460,8 @@ export class WebGPUOutlineManager {
   private removeHoverOutline(): void {
     if (this.hoverOutlineMesh && this.scene) {
       this.scene.remove(this.hoverOutlineMesh);
-      this.hoverOutlineMesh.geometry.dispose();
+      // DO NOT dispose geometry as it is shared with the original mesh
+      // this.hoverOutlineMesh.geometry.dispose();
       this.hoverOutlineMesh = null;
     }
   }
@@ -584,6 +550,13 @@ export class WebGPUOutlineManager {
     }
     
     console.log(`🎯 Outline effect ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Check if outline effect is enabled
+   */
+  public isEnabled(): boolean {
+    return this.settings.enabled;
   }
 
   /**
@@ -741,13 +714,17 @@ export class WebGPUOutlineManager {
     this.removeHoverOutline();
     
     // Dispose materials
-    if (this.selectionOutlineMaterial) {
-      this.selectionOutlineMaterial.dispose();
-      this.selectionOutlineMaterial = null;
-    }
-    if (this.hoverOutlineMaterial) {
-      this.hoverOutlineMaterial.dispose();
-      this.hoverOutlineMaterial = null;
+    try {
+      if (this.selectionOutlineMaterial) {
+        this.selectionOutlineMaterial.dispose();
+        this.selectionOutlineMaterial = null;
+      }
+      if (this.hoverOutlineMaterial) {
+        this.hoverOutlineMaterial.dispose();
+        this.hoverOutlineMaterial = null;
+      }
+    } catch (e) {
+      console.warn('Error disposing outline materials:', e);
     }
     
     // Clear references

@@ -1,5 +1,5 @@
 /**
- * WEBGPU COLOR PICKER (The "Eye")
+ * WEBGPU COLOR PICKER (The "Picky Eye")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module is what allows the computer to "see" what you are clicking 
@@ -77,10 +77,14 @@ export class WebGPUColorPicker {
     this.camera = camera;
     this.container = container;
     
-    // Reset state for new scene
-    this.reset();
+    // DO NOT RESET HERE! 
+    // Resetting here wipes out the element registry that was populated during scene build.
+    // Reset should be called explicitly before building the scene.
     
-    console.log('✅ WebGPU Color Picker initialized (CPU raycast mode)');
+    console.log('✅ WebGPU Color Picker initialized (CPU raycast mode)', {
+      sceneChildren: scene.children.length,
+      container: container.id || container.tagName
+    });
   }
 
   /**
@@ -179,6 +183,12 @@ export class WebGPUColorPicker {
     screenY: number
   ): Promise<PickingResult | null> {
     if (!this.enabled || !this.scene || !this.camera || !this.container) {
+      console.warn('⚠️ ColorPicker: Missing dependencies or disabled', { 
+        enabled: this.enabled, 
+        scene: !!this.scene, 
+        camera: !!this.camera, 
+        container: !!this.container 
+      });
       return null;
     }
     
@@ -195,7 +205,6 @@ export class WebGPUColorPicker {
     const intersects = this.raycaster.intersectObjects(this.scene.children, true);
     
     if (intersects.length === 0) {
-      // console.log('🔍 Raycast hit nothing');
       return null;
     }
     
@@ -218,7 +227,10 @@ export class WebGPUColorPicker {
       
       // Check if geometry has elementColor attribute
       const elementColorAttr = geometry.getAttribute('elementColor');
-      if (!elementColorAttr) continue;
+      if (!elementColorAttr) {
+
+        continue;
+      }
       
       // Get the face index from the intersection
       const faceIndex = intersect.faceIndex;
@@ -251,7 +263,6 @@ export class WebGPUColorPicker {
       
       const info = this.elementIdToInfo.get(elementId);
       if (!info) {
-        console.warn(`⚠️ Unknown element ID: ${elementId}`);
         continue;
       }
       
@@ -328,6 +339,13 @@ export class WebGPUColorPicker {
    */
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+  }
+
+  /**
+   * Check if picking is enabled
+   */
+  public isEnabled(): boolean {
+    return this.enabled;
   }
 
   /**

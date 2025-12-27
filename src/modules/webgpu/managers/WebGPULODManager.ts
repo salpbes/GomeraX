@@ -13,28 +13,6 @@
  * --------------------------------------------------------------------------------
  */
 
-/**
- * =============================================================================
- * WebGPU Level of Detail (LOD) Manager
- * =============================================================================
- * 
- * Automatic level-of-detail system for WebGPU renderer. Reduces geometry
- * complexity for distant objects to improve rendering performance.
- * 
- * Features:
- * - Automatic LOD switching based on camera distance
- * - Two detail levels: Full and Simplified
- * - Configurable distance threshold
- * - Real-time LOD statistics
- * - Works with nested object hierarchies (uses world position)
- * 
- * How it works:
- * - Full Detail: Original geometry (within threshold distance)
- * - Simplified: Reduced geometry (~25% triangles, beyond threshold)
- * 
- * @see https://threejs.org/docs/#api/en/objects/LOD
- * =============================================================================
- */
 
 import * as THREE from 'three';
 

@@ -1,9 +1,13 @@
+/**
+ * MeasurementUIManager (The "Measurement Maestro")
+ * This handles all UI-related functionality for measurements.
+ * It manages user interactions with the measurement buttons
+ * and ensures safe operation when measurements are active.
+ */
 import { NotificationHelper } from './NotificationHelper';
 import { ClusterModule } from '../webgl/ClusterModule';
 
-/**
- * MeasurementUIManager handles all UI-related functionality for measurements.
- */
+
 export class MeasurementUIManager {
   constructor(
     private viewer: any,

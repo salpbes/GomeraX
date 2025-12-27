@@ -220,6 +220,8 @@ export class TableUIManager {
   public appendRowsToTable(rows: PropertyRow[]): void {
     if (!this.tableBody) return;
     
+    const fragment = document.createDocumentFragment();
+    
     rows.forEach(row => {
       const tr = document.createElement('tr');
       tr.onclick = () => (this.context as any).selectionManager.handleRowClick(row, tr);
@@ -231,8 +233,10 @@ export class TableUIManager {
         tr.appendChild(td);
       });
       
-      this.tableBody!.appendChild(tr);
+      fragment.appendChild(tr);
     });
+    
+    this.tableBody.appendChild(fragment);
   }
 
   public updateLoadingProgress(loaded: number, total: number, isComplete: boolean = false, isPaused: boolean = false): void {

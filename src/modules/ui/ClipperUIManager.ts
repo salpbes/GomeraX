@@ -1,10 +1,24 @@
+/**
+ * CLIPPER UI MANAGER (The "Sectioning Supervisor")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This class manages all UI-related functionality for the Clipper (sectioning) tool.
+ * It handles user interactions with the sectioning buttons and ensures safe 
+ * visual styles during sectioning operations.
+ * ClipperUIManager handles all UI-related functionality for sectioning and clipping.
+ * 
+ * HOW IT CONNECTS:
+ * - IFCViewer: Interfaces with the main viewer to control the clipper tool.
+ * - WorldManager: Adjusts visual styles based on sectioning state.
+ * - ClusterModule: Checks for clustering mode to prevent conflicts with sectioning.
+ * --------------------------------------------------------------------------------
+
+ */
 import { NotificationHelper } from './NotificationHelper';
 import { WorldManager } from '../webgl/WorldManager';
 import { ClusterModule } from '../webgl/ClusterModule';
 
-/**
- * ClipperUIManager handles all UI-related functionality for sectioning and clipping.
- */
+
 export class ClipperUIManager {
   constructor(
     private viewer: any,

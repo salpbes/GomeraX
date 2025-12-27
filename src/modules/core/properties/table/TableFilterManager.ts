@@ -264,10 +264,6 @@ export class TableFilterManager {
         if (expressID !== undefined && expressID !== null) {
           const id = Number(expressID);
           
-          // Logic:
-          // 1. If isolation is active, only the isolated ID is visible.
-          // 2. If only filtering is active, all visibleIds are visible.
-          // 3. If nothing is active, everything is visible.
           let isVisible = true;
           if (isIsolationActive) {
             isVisible = (id === this.isolatedId);
@@ -281,42 +277,36 @@ export class TableFilterManager {
 
           updatedCount++;
           
-          // If it's a mesh, update its material
-          if (obj instanceof THREE.Mesh && obj.material) {
-            const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-            materials.forEach((mat: any) => {
-              mat.transparent = !isVisible; 
-              mat.opacity = isVisible ? 1.0 : 0.35;
-              mat.depthWrite = isVisible;
-              
-              if (mat.alphaToCoverage !== undefined) {
-                mat.alphaToCoverage = !isVisible;
-              }
-              
-              if (mat.needsUpdate !== undefined) {
-                mat.needsUpdate = true;
-              }
-            });
-          }
+          // Update material for this object and its children if it's a group
+          const updateObjectMaterial = (target: THREE.Object3D) => {
+            if (target instanceof THREE.Mesh && target.material) {
+              const materials = Array.isArray(target.material) ? target.material : [target.material];
+              materials.forEach((mat: any) => {
+                if (mat.opacity === (isVisible ? 1.0 : 0.35) && mat.transparent === !isVisible) return;
+                
+                mat.transparent = !isVisible; 
+                mat.opacity = isVisible ? 1.0 : 0.35;
+                mat.depthWrite = isVisible;
+                
+                if (mat.alphaToCoverage !== undefined) {
+                  mat.alphaToCoverage = !isVisible;
+                }
+                
+                if (mat.needsUpdate !== undefined) {
+                  mat.needsUpdate = true;
+                }
+              });
+            }
+          };
+
+          updateObjectMaterial(obj);
           
-          // If it's a group, we need to update all its child meshes
+          // If it's a group, update all its child meshes
           if (obj instanceof THREE.Group) {
-            obj.traverse((child) => {
-              if (child instanceof THREE.Mesh && child.material) {
-                const materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.forEach((mat: any) => {
-                  mat.transparent = !isVisible; 
-                  mat.opacity = isVisible ? 1.0 : 0.35;
-                  mat.depthWrite = isVisible;
-                  
-                  if (mat.alphaToCoverage !== undefined) {
-                    mat.alphaToCoverage = !isVisible;
-                  }
-                  
-                  if (mat.needsUpdate !== undefined) {
-                    mat.needsUpdate = true;
-                  }
-                });
+            obj.children.forEach(child => {
+              if (child instanceof THREE.Mesh) updateObjectMaterial(child);
+              else if (child instanceof THREE.Group) {
+                child.traverse(c => updateObjectMaterial(c));
               }
             });
           }

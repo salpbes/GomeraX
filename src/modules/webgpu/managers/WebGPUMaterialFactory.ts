@@ -1,5 +1,5 @@
 /**
- * WebGPU Material Factory
+ * WebGPU Material Factory (The "Material Alchemist")
  * 
  * Centralized material creation and caching for WebGPU rendering.
  * Handles conversion of OBC/IFC materials to WebGPU-compatible THREE.js materials.
@@ -66,10 +66,10 @@ export class WebGPUMaterialFactory {
   public getOrCreateGhostMaterial(): THREE.MeshStandardMaterial {
     if (!this.ghostMaterial) {
       this.ghostMaterial = new THREE.MeshStandardMaterial({
-        color: 0xcccccc,
+        color: 0xaaaaaa,
         roughness: 1,
         metalness: 0,
-        opacity: 0.15,
+        opacity: 0.6,
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -112,6 +112,27 @@ export class WebGPUMaterialFactory {
     this.materialCache.set(key, mat);
     return mat;
   }
+
+  /**
+   * Create a compatible material for in-place scene swapping.
+   * Converts any material (ShaderMaterial, etc.) to a basic WebGPU-safe material.
+   */
+  public createCompatibleMaterial(original: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] {
+    const base = Array.isArray(original) ? original[0] : original;
+
+    // Extract a best-effort color
+    let color: any = 0x888888;
+    if (base && (base as any).color) color = (base as any).color;
+    else if (base && (base as any).uniforms?.diffuse?.value) color = (base as any).uniforms.diffuse.value;
+
+    return new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      transparent: !!(base && (base as any).transparent),
+      opacity: (base && typeof (base as any).opacity === 'number') ? (base as any).opacity : 1.0,
+      wireframe: !!(base && (base as any).wireframe)
+    });
+  }
   
   /**
    * Create material from raw material data (model.getMaterials())
@@ -142,30 +163,6 @@ export class WebGPUMaterialFactory {
   }
   
   /**
-   * Get or create a Color Splash material for a category
-   */
-  public getOrCreateColorSplashMaterial(
-    category: string, 
-    colorSplashColors: Map<string, THREE.Color>
-  ): THREE.MeshStandardMaterial | null {
-    const color = colorSplashColors.get(category);
-    if (!color) return null;
-    
-    const key = `splash_${category}_${color.getHexString()}`;
-    const cached = this.colorSplashCache.get(key);
-    if (cached) return cached;
-    
-    const mat = new THREE.MeshStandardMaterial({
-      color: color.clone(),
-      roughness: 1,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
-    this.colorSplashCache.set(key, mat);
-    return mat;
-  }
-  
-  /**
    * Get or create a Slicer material for a specific color
    */
   public getOrCreateSlicerMaterial(color: THREE.Color): THREE.MeshStandardMaterial {
@@ -184,6 +181,27 @@ export class WebGPUMaterialFactory {
       depthWrite: false
     });
     this.slicerMaterialCache.set(key, mat);
+    return mat;
+  }
+
+  /**
+   * Get or create a Color Splash material (opaque)
+   */
+  public getOrCreateColorSplashMaterial(color: THREE.Color): THREE.MeshStandardMaterial {
+    const key = `splash_${color.getHexString()}`;
+    const cached = this.colorSplashCache.get(key);
+    if (cached) return cached;
+    
+    const mat = new THREE.MeshStandardMaterial({
+      color: color.clone(),
+      roughness: 1,
+      metalness: 0,
+      side: THREE.DoubleSide,
+      opacity: 1.0,
+      transparent: false,
+      depthWrite: true
+    });
+    this.colorSplashCache.set(key, mat);
     return mat;
   }
   
@@ -281,17 +299,26 @@ export class WebGPUMaterialFactory {
    */
   public clearCaches(): void {
     // Dispose all cached materials
+    const disposeSafe = (mat: THREE.Material | null) => {
+      if (!mat) return;
+      try {
+        mat.dispose();
+      } catch (e) {
+        // Ignore disposal errors (often happens in WebGPU if renderer is already gone)
+      }
+    };
+
     for (const mat of this.materialCache.values()) {
-      mat.dispose();
+      disposeSafe(mat);
     }
     for (const mat of this.realMaterialCache.values()) {
-      mat.dispose();
+      disposeSafe(mat);
     }
     for (const mat of this.slicerMaterialCache.values()) {
-      mat.dispose();
+      disposeSafe(mat);
     }
     for (const mat of this.colorSplashCache.values()) {
-      mat.dispose();
+      disposeSafe(mat);
     }
     
     this.materialCache.clear();
@@ -300,11 +327,11 @@ export class WebGPUMaterialFactory {
     this.colorSplashCache.clear();
     
     if (this.ghostMaterial) {
-      this.ghostMaterial.dispose();
+      disposeSafe(this.ghostMaterial);
       this.ghostMaterial = null;
     }
     if (this.sharedMaterial) {
-      this.sharedMaterial.dispose();
+      disposeSafe(this.sharedMaterial);
       this.sharedMaterial = null;
     }
   }

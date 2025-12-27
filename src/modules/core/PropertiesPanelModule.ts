@@ -1,5 +1,5 @@
 /**
- * Properties Panel Module
+ * Properties Panel Module (The "Building Inspector")
  * 
  * Provides:
  * - Simple model tree view

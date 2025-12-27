@@ -1,5 +1,5 @@
 /**
- * IFC Viewer Application
+ * IFC Viewer Application (The "Concrete Master Builder")
  * 
  * Main application class that orchestrates all modules:
  * - WorldManager: Handles the 3D scene setup

@@ -1,5 +1,5 @@
 /**
- * Main Entry Point
+ * Main Entry Point (The "Pandora's Box")
  * 
  * This file initializes the IFC Viewer application
  * It's the starting point that gets executed when the page loads

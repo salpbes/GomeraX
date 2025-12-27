@@ -98,25 +98,31 @@ export class TableDataManager {
    * Load properties for specific categories (used by ColorSplash/Cluster)
    */
   public async loadPropertiesForCategories(elementsByCategory: Map<string, { [key: string]: Set<number> }>): Promise<void> {
-    const idsByModel = new Map<string, number[]>();
+    const idsByModel = new Map<string, Set<number>>();
     let totalCount = 0;
 
     for (const [category, models] of elementsByCategory) {
       for (const [modelId, ids] of Object.entries(models)) {
         if (!idsByModel.has(modelId)) {
-          idsByModel.set(modelId, []);
+          idsByModel.set(modelId, new Set<number>());
         }
         const modelIds = idsByModel.get(modelId)!;
         ids.forEach(id => {
-          if (!modelIds.includes(id)) {
-            modelIds.push(id);
+          if (!modelIds.has(id)) {
+            modelIds.add(id);
             totalCount++;
           }
         });
       }
     }
 
-    await this.fetchAndStreamProperties(idsByModel, totalCount);
+    // Convert Sets back to arrays for fetchAndStreamProperties
+    const finalIdsByModel = new Map<string, number[]>();
+    for (const [modelId, idSet] of idsByModel) {
+      finalIdsByModel.set(modelId, Array.from(idSet));
+    }
+
+    await this.fetchAndStreamProperties(finalIdsByModel, totalCount);
   }
 
   /**
@@ -136,6 +142,8 @@ export class TableDataManager {
     }
 
     console.log(`📊 Starting streaming fetch for ${totalCount} elements (starting at ${startLoadedCount})`);
+
+    let lastYieldTime = performance.now();
 
     for (let modelIdx = 0; modelIdx < modelEntries.length; modelIdx++) {
       const [modelId, elementIds] = modelEntries[modelIdx];
@@ -169,7 +177,10 @@ export class TableDataManager {
               batchRows.push(row);
               this.context.currentProperties.push(row);
               
-              Object.keys(row).forEach(key => knownColumns.add(key));
+              // Only add new columns if we haven't seen them yet
+              Object.keys(row).forEach(key => {
+                if (!knownColumns.has(key)) knownColumns.add(key);
+              });
             }
           }
         } catch (error) {
@@ -188,7 +199,12 @@ export class TableDataManager {
         
         this.context.updateLoadingProgress(loadedCount, totalCount);
 
-        await new Promise(resolve => setTimeout(resolve, 5));
+        // Yield to main thread to keep UI responsive
+        const currentTime = performance.now();
+        if (currentTime - lastYieldTime > 12) { // Yield if we've spent more than 12ms
+          await new Promise(resolve => setTimeout(resolve, 0));
+          lastYieldTime = performance.now();
+        }
       }
     }
 

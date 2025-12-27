@@ -1,5 +1,5 @@
 /**
- * WEBGPU FOG (The "Atmosphere")
+ * WEBGPU FOG (The "Dublin Atmosphere")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This adds a subtle "fog" effect to the distance in WebGPU mode. It makes 
@@ -11,28 +11,6 @@
  * --------------------------------------------------------------------------------
  */
 
-/**
- * =============================================================================
- * WebGPU Fog Effect
- * =============================================================================
- * 
- * Atmospheric fog effect for WebGPU renderer. Unlike SSAO, fog doesn't require
- * post-processing and works perfectly with MSAA (anti-aliasing).
- * 
- * Fog adds depth and atmosphere to scenes by gradually blending distant objects
- * with a fog color, creating a sense of distance and scale.
- * 
- * Features:
- * - Linear fog (constant density)
- * - Exponential fog (density increases with distance)
- * - Exponential squared fog (more intense falloff)
- * - Configurable color, near/far, and density
- * - Works with MSAA enabled
- * 
- * @see https://threejs.org/docs/#api/en/scenes/Fog
- * @see https://threejs.org/docs/#api/en/scenes/FogExp2
- * =============================================================================
- */
 
 import * as THREE from 'three';
 

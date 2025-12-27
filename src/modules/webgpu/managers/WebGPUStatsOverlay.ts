@@ -1,5 +1,5 @@
 /**
- * WEBGPU STATS OVERLAY (The "Dashboard")
+ * WEBGPU STATS OVERLAY (The "Dashboard of Truth")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is the small info box that shows you how hard the computer is 

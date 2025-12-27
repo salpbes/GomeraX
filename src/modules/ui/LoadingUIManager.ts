@@ -1,3 +1,8 @@
+/** LoadingUIManager (The "Loading Maestro")
+ * This handles all UI-related functionality for loading indicators.
+ * It manages the display and updates of loading progress,
+ * including tips, jokes, and model count updates.
+ */
 import { IFCLoaderModule } from '../core/IFCLoaderModule';
 
 export class LoadingUIManager {

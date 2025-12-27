@@ -1,5 +1,5 @@
 /**
- * FIRST PERSON CONTROLS (The "Walking Mode")
+ * FIRST PERSON CONTROLS (The "Walking Dead Mode")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This lets you walk through the building like a video game. You use the 

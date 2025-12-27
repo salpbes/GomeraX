@@ -1,5 +1,5 @@
 /**
- * WEBGPU SHADOW MANAGER (The "Sun")
+ * WEBGPU SHADOW MANAGER (The "Shadow Warrior")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module controls the lighting and shadows in WebGPU mode. It creates 
@@ -305,6 +305,10 @@ export class WebGPUShadowManager {
     return this.groundConfig.enabled;
   }
 
+  public getGroundPlane(): THREE.Mesh | null {
+    return this.groundPlane;
+  }
+
   public getShadowLight(): THREE.DirectionalLight | null {
     return this.shadowLight;
   }
@@ -320,12 +324,15 @@ export class WebGPUShadowManager {
   /**
    * Check if shadow map needs update based on camera movement
    */
-  public shouldUpdateShadowMap(cameraMoved: boolean): boolean {
+  public updateShadowMap(cameraMoved: boolean): void {
+    if (!this.shadowLight || !this.config.enabled) return;
+
     if (cameraMoved || this.shadowMapNeedsUpdate) {
+      this.shadowLight.shadow.needsUpdate = true;
       this.shadowMapNeedsUpdate = false;
-      return true;
+    } else {
+      this.shadowLight.shadow.needsUpdate = false;
     }
-    return false;
   }
 
   /**

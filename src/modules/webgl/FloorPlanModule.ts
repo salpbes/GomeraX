@@ -1,5 +1,5 @@
 /**
- * FLOOR PLAN MODULE (The "Blueprint Maker")
+ * FLOOR PLAN MODULE (The "Old Blueprint Drawer")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This module takes the complex 3D building and flattens it into 2D floor 

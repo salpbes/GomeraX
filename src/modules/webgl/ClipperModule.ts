@@ -1,5 +1,5 @@
 /**
- * CLIPPER MODULE (The "Slicer")
+ * CLIPPER MODULE (The "Slicer of Buildings")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is the tool that lets you "cut" through the building. You can place 

@@ -223,6 +223,14 @@ export class WebGPUOptimizations {
     return this.config.geometryMergingEnabled;
   }
 
+  public getMergedMeshes(): THREE.Mesh[] {
+    return this.mergedMeshes;
+  }
+
+  public setMergedMeshes(meshes: THREE.Mesh[]): void {
+    this.mergedMeshes = meshes;
+  }
+
   public getMergedMeshCount(): number {
     return this.mergedMeshes.length;
   }

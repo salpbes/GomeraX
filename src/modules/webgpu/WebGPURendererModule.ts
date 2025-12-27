@@ -1,5 +1,5 @@
 /**
- * WEBGPU RENDERER (The "Supercharger")
+ * WEBGPU RENDERER (The "Magic Turbo Supercharger")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is a high-performance 3D engine that uses the latest "WebGPU" technology. 
@@ -13,138 +13,9 @@
  * --------------------------------------------------------------------------------
  */
 
-/**
- * =============================================================================
- * WebGPU Renderer Module (Experimental)
- * =============================================================================
- * 
- * WHAT THIS MODULE DOES:
- * ----------------------
- * This module provides an optional WebGPU rendering mode for the IFC Viewer.
- * When enabled, it renders the 3D model using WebGPU instead of WebGL.
- * 
- * WHY WEBGPU?
- * -----------
- * WebGPU is the next-generation graphics API that offers:
- * - Better performance (especially for complex models)
- * - More efficient GPU utilization
- * - Modern shader capabilities
- * 
- * However, WebGPU has trade-offs:
- * - Requires modern browser support (Chrome 113+, Edge 113+, Firefox Nightly)
- * - PostProduction effects (ambient occlusion, outlines) are NOT available
- * - This is experimental and may have visual differences
- * 
- * 
- * HOW IT WORKS (LAYMAN'S EXPLANATION):
- * ------------------------------------
- * Think of it like this: the IFC model is stored in a special format by OBC
- * (ThatOpen Components) that's optimized for WebGL rendering. WebGPU speaks
- * a slightly different "language", so we need to translate the model.
- * 
- * The translation process:
- * 
- * 1. GEOMETRY: We can't just copy the existing 3D meshes because OBC uses a
- *    special "Level of Detail" (LOD) system that WebGPU doesn't understand.
- *    Instead, we ask OBC for the raw geometry data (vertices, triangles) and
- *    rebuild each mesh from scratch in a WebGPU-compatible format.
- * 
- * 2. MATERIALS/COLORS: This was tricky! OBC has multiple ways to get colors:
- *    - `getItemsMaterialDefinition()` - BROKEN: only returns ~4 gray colors
- *    - `getMaterials()` - CORRECT: returns all 24+ real material colors
- *    
- *    To connect a mesh to its color, we use this chain:
- *    meshData.sampleId → model.getSamples() → sample.material → model.getMaterials()
- *    
- *    In plain English: each piece of geometry has a "sample ID", which points
- *    to a "sample", which tells us which material (color) to use.
- * 
- * 3. NORMALS: WebGPU is stricter about data formats. OBC stores normals as
- *    Int16 (compact, 6 bytes per vertex) but WebGPU requires Float32 with
- *    4-byte alignment (12 bytes per vertex). We convert them on the fly.
- * 
- * 4. LIGHTING: Since we render a separate "proxy scene", we need to copy
- *    the lights from the original scene, or add fallback lights. A dedicated
- *    shadow-casting directional light is set up for realistic shadows.
- * 
- * 5. CONTROLS: We keep the original WebGL canvas active (but invisible) so
- *    that OrbitControls still work. The WebGPU canvas is visual-only.
- * 
- * 
- * ARCHITECTURE DECISIONS:
- * -----------------------
- * - "Proxy Scene": We build a completely separate THREE.Scene for WebGPU
- *   rather than trying to modify OBC's fragment meshes in-place. This avoids
- *   breaking OBC's internal state and makes cleanup easier.
- * 
- * - "Category Color Fallback": If the model has very few unique material colors
- *   (e.g., everything is gray), we fall back to category-based coloring that
- *   matches the ColorSplash feature (walls=yellow, beams=red, etc.).
- * 
- * - "Canvas Layering": Original canvas (opacity:0, pointer-events:auto) sits
- *   on top of WebGPU canvas (pointer-events:none) so controls work normally.
- * 
- * - "Model Load Listener": Automatically rebuilds the proxy scene when new
- *   models are loaded, enabling multi-model support in WebGPU mode.
- * 
- * 
- * PERFORMANCE OPTIMIZATIONS:
- * --------------------------
- * - Frustum Culling: Hides meshes outside the camera's view frustum
- * - Geometry Merging: Combines meshes with same material to reduce draw calls
- * - Shadow Map Caching: Only updates shadows when camera moves significantly
- * - Adaptive Quality: Presets for low/medium/high performance trade-offs
- * 
- * 
- * FEATURES:
- * ---------
- * - Hide Spaces: Toggle visibility of IFCSPACE elements (synced with WebGL mode)
- * - Shadow Quality: Adjustable shadow map resolution (512/1024/2048/4096)
- * - Shadow Direction: Configurable sun angle and elevation
- * - Ground Plane: Optional shadow-receiving ground surface
- * - Tone Mapping: Multiple tone mapping modes for visual style
- * - Edge Rendering: Optional wireframe edges on meshes
- * - Stats Overlay: Real-time performance metrics display including:
- *   - FPS, frame time, min/max FPS
- *   - Mesh counts, triangles, vertices, draw calls
- *   - Memory usage (geometries, materials, JS heap)
- *   - Optimization status (frustum culling, geometry merging)
- *   - Hardware info (CPU cores, device memory, battery)
- *   - GPU info and renderer details
- * 
- * 
- * WEBGPU-SPECIFIC GOTCHAS:
- * ------------------------
- * - DO NOT dispose shadow maps directly - causes renderer freeze
- *   Solution: Recreate the entire shadow light instead of modifying mapSize
- * - DO NOT dispose materials while renderer is active - causes usedTimes errors
- *   Solution: Let garbage collection handle cleanup
- * - Shadow map resolution changes require recreating the DirectionalLight
- *   to avoid WebGPU resource management conflicts
- * 
- * 
- * KNOWN LIMITATIONS:
- * ------------------
- * - No postprocessing effects (AO, outlines, custom passes)
- * - No section plane hatching (relies on postprocessing)
- * - Highlighting/selection may not work the same way
- * - Some custom OBC features may not render correctly
- * - Hardware telemetry (CPU/GPU temperature) not available due to browser security
- * 
- * 
- * @see https://threejs.org/docs/#api/en/renderers/WebGPURenderer
- * =============================================================================
- */
-
 import * as THREE from 'three';
 // ClippingGroup removed - sectioning not supported in WebGPU mode
 import * as OBC from '@thatopen/components';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WebGPUOutlineManager, type SelectionInfo } from './WebGPUOutlineManager';
-import { WebGPUColorPicker, type PickingResult, type ElementInfo } from './WebGPUColorPicker';
-import { WebGPUElementSelector, type ElementSelectionInfo } from './WebGPUElementSelector';
-import { WebGPUFog, type FogSettings, type FogType } from './WebGPUFog';
-import { WebGPULODManager, type LODSettings, type LODStats } from './WebGPULODManager';
 // NOTE: WebGPUAmbientOcclusion removed - see WebGPUAmbientOcclusion.ts for explanation
 // WebGPUSectionManager removed - sectioning not supported in WebGPU mode
 
@@ -152,6 +23,26 @@ import { WebGPULODManager, type LODSettings, type LODStats } from './WebGPULODMa
 import { 
   WebGPUStatsManager,
   WebGPUMaterialFactory,
+  WebGPUCategoryPalette,
+  WebGPUProxySceneBuilder,
+  WebGPUShadowManager,
+  WebGPUEdgeManager,
+  WebGPULODManager,
+  type LODSettings,
+  type LODStats,
+  WebGPUFog,
+  type FogSettings,
+  type FogType,
+  WebGPUOutlineManager,
+  type SelectionInfo,
+  WebGPUColorPicker,
+  type PickingResult,
+  type ElementInfo,
+  WebGPUElementSelector,
+  type ElementSelectionInfo,
+  WebGPUOptimizations,
+  WebGPUStatsOverlay,
+  type StatsOverlayConfig,
   IFC_CATEGORY_COLORS,
   getOrCreateCategoryMaterial 
 } from './managers';
@@ -190,59 +81,14 @@ export class WebGPURendererModule {
   private onBeforeRenderBackup = new Map<string, THREE.Object3D['onBeforeRender']>();
   private onAfterRenderBackup = new Map<string, THREE.Object3D['onAfterRender']>();
 
-  // Shadow settings
-  private shadowsEnabled: boolean = true;
-  private shadowLight: THREE.DirectionalLight | null = null;
-  private shadowAngle: number = 45; // degrees (0-360)
-  private shadowElevation: number = 45; // degrees (10-90)
-  private sceneCenter: THREE.Vector3 = new THREE.Vector3();
-  private sceneMaxDim: number = 100;
-
-  // Ground plane settings
-  private groundPlaneEnabled: boolean = false;
-  private groundPlane: THREE.Mesh | null = null;
-
   // Edge/outline rendering settings
-  private edgesEnabled: boolean = false;
-  private edgeLines: THREE.LineSegments[] = [];
-  private edgeThreshold: number = 15; // angle threshold in degrees
-  private edgeMaterial: THREE.LineBasicMaterial | null = null;
+  // (Managed by WebGPUEdgeManager)
 
   // Performance stats settings
-  private statsEnabled: boolean = false;
-  private statsOverlay: HTMLDivElement | null = null;
-  private frameCount: number = 0;
-  private lastFpsUpdate: number = 0;
-  private fps: number = 0;
-  private frameTime: number = 0;
-  private lastFrameTime: number = 0;
-  private triangleCount: number = 0;
-  private vertexCount: number = 0;
-  private drawCalls: number = 0;
-  private meshCount: number = 0;
-  private lineCount: number = 0;
-  private lightCount: number = 0;
-  private geometryCount: number = 0;
-  private materialCount: number = 0;
-  private textureCount: number = 0;
-  private frameTimeHistory: number[] = [];
-  private currentToneMapping: number = 7; // Neutral default
-  private gpuInfo: string = 'Unknown';
-  private minFps: number = 999;
-  private maxFps: number = 0;
-  private visibleMeshCount: number = 0;
-  private fpsHistory: number[] = [];
+  // (Managed by WebGPUStatsManager)
   
   // Performance optimization settings
-  private frustumCullingEnabled: boolean = true;
-  private geometryMergingEnabled: boolean = true;
-  private shadowMapNeedsUpdate: boolean = true;
-  private mergedMeshes: THREE.Mesh[] = [];
-  private frustum: THREE.Frustum = new THREE.Frustum();
-  private projScreenMatrix: THREE.Matrix4 = new THREE.Matrix4();
-  private lastCameraPosition: THREE.Vector3 = new THREE.Vector3();
-  private lastCameraQuaternion: THREE.Quaternion = new THREE.Quaternion();
-  private cameraMovedThreshold: number = 0.001;
+  // (Managed by WebGPUOptimizations)
 
   // When section clipping is active, WebGPU shadow + clipping interactions can
   // produce view-dependent artifacts. We temporarily disable shadows.
@@ -269,32 +115,22 @@ export class WebGPURendererModule {
   private knownModelIds: Set<string> = new Set();
 
   // Outline/selection highlighting
-  private outlineManager: WebGPUOutlineManager | null = null;
-  private outlineEnabled: boolean = true;
+  // (Managed by WebGPUOutlineManager)
 
   // GPU Color Picking for individual element selection
-  private colorPicker: WebGPUColorPicker | null = null;
-  private colorPickingEnabled: boolean = true;
+  // (Managed by WebGPUColorPicker)
 
   // Element selector for individual element highlighting in merged geometry
-  private elementSelector: WebGPUElementSelector | null = null;
-  private elementSelectionHandlersSet: boolean = false;
-  private selectionClickHandler: ((e: Event) => void) | null = null;
-  private selectionPointerDownHandler: ((e: PointerEvent) => void) | null = null;
-  private pointerDownPos = { x: 0, y: 0 };
-  private selectionEscHandler: ((e: KeyboardEvent) => void) | null = null;
-  private selectionEventTarget: HTMLElement | null = null;
+  // (Managed by WebGPUElementSelector)
 
   // NOTE: Ambient Occlusion (GTAO) was removed - see WebGPUAmbientOcclusion.ts for explanation
   // The GTAONode requires non-multisampled depth textures, but our WebGPU renderer uses MSAA
 
   // Fog effect
-  private fogManager: WebGPUFog | null = null;
-  private fogEnabled: boolean = false;
+  // (Managed by WebGPUFog)
 
   // Level of Detail (LOD) system
-  private lodManager: WebGPULODManager | null = null;
-  private lodEnabled: boolean = false;
+  // (Managed by WebGPULODManager)
 
   // Color Splash support
   private colorSplashActive: boolean = false;
@@ -316,16 +152,51 @@ export class WebGPURendererModule {
   // Sectioning-related state removed (sectioning not supported in WebGPU mode)
   // originalMaterialSides, isClippingActive, originalAlphaToCoverage, edgesWereVisibleBeforeClipping removed
 
+  // Missing properties restored for compilation
+  private selectionPointerDownHandler: ((e: PointerEvent) => void) | null = null;
+  private selectionClickHandler: ((e: Event) => void) | null = null;
+  private selectionEscHandler: ((e: KeyboardEvent) => void) | null = null;
+  private selectionEventTarget: HTMLElement | Window | null = null;
+  private elementSelectionHandlersSet: boolean = false;
+  private pointerDownPos = new THREE.Vector2();
+  private ghostModeActive: boolean = true;
+  private currentToneMapping: THREE.ToneMapping = THREE.NoToneMapping;
+  private gpuInfo: string = '';
+  private frameCount: number = 0;
+
   // =========================================================================
   // MODULAR MANAGERS
   // =========================================================================
   // These managers were extracted from this class for better maintainability
-  private statsManager: WebGPUStatsManager | null = null;
-  private materialFactory: WebGPUMaterialFactory | null = null;
+  private statsManager: WebGPUStatsManager;
+  private materialFactory: WebGPUMaterialFactory;
+  private categoryPalette: WebGPUCategoryPalette;
+  private proxySceneBuilder: WebGPUProxySceneBuilder;
+  private shadowManager: WebGPUShadowManager;
+  private edgeManager: WebGPUEdgeManager;
+  private outlineManager: WebGPUOutlineManager;
+  private colorPicker: WebGPUColorPicker;
+  private elementSelector: WebGPUElementSelector;
+  private fogManager: WebGPUFog;
+  private lodManager: WebGPULODManager;
+  private optimizations: WebGPUOptimizations;
+  private statsOverlay: WebGPUStatsOverlay;
 
   constructor() {
     // Initialize modular managers
+    this.statsManager = new WebGPUStatsManager();
     this.materialFactory = new WebGPUMaterialFactory();
+    this.categoryPalette = new WebGPUCategoryPalette();
+    this.proxySceneBuilder = new WebGPUProxySceneBuilder(this.materialFactory, this.categoryPalette);
+    this.shadowManager = new WebGPUShadowManager();
+    this.edgeManager = new WebGPUEdgeManager();
+    this.outlineManager = new WebGPUOutlineManager();
+    this.colorPicker = new WebGPUColorPicker();
+    this.elementSelector = new WebGPUElementSelector();
+    this.fogManager = new WebGPUFog();
+    this.lodManager = new WebGPULODManager();
+    this.optimizations = new WebGPUOptimizations();
+    this.statsOverlay = new WebGPUStatsOverlay();
   }
 
   /**
@@ -517,266 +388,62 @@ export class WebGPURendererModule {
    * This ensures only compatible objects are rendered
    */
   private async createProxyScene(originalScene: THREE.Scene): Promise<void> {
+    if (!this.proxySceneBuilder || !this.components) return;
+
+    // Reset builder tracking
+    this.proxySceneBuilder.clear();
+
+    // Reset color picker before building scene to clear old IDs
+    if (this.colorPicker) {
+      this.colorPicker.reset();
+    }
+
     // Preferred path: rebuild IFC geometry from OBC typed arrays (WebGPU-safe)
-    // instead of touching fragment meshes whose attributes may not expose TypedArray storage.
-    const built = await this.tryBuildProxySceneFromFragments(originalScene);
-    if (built) return;
-
-    console.log('🔄 Preparing WebGPU scene (in-place material swap)...');
-
-    // IMPORTANT: do not clone geometries (Fragments can use custom/interleaved layouts).
-    // We keep the original scene/camera and only swap materials to WebGPU-safe ones.
-    this.proxyScene = originalScene;
-    this.proxySceneKind = 'in-place';
-
-    // Clear any previous backups (in case enable() is called twice without disable())
-    this.materialBackup.clear();
-    this.visibilityBackup.clear();
-    this.geometryBackup.clear();
-    this.createdGeometries = [];
-    this.onBeforeRenderBackup.clear();
-    this.onAfterRenderBackup.clear();
-
-    const isTypedArrayView = (value: any): boolean => {
-      return !!value && ArrayBuffer.isView(value) && !(value instanceof DataView);
-    };
-
-    const toFloat32Array = (value: any): Float32Array | null => {
-      if (value === undefined || value === null) return null;
-      if (isTypedArrayView(value)) return new Float32Array(value as any);
-      if (value instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer)) {
-        return new Float32Array(value as any);
-      }
-      if (Array.isArray(value)) return new Float32Array(value);
-      return null;
-    };
-
-    const toUint32Array = (value: any): Uint32Array | null => {
-      if (value === undefined || value === null) return null;
-      if (isTypedArrayView(value)) return new Uint32Array(value as any);
-      if (value instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer)) {
-        return new Uint32Array(value as any);
-      }
-      if (Array.isArray(value)) return new Uint32Array(value);
-      return null;
-    };
-
-    const copyAttributeAsFloat32 = (attr: any): THREE.BufferAttribute | null => {
-      if (!attr) return null;
-
-      const itemSize: number = attr.itemSize;
-      const count: number = attr.count;
-      if (!itemSize || !count) return null;
-
-      // InterleavedBufferAttribute (or interleaved-like): de-interleave from underlying data array.
-      // This avoids calling BufferAttribute.getComponent(), which can throw if `.array` is missing.
-      if ((attr.isInterleavedBufferAttribute || attr.data?.stride !== undefined) && attr.data) {
-        const raw = attr.data.array;
-        const src = toFloat32Array(raw);
-        const stride: number = attr.data.stride;
-        const offset: number = attr.offset;
-
-        if (src === null) return null;
-        if (!stride && stride !== 0) return null;
-        if (offset === undefined || offset === null) return null;
-
-        const out = new Float32Array(count * itemSize);
-        for (let i = 0; i < count; i++) {
-          const base = i * stride + offset;
-          for (let k = 0; k < itemSize; k++) {
-            out[i * itemSize + k] = (src as any)[base + k] ?? 0;
-          }
-        }
-        return new THREE.BufferAttribute(out, itemSize, !!attr.normalized);
-      }
-
-      // Fast path: attribute has array-like storage
-      {
-        const direct = toFloat32Array(attr.array);
-        if (direct) {
-          return new THREE.BufferAttribute(direct, itemSize, !!attr.normalized);
-        }
-      }
-
-      // If array is missing, don't attempt getComponent() (it can crash inside Three.js)
-      if (attr.array === undefined || attr.array === null) {
-        return null;
-      }
-
-      // Fallback: sample via getComponent (works for some custom attrs)
-      if (typeof attr.getComponent === 'function') {
-        try {
-          const out = new Float32Array(count * itemSize);
-          for (let i = 0; i < count; i++) {
-            for (let k = 0; k < itemSize; k++) {
-              out[i * itemSize + k] = attr.getComponent(i, k);
-            }
-          }
-          return new THREE.BufferAttribute(out, itemSize, !!attr.normalized);
-        } catch {
-          return null;
-        }
-      }
-
-      return null;
-    };
-
-    const sanitizeGeometryForWebGPU = (src: THREE.BufferGeometry): THREE.BufferGeometry | null => {
-      const position = copyAttributeAsFloat32(src.getAttribute('position'));
-      if (!position || position.count === 0) return null;
-
-      const next = new THREE.BufferGeometry();
-      next.setAttribute('position', position);
-
-      const normal = copyAttributeAsFloat32(src.getAttribute('normal'));
-      if (normal && normal.count === position.count) {
-        next.setAttribute('normal', normal);
-      }
-
-      const uv = copyAttributeAsFloat32(src.getAttribute('uv'));
-      if (uv && uv.count === position.count) {
-        next.setAttribute('uv', uv);
-      }
-
-      // Copy index if valid and typed
-      const idx: any = src.getIndex();
-      if (idx && idx.count > 0) {
-        const idxArray = toUint32Array(idx.array);
-        if (idxArray) {
-          next.setIndex(new THREE.BufferAttribute(idxArray, 1));
-        } else if (typeof idx.getX === 'function') {
-          try {
-            const out = new Uint32Array(idx.count);
-            for (let i = 0; i < idx.count; i++) out[i] = idx.getX(i);
-            next.setIndex(new THREE.BufferAttribute(out, 1));
-          } catch {
-            // Skip index if it's not readable; WebGPU can still draw non-indexed.
-          }
-        }
-      }
-
-      next.computeBoundingBox();
-      next.computeBoundingSphere();
-      return next;
-    };
-
-    const createCompatibleMaterial = (original: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] => {
-      const base = Array.isArray(original) ? original[0] : original;
-
-      // Extract a best-effort color
-      let color: any = 0x888888;
-      if (base && (base as any).color) color = (base as any).color;
-      else if (base && (base as any).uniforms?.diffuse?.value) color = (base as any).uniforms.diffuse.value;
-
-      return new THREE.MeshBasicMaterial({
-        color,
-        side: THREE.DoubleSide,
-        transparent: !!(base && (base as any).transparent),
-        opacity: (base && typeof (base as any).opacity === 'number') ? (base as any).opacity : 1.0,
-        wireframe: !!(base && (base as any).wireframe)
-      });
-    };
-
-    let swapped = 0;
-    let hiddenUnsupported = 0;
-
-    // Ensure matrices are up-to-date
-    originalScene.updateMatrixWorld(true);
-
-    originalScene.traverse((obj) => {
-      // Some OBC/scene objects attach renderer-specific callbacks (LOD, postprocessing hooks, etc.)
-      // that assume WebGL internals and can crash WebGPURenderer. Disable them in WebGPU mode.
-      if (typeof (obj as any).onBeforeRender === 'function') {
-        if (!this.onBeforeRenderBackup.has(obj.uuid)) {
-          this.onBeforeRenderBackup.set(obj.uuid, (obj as any).onBeforeRender);
-        }
-        (obj as any).onBeforeRender = () => {};
-      }
-      if (typeof (obj as any).onAfterRender === 'function') {
-        if (!this.onAfterRenderBackup.has(obj.uuid)) {
-          this.onAfterRenderBackup.set(obj.uuid, (obj as any).onAfterRender);
-        }
-        (obj as any).onAfterRender = () => {};
-      }
-
-      // Hide unsupported primitive types for now (Lines/Points can be handled later)
-      if (obj instanceof THREE.Line || obj instanceof THREE.Points || obj instanceof THREE.Sprite) {
-        if (!this.visibilityBackup.has(obj.uuid)) {
-          this.visibilityBackup.set(obj.uuid, obj.visible);
-        }
-        obj.visible = false;
-        hiddenUnsupported++;
-        return;
-      }
-
-      if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
-        const mesh = obj as THREE.Mesh;
-
-        // Sanitize geometry attributes: WebGPU node builder requires typed arrays.
-        // Some fragment geometries expose attributes without a proper `.array`.
-        if (mesh.geometry && mesh.geometry instanceof THREE.BufferGeometry) {
-          try {
-            if (!this.geometryBackup.has(mesh.uuid)) {
-              this.geometryBackup.set(mesh.uuid, mesh.geometry);
-            }
-
-            const sanitized = sanitizeGeometryForWebGPU(mesh.geometry);
-            if (!sanitized) {
-              if (!this.visibilityBackup.has(mesh.uuid)) {
-                this.visibilityBackup.set(mesh.uuid, mesh.visible);
-              }
-              mesh.visible = false;
-              hiddenUnsupported++;
-              const srcPos = (mesh.geometry as any).getAttribute?.('position');
-              console.warn(
-                '⚠️ Hiding mesh due to incompatible geometry:',
-                mesh.name || mesh.uuid,
-                {
-                  geometryType: (mesh.geometry as any)?.type,
-                  positionAttrType: srcPos?.constructor?.name,
-                  hasArray: srcPos ? srcPos.array !== undefined && srcPos.array !== null : false,
-                  isInterleaved: !!srcPos?.isInterleavedBufferAttribute,
-                  hasDataArray: !!srcPos?.data?.array,
-                }
-              );
-              return;
-            }
-
-            mesh.geometry = sanitized;
-            this.createdGeometries.push(sanitized);
-          } catch (e) {
-            if (!this.visibilityBackup.has(mesh.uuid)) {
-              this.visibilityBackup.set(mesh.uuid, mesh.visible);
-            }
-            mesh.visible = false;
-            hiddenUnsupported++;
-            console.warn('⚠️ Geometry sanitization failed, hiding mesh:', mesh.name || mesh.uuid, e);
-            return;
-          }
-        }
-
-        if (!this.materialBackup.has(mesh.uuid)) {
-          this.materialBackup.set(mesh.uuid, mesh.material);
-        }
-        try {
-          mesh.material = createCompatibleMaterial(mesh.material as any) as any;
-          swapped++;
-        } catch (e) {
-          // If material swap fails, hide the mesh to avoid crashing WebGPU
-          if (!this.visibilityBackup.has(mesh.uuid)) {
-            this.visibilityBackup.set(mesh.uuid, mesh.visible);
-          }
-          mesh.visible = false;
-          hiddenUnsupported++;
-          console.warn('⚠️ Failed to swap material for mesh, hiding it:', mesh.name || mesh.uuid, e);
-        }
-
-        // Avoid culling surprises in WebGPU mode
-        mesh.frustumCulled = this.frustumCullingEnabled;
-      }
+    const result = await this.proxySceneBuilder.tryBuildProxySceneFromFragments(originalScene, this.components, {
+      frustumCulling: this.optimizations?.isFrustumCullingEnabled() ?? true,
+      shadows: this.shadowManager.isShadowsEnabled(),
+      modelsVisible: this.modelsVisible,
+      geometryMerging: this.optimizations?.isGeometryMergingEnabled() ?? true,
+      colorPickingEnabled: this.colorPicker?.isEnabled() ?? true,
+      colorPicker: this.colorPicker,
+      elementSelector: this.elementSelector,
+      ghostModeActive: this.ghostModeActive,
+      getGhostMaterial: () => this.getOrCreateGhostMaterial(),
+      colorSplashActive: this.colorSplashActive,
+      colorSplashColors: this.colorSplashColors,
+      hiddenCategories: this.hiddenCategories,
+      hiddenElements: this.hiddenElements,
+      isolatedElements: this.isolatedElements,
+      slicerActive: this.slicerActive,
+      slicerColors: this.slicerColors,
+      setupShadowLight: (scene) => this.setupShadowLight(scene),
+      updateShadowBounds: () => this.updateShadowBounds(),
     });
 
-    console.log(`✅ WebGPU scene prepared: swappedMaterials=${swapped}, hiddenUnsupported=${hiddenUnsupported}`);
+    if (result) {
+      this.proxyScene = result.scene;
+      this.proxySceneKind = result.kind;
+      this.createdGeometries = this.proxySceneBuilder.createdGeometries;
+      this.optimizations?.setMergedMeshes(this.proxySceneBuilder.mergedMeshes);
+      this.modelGroups = this.proxySceneBuilder.modelGroups;
+      return;
+    }
+
+    // Fallback path: in-place material swap
+    const success = await this.proxySceneBuilder.tryBuildProxySceneInPlace(originalScene, {
+      frustumCulling: this.optimizations?.isFrustumCullingEnabled() ?? true,
+      materialBackup: this.materialBackup,
+      visibilityBackup: this.visibilityBackup,
+      geometryBackup: this.geometryBackup,
+      onBeforeRenderBackup: this.onBeforeRenderBackup,
+      onAfterRenderBackup: this.onAfterRenderBackup,
+    });
+
+    if (success) {
+      this.proxyScene = originalScene;
+      this.proxySceneKind = 'in-place';
+      this.createdGeometries = this.proxySceneBuilder.createdGeometries;
+    }
   }
 
   /**
@@ -784,38 +451,7 @@ export class WebGPURendererModule {
    * The shadow camera is configured to cover the model's bounding box.
    */
   private setupShadowLight(scene: THREE.Scene): void {
-    // Create shadow-casting directional light
-    const shadowLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    shadowLight.name = 'webgpu-shadow-light';
-    
-    // Position light at an angle for nice shadows
-    shadowLight.position.set(50, 100, 50);
-    shadowLight.target.position.set(0, 0, 0);
-    
-    if (this.shadowsEnabled) {
-      shadowLight.castShadow = true;
-      
-      // Shadow map size - higher = sharper shadows but more expensive
-      shadowLight.shadow.mapSize.width = 2048;
-      shadowLight.shadow.mapSize.height = 2048;
-      
-      // Shadow camera frustum - will be adjusted to fit the scene
-      const shadowCam = shadowLight.shadow.camera;
-      shadowCam.left = -100;
-      shadowCam.right = 100;
-      shadowCam.top = 100;
-      shadowCam.bottom = -100;
-      shadowCam.near = 1;
-      shadowCam.far = 500;
-      
-      // Reduce shadow artifacts
-      shadowLight.shadow.bias = -0.0005;
-      shadowLight.shadow.normalBias = 0.02;
-    }
-    
-    scene.add(shadowLight);
-    scene.add(shadowLight.target);
-    this.shadowLight = shadowLight;
+    this.shadowManager.setupShadowLight(scene);
   }
 
   /**
@@ -825,138 +461,21 @@ export class WebGPURendererModule {
    */
   public updateShadowBounds(): void {
     if (!this.proxyScene) return;
-    
-    // Ensure all world matrices are up to date
-    this.proxyScene.updateMatrixWorld(true);
-    
-    // Calculate scene bounding box (excluding ground plane)
-    const box = new THREE.Box3();
-    this.proxyScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh && obj.geometry && obj.name !== 'webgpu-ground-plane') {
-        obj.geometry.computeBoundingBox();
-        if (obj.geometry.boundingBox) {
-          const meshBox = obj.geometry.boundingBox.clone();
-          meshBox.applyMatrix4(obj.matrixWorld);
-          box.union(meshBox);
-        }
-      }
-    });
-    
-    if (box.isEmpty()) return;
-    
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    
-    console.log('📦 Bounding box:', {
-      min: box.min.toArray().map(v => v.toFixed(1)),
-      max: box.max.toArray().map(v => v.toFixed(1)),
-      center: center.toArray().map(v => v.toFixed(1)),
-    });
-    
-    // Store scene bounds for shadow angle updates
-    this.sceneCenter.copy(center);
-    this.sceneMaxDim = maxDim;
-    
-    // Update shadow light if available
-    if (this.shadowLight) {
-      // Adjust shadow camera to fit scene
-      const shadowCam = this.shadowLight.shadow.camera;
-      const padding = maxDim * 0.5;
-      shadowCam.left = -maxDim - padding;
-      shadowCam.right = maxDim + padding;
-      shadowCam.top = maxDim + padding;
-      shadowCam.bottom = -maxDim - padding;
-      shadowCam.near = 1;
-      shadowCam.far = maxDim * 4;
-      shadowCam.updateProjectionMatrix();
-      
-      // Position light based on current angle settings
-      this.updateShadowLightPosition();
-    }
-    
-    // Setup ground plane
-    this.setupGroundPlane(this.proxyScene, box);
-    
-    console.log('🌤️ Shadow bounds updated:', {
-      center: center.toArray().map(v => v.toFixed(1)),
-      size: size.toArray().map(v => v.toFixed(1)),
-      maxDim: maxDim.toFixed(1)
-    });
-  }
-
-  /**
-   * Setup a ground plane that receives shadows.
-   * Positioned below the model based on its bounding box.
-   */
-  private setupGroundPlane(scene: THREE.Scene, boundingBox: THREE.Box3): void {
-    // Remove existing ground plane if any
-    if (this.groundPlane) {
-      scene.remove(this.groundPlane);
-      this.groundPlane.geometry.dispose();
-      (this.groundPlane.material as THREE.Material).dispose();
-      this.groundPlane = null;
-    }
-    
-    const center = boundingBox.getCenter(new THREE.Vector3());
-    const size = boundingBox.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.z) * 2; // Make it larger than the model
-    
-    // Create ground plane geometry
-    const geometry = new THREE.PlaneGeometry(maxDim, maxDim);
-    
-    // Use MeshStandardMaterial for WebGPU compatibility
-    // ShadowMaterial is not compatible with WebGPU
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x909090,
-      roughness: 0.9,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
-    
-    this.groundPlane = new THREE.Mesh(geometry, material);
-    this.groundPlane.name = 'webgpu-ground-plane';
-    
-    // Set initial visibility based on settings
-    this.groundPlane.visible = this.groundPlaneEnabled;
-    
-    // Rotate to be horizontal (PlaneGeometry is vertical by default)
-    this.groundPlane.rotation.x = -Math.PI / 2;
-    
-    // Position slightly below ground level to avoid z-fighting with floor elements
-    this.groundPlane.position.set(center.x, -0.5, center.z);
-    
-    // Only receive shadows, don't cast
-    this.groundPlane.receiveShadow = true;
-    this.groundPlane.castShadow = false;
-    
-    scene.add(this.groundPlane);
-    
-    console.log('🏗️ Ground plane added:', {
-      visible: this.groundPlaneEnabled,
-      center: center.toArray().map(v => v.toFixed(1)),
-      size: maxDim.toFixed(1)
-    });
+    this.shadowManager.updateShadowBounds(this.proxyScene);
   }
 
   /**
    * Enable or disable ground plane at runtime
    */
   public setGroundPlaneEnabled(enabled: boolean): void {
-    this.groundPlaneEnabled = enabled;
-    
-    if (this.groundPlane) {
-      this.groundPlane.visible = enabled;
-    }
-    
-    console.log(`🏗️ Ground plane ${enabled ? 'enabled' : 'disabled'}`);
+    this.shadowManager.setGroundPlaneEnabled(enabled);
   }
 
   /**
    * Get current ground plane state
    */
   public isGroundPlaneEnabled(): boolean {
-    return this.groundPlaneEnabled;
+    return this.shadowManager.isGroundPlaneEnabled();
   }
 
   /**
@@ -1027,16 +546,7 @@ export class WebGPURendererModule {
    * Enable or disable shadows at runtime
    */
   public setShadowsEnabled(enabled: boolean): void {
-    this.shadowsEnabled = enabled;
-    
-    // Simply toggle the shadow light - no need to update every mesh
-    // The renderer will handle the rest
-    if (this.shadowLight) {
-      this.shadowLight.castShadow = enabled;
-      this.shadowLight.visible = enabled;
-    }
-    
-    console.log(`🌤️ Shadows ${enabled ? 'enabled' : 'disabled'}`);
+    this.shadowManager.setShadowsEnabled(enabled);
   }
 
   /**
@@ -1044,15 +554,14 @@ export class WebGPURendererModule {
    * @param angle - Angle in degrees (0-360). 0=North, 90=East, 180=South, 270=West
    */
   public setShadowAngle(angle: number): void {
-    this.shadowAngle = angle % 360;
-    this.updateShadowLightPosition();
+    this.shadowManager.setShadowAngle(angle);
   }
 
   /**
    * Get current shadow angle
    */
   public getShadowAngle(): number {
-    return this.shadowAngle;
+    return this.shadowManager.getShadowAngle();
   }
 
   /**
@@ -1060,68 +569,41 @@ export class WebGPURendererModule {
    * @param elevation - Angle in degrees (10-90). Higher = more overhead sun
    */
   public setShadowElevation(elevation: number): void {
-    this.shadowElevation = Math.max(10, Math.min(90, elevation));
-    this.updateShadowLightPosition();
+    this.shadowManager.setShadowElevation(elevation);
   }
 
   /**
    * Get current shadow elevation
    */
   public getShadowElevation(): number {
-    return this.shadowElevation;
-  }
-
-  /**
-   * Update shadow light position based on angle and elevation
-   */
-  private updateShadowLightPosition(): void {
-    if (!this.shadowLight) return;
-    
-    const angleRad = (this.shadowAngle * Math.PI) / 180;
-    const elevRad = (this.shadowElevation * Math.PI) / 180;
-    const distance = this.sceneMaxDim * 1.5;
-    
-    // Calculate position using spherical coordinates
-    const x = this.sceneCenter.x + distance * Math.cos(elevRad) * Math.sin(angleRad);
-    const y = this.sceneCenter.y + distance * Math.sin(elevRad);
-    const z = this.sceneCenter.z + distance * Math.cos(elevRad) * Math.cos(angleRad);
-    
-    this.shadowLight.position.set(x, y, z);
-    this.shadowLight.target.position.copy(this.sceneCenter);
-    this.shadowLight.target.updateMatrixWorld();
+    return this.shadowManager.getShadowElevation();
   }
 
   /**
    * Get current shadow state
    */
   public isShadowsEnabled(): boolean {
-    return this.shadowsEnabled;
+    return this.shadowManager.isShadowsEnabled();
   }
 
   /**
    * Enable or disable edge/outline rendering
    */
   public async setEdgesEnabled(enabled: boolean): Promise<void> {
-    this.edgesEnabled = enabled;
-    
-    if (enabled && this.proxyScene && this.edgeLines.length === 0) {
-      // Create edges if not already created
-      await this.createEdges();
-    }
-    
-    // Toggle visibility of existing edge lines
-    for (const line of this.edgeLines) {
-      line.visible = enabled;
-    }
-    
-    console.log(`✏️ Edges ${enabled ? 'enabled' : 'disabled'}`);
+    if (!this.edgeManager) return;
+    await this.edgeManager.setEdgesEnabled(
+      enabled, 
+      this.proxyScene, 
+      this.ghostMaterial, 
+      this.isolatedElements !== null
+    );
   }
 
   /**
    * Get current edge rendering state
    */
   public isEdgesEnabled(): boolean {
-    return this.edgesEnabled;
+    return this.edgeManager?.isEdgesEnabled() ?? false;
   }
 
   /**
@@ -1129,116 +611,35 @@ export class WebGPURendererModule {
    * Lower = more edges, Higher = fewer edges (only sharp angles)
    */
   public async setEdgeThreshold(degrees: number): Promise<void> {
-    this.edgeThreshold = Math.max(1, Math.min(90, degrees));
-    
-    // Recreate edges with new threshold if enabled
-    if (this.edgesEnabled && this.proxyScene) {
-      this.removeEdges();
-      await this.createEdges();
-    }
-    
-    console.log(`✏️ Edge threshold set to ${this.edgeThreshold}°`);
+    if (!this.edgeManager) return;
+    await this.edgeManager.setEdgeThreshold(
+      degrees, 
+      this.proxyScene, 
+      this.ghostMaterial, 
+      this.isolatedElements !== null
+    );
   }
 
   /**
    * Get current edge threshold
    */
   public getEdgeThreshold(): number {
-    return this.edgeThreshold;
+    return this.edgeManager?.getEdgeThreshold() ?? 15;
   }
 
   /**
    * Create edge lines for all meshes in the proxy scene
    */
   private async createEdges(): Promise<void> {
-    if (!this.proxyScene) return;
-    
-    const thresholdRadians = (this.edgeThreshold * Math.PI) / 180;
-    let edgeCount = 0;
-    let processedCount = 0;
-    
-    // Reuse or create the shared material for all edges
-    if (!this.edgeMaterial) {
-      this.edgeMaterial = new THREE.LineBasicMaterial({
-        color: 0x000000,
-        linewidth: 1, // Note: linewidth > 1 only works on some platforms
-        transparent: true,
-        opacity: 0.8,
-      });
-    }
-    
-    // Collect meshes first to avoid issues with scene modification during traversal
-    const meshes: THREE.Mesh[] = [];
-    this.proxyScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh && obj.geometry && obj.name !== 'webgpu-ground-plane') {
-        meshes.push(obj);
-      }
-    });
-
-    for (const obj of meshes) {
-      // OPTIMIZATION: Skip edges for ghosted items during isolation
-      // This significantly improves performance and makes isolated items stand out
-      if (this.isolatedElements && obj.material === this.ghostMaterial) {
-        continue;
-      }
-
-      try {
-        // Create edges geometry from mesh geometry
-        const edgesGeometry = new THREE.EdgesGeometry(obj.geometry, thresholdRadians * (180 / Math.PI));
-        
-        if (edgesGeometry.attributes.position && edgesGeometry.attributes.position.count > 0) {
-          const lineSegments = new THREE.LineSegments(edgesGeometry, this.edgeMaterial);
-          
-          // Copy transform from the mesh
-          lineSegments.position.copy(obj.position);
-          lineSegments.rotation.copy(obj.rotation);
-          lineSegments.scale.copy(obj.scale);
-          lineSegments.matrix.copy(obj.matrix);
-          lineSegments.matrixWorld.copy(obj.matrixWorld);
-          lineSegments.matrixAutoUpdate = false;
-          
-          lineSegments.name = 'edge-line';
-          lineSegments.visible = this.edgesEnabled;
-          lineSegments.frustumCulled = true; // Enable culling for performance
-          
-          // Add to same parent as mesh or to scene
-          if (obj.parent) {
-            obj.parent.add(lineSegments);
-          } else {
-            this.proxyScene!.add(lineSegments);
-          }
-          
-          this.edgeLines.push(lineSegments);
-          edgeCount++;
-        }
-      } catch (e) {
-        // Skip meshes that can't have edges computed
-      }
-
-      // Yield to UI every 50 meshes to prevent freezing
-      processedCount++;
-      if (processedCount % 50 === 0) {
-        await new Promise<void>(resolve => setTimeout(resolve, 0));
-      }
-    }
-    
-    console.log(`✏️ Created ${edgeCount} edge outlines`);
+    if (!this.proxyScene || !this.edgeManager) return;
+    await this.edgeManager.createEdges(this.proxyScene, this.ghostMaterial, this.isolatedElements !== null);
   }
 
   /**
    * Remove all edge lines
    */
   private removeEdges(): void {
-    for (const line of this.edgeLines) {
-      if (line.parent) {
-        line.parent.remove(line);
-      }
-      if (line.geometry) {
-        line.geometry.dispose();
-      }
-    }
-    this.edgeLines = [];
-    // Note: we keep this.edgeMaterial for reuse to avoid WebGPU "usedTimes" errors
+    this.edgeManager?.removeEdges();
   }
 
   // =========================================================================
@@ -1248,17 +649,30 @@ export class WebGPURendererModule {
   /**
    * Initialize the outline manager for selection highlighting
    */
+  private initializeColorPicker(): void {
+    if (!this.proxyScene || !this.camera || !this.container || !this.webgpuRenderer) return;
+    
+    if (this.colorPicker) {
+      this.colorPicker.initialize(this.webgpuRenderer, this.proxyScene, this.camera, this.container);
+      this.colorPicker.buildPickingScene();
+    }
+  }
+
   private initializeOutlineManager(): void {
     if (!this.proxyScene || !this.camera || !this.container) return;
     
-    this.outlineManager = new WebGPUOutlineManager();
-    this.outlineManager.initialize(this.proxyScene, this.camera, this.container);
+    if (this.outlineManager) {
+      this.outlineManager.initialize(this.proxyScene, this.camera, this.container);
+    }
+
+    // Initialize Element Selector with the current scene
+    if (this.elementSelector) {
+      this.elementSelector.initialize(this.proxyScene, this.camera, this.container);
+    }
     
     // Set up selection callback to log selections
     this.outlineManager.setOnSelect((mesh, info) => {
-      if (mesh && info) {
-        console.log(`🎯 WebGPU Selection: ${mesh.name || 'Unnamed mesh'}`, info);
-      }
+      // Selection handled by element selector
     });
     
     // Set up hover callback (optional)
@@ -1274,6 +688,9 @@ export class WebGPURendererModule {
     } else {
       console.log('🎯 Outline/selection highlighting initialized');
     }
+    
+    // Ensure element selection handlers are set up
+    this.setupElementSelectionHandlers();
   }
 
   /**
@@ -1323,8 +740,6 @@ export class WebGPURendererModule {
             this.elementSelector.clearSelection();
             this.elementSelector.selectElement(result, info);
           }
-
-          console.log(`🎯 GPU Picked element: localId=${info.localId}, category=${info.category || 'unknown'}`);
         }
       } else if (!isMultiSelect && !isToggle) {
         // Clicked on nothing - clear selection
@@ -1380,20 +795,14 @@ export class WebGPURendererModule {
    * Enable or disable outline/selection highlighting
    */
   public setOutlineEnabled(enabled: boolean): void {
-    this.outlineEnabled = enabled;
-    
-    if (this.outlineManager) {
-      this.outlineManager.setEnabled(enabled);
-    }
-    
-    console.log(`🎯 Outline highlighting ${enabled ? 'enabled' : 'disabled'}`);
+    this.outlineManager?.setEnabled(enabled);
   }
 
   /**
    * Get current outline highlighting state
    */
   public isOutlineEnabled(): boolean {
-    return this.outlineEnabled;
+    return this.outlineManager?.isEnabled() ?? true;
   }
 
   /**
@@ -1401,12 +810,8 @@ export class WebGPURendererModule {
    * @param color Hex color value (e.g., 0x00aaff for blue)
    */
   public setOutlineSelectionColor(color: number | string): void {
-    if (this.outlineManager) {
-      this.outlineManager.setSelectionColor(color);
-    }
-    if (this.elementSelector) {
-      this.elementSelector.setSelectionColor(color);
-    }
+    this.outlineManager?.setSelectionColor(color);
+    this.elementSelector?.setSelectionColor(color);
     console.log(`🎯 Selection color changed`);
   }
 
@@ -1415,12 +820,8 @@ export class WebGPURendererModule {
    * @param color Hex color value (e.g., 0xffff00 for yellow)
    */
   public setOutlineHoverColor(color: number | string): void {
-    if (this.outlineManager) {
-      this.outlineManager.setHoverColor(color);
-    }
-    if (this.elementSelector) {
-      this.elementSelector.setHoverColor(color);
-    }
+    this.outlineManager?.setHoverColor(color);
+    this.elementSelector?.setHoverColor(color);
     console.log(`🎯 Hover color changed`);
   }
 
@@ -1429,10 +830,8 @@ export class WebGPURendererModule {
    * @param thickness Value between 0.01 and 0.2 (default: 0.03)
    */
   public setOutlineThickness(thickness: number): void {
-    if (this.outlineManager) {
-      this.outlineManager.setThickness(thickness);
-      console.log(`🎯 Outline thickness set to ${thickness}`);
-    }
+    this.outlineManager?.setThickness(thickness);
+    console.log(`🎯 Outline thickness set to ${thickness}`);
   }
 
   /**
@@ -1449,9 +848,9 @@ export class WebGPURendererModule {
    * Clear all current selections
    */
   public clearOutlineSelection(): void {
-    if (this.outlineManager) {
-      this.outlineManager.clearSelection();
-    }
+    this.outlineManager?.clearSelection();
+    this.elementSelector?.clearSelection();
+    console.log('🎯 Selection cleared');
   }
 
   /**
@@ -1486,7 +885,7 @@ export class WebGPURendererModule {
     console.log('🎯 WebGPU Outline Debug');
     console.log('🎯 ==========================================');
     console.log('🎯 Outline manager exists:', !!this.outlineManager);
-    console.log('🎯 Outline enabled:', this.outlineEnabled);
+    console.log('🎯 Outline enabled:', this.outlineManager?.isEnabled());
     console.log('🎯 Proxy scene exists:', !!this.proxyScene);
     console.log('🎯 Camera exists:', !!this.camera);
     console.log('🎯 Container exists:', !!this.container);
@@ -1514,15 +913,14 @@ export class WebGPURendererModule {
    * Note: This affects the next scene rebuild, not immediately
    */
   public setColorPickingEnabled(enabled: boolean): void {
-    this.colorPickingEnabled = enabled;
-    console.log(`🎯 GPU color picking ${enabled ? 'enabled' : 'disabled'} (applies to next scene build)`);
+    this.colorPicker?.setEnabled(enabled);
   }
 
   /**
    * Check if GPU color picking is enabled
    */
   public isColorPickingEnabled(): boolean {
-    return this.colorPickingEnabled;
+    return this.colorPicker?.isEnabled() ?? true;
   }
 
   /**
@@ -1607,7 +1005,7 @@ export class WebGPURendererModule {
     console.log('🎯 GPU Color Picker Debug');
     console.log('🎯 ==========================================');
     console.log('🎯 Color picker exists:', !!this.colorPicker);
-    console.log('🎯 Color picking enabled:', this.colorPickingEnabled);
+    console.log('🎯 Color picking enabled:', this.colorPicker?.isEnabled());
     
     if (this.colorPicker) {
       console.log('🎯 Registered elements:', this.colorPicker.getElementCount());
@@ -1754,35 +1152,31 @@ export class WebGPURendererModule {
       return;
     }
     
-    this.fogManager = new WebGPUFog();
-    this.fogManager.initialize(this.proxyScene);
-    console.log('🌫️ Fog effect initialized (disabled by default)');
+    if (this.fogManager) {
+      this.fogManager.initialize(this.proxyScene);
+      console.log('🌫️ Fog effect initialized (disabled by default)');
+    }
   }
 
   /**
    * Enable or disable fog effect
    */
   public setFogEnabled(enabled: boolean): void {
-    this.fogEnabled = enabled;
-    if (this.fogManager) {
-      this.fogManager.setEnabled(enabled);
-    }
+    this.fogManager?.setEnabled(enabled);
   }
 
   /**
    * Check if fog is enabled
    */
   public isFogEnabled(): boolean {
-    return this.fogEnabled && this.fogManager?.isEnabled() === true;
+    return this.fogManager?.isEnabled() ?? false;
   }
 
   /**
    * Set fog type (linear, exponential, exponential2)
    */
   public setFogType(type: FogType): void {
-    if (this.fogManager) {
-      this.fogManager.setType(type);
-    }
+    this.fogManager?.setType(type);
   }
 
   /**
@@ -1790,9 +1184,7 @@ export class WebGPURendererModule {
    * @param hexColor Hex color string (e.g., '#e0e8f0')
    */
   public setFogColor(hexColor: string): void {
-    if (this.fogManager) {
-      this.fogManager.setColor(hexColor);
-    }
+    this.fogManager?.setColor(hexColor);
   }
 
   /**
@@ -1800,27 +1192,21 @@ export class WebGPURendererModule {
    * @param density Density value (0.0001-0.1)
    */
   public setFogDensity(density: number): void {
-    if (this.fogManager) {
-      this.fogManager.setDensity(density);
-    }
+    this.fogManager?.setDensity(density);
   }
 
   /**
    * Set fog near distance (for linear fog)
    */
   public setFogNear(near: number): void {
-    if (this.fogManager) {
-      this.fogManager.setNear(near);
-    }
+    this.fogManager?.setNear(near);
   }
 
   /**
    * Set fog far distance (for linear fog)
    */
   public setFogFar(far: number): void {
-    if (this.fogManager) {
-      this.fogManager.setFar(far);
-    }
+    this.fogManager?.setFar(far);
   }
 
   /**
@@ -1881,37 +1267,37 @@ export class WebGPURendererModule {
       return;
     }
     
-    this.lodManager = new WebGPULODManager();
-    this.lodManager.initialize(this.proxyScene, this.camera);
-    console.log('📐 LOD system initialized (disabled by default)');
+    if (this.lodManager) {
+      this.lodManager.initialize(this.proxyScene, this.camera);
+      console.log('📐 LOD system initialized (disabled by default)');
+    }
   }
 
   /**
    * Initialize the stats manager for performance monitoring
    */
   private initializeStatsManager(): void {
-    if (!this.container) {
+    if (!this.container || !this.statsManager) {
       console.log('⚠️ Cannot initialize stats manager: container not ready');
       return;
     }
     
-    this.statsManager = new WebGPUStatsManager();
     this.statsManager.initialize({
       container: this.container,
       getRenderer: () => this.webgpuRenderer,
       getCamera: () => this.camera,
       getScene: () => this.proxyScene,
       getSettings: () => ({
-        frustumCullingEnabled: this.frustumCullingEnabled,
-        geometryMergingEnabled: this.geometryMergingEnabled,
-        shadowsEnabled: this.shadowsEnabled,
-        edgesEnabled: this.edgesEnabled,
-        groundPlaneEnabled: this.groundPlaneEnabled,
+        frustumCullingEnabled: this.optimizations?.isFrustumCullingEnabled() ?? true,
+        geometryMergingEnabled: this.optimizations?.isGeometryMergingEnabled() ?? true,
+        shadowsEnabled: this.shadowManager.isShadowsEnabled(),
+        edgesEnabled: this.edgeManager.isEdgesEnabled(),
+        groundPlaneEnabled: this.shadowManager.isGroundPlaneEnabled(),
         hiddenCategories: this.hiddenCategories,
         currentToneMapping: this.currentToneMapping,
-        lodEnabled: this.lodEnabled,
-        shadowLight: this.shadowLight,
-        mergedMeshes: this.mergedMeshes,
+        lodEnabled: this.lodManager?.isEnabled() ?? false,
+        shadowLight: this.shadowManager.getShadowLight(),
+        mergedMeshes: this.optimizations?.getMergedMeshes() ?? [],
         lodManager: this.lodManager,
       }),
     });
@@ -1922,7 +1308,7 @@ export class WebGPURendererModule {
     }
     
     // Set scene center for distance calculations
-    this.statsManager.setSceneCenter(this.sceneCenter);
+    this.statsManager.setSceneCenter(this.shadowManager.getSceneCenter());
     
     console.log('📊 Stats manager initialized');
   }
@@ -1931,8 +1317,6 @@ export class WebGPURendererModule {
    * Enable or disable LOD system
    */
   public setLODEnabled(enabled: boolean): void {
-    this.lodEnabled = enabled;
-    
     if (this.lodManager) {
       if (enabled && !this.lodManager.isInitialized()) {
         this.initializeLOD();
@@ -1945,51 +1329,41 @@ export class WebGPURendererModule {
       
       this.lodManager.setEnabled(enabled);
     }
-    
-    console.log(`📐 LOD ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
    * Check if LOD is enabled
    */
   public isLODEnabled(): boolean {
-    return this.lodEnabled && this.lodManager?.isEnabled() === true;
+    return this.lodManager?.isEnabled() ?? false;
   }
 
   /**
    * Set LOD high distance threshold (full detail up to this distance)
    */
   public setLODHighDistance(distance: number): void {
-    if (this.lodManager) {
-      this.lodManager.setHighDistance(distance);
-    }
+    this.lodManager?.setHighDistance(distance);
   }
 
   /**
    * Set LOD medium distance threshold
    */
   public setLODMediumDistance(distance: number): void {
-    if (this.lodManager) {
-      this.lodManager.setMediumDistance(distance);
-    }
+    this.lodManager?.setMediumDistance(distance);
   }
 
   /**
    * Set LOD low distance threshold
    */
   public setLODLowDistance(distance: number): void {
-    if (this.lodManager) {
-      this.lodManager.setLowDistance(distance);
-    }
+    this.lodManager?.setLowDistance(distance);
   }
 
   /**
    * Toggle impostor visibility (bounding boxes for very far objects)
    */
   public setLODShowImpostors(show: boolean): void {
-    if (this.lodManager) {
-      this.lodManager.setShowImpostors(show);
-    }
+    this.lodManager?.setShowImpostors(show);
   }
 
   /**
@@ -2010,8 +1384,8 @@ export class WebGPURendererModule {
    * Refresh LOD (reprocess scene)
    */
   public refreshLOD(): void {
-    if (this.lodManager && this.lodEnabled) {
-      this.lodManager.refresh();
+    if (this.lodManager?.isEnabled()) {
+      this.lodManager?.refresh();
     }
   }
 
@@ -2031,25 +1405,19 @@ export class WebGPURendererModule {
    * When enabled, objects outside the camera view are hidden (not rendered)
    */
   public setFrustumCullingEnabled(enabled: boolean): void {
-    this.frustumCullingEnabled = enabled;
+    this.optimizations?.setFrustumCullingEnabled(enabled);
     
     // If disabling, make all meshes visible again
-    if (!enabled && this.proxyScene) {
-      this.proxyScene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.visible = true;
-        }
-      });
+    if (!enabled && this.proxyScene && this.optimizations) {
+      this.optimizations.resetVisibility(this.proxyScene);
     }
-    
-    console.log(`🔍 Frustum culling ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   /**
    * Get current frustum culling state
    */
   public isFrustumCullingEnabled(): boolean {
-    return this.frustumCullingEnabled;
+    return this.optimizations?.isFrustumCullingEnabled() ?? true;
   }
 
   /**
@@ -2058,15 +1426,14 @@ export class WebGPURendererModule {
    * Note: This only affects newly loaded models, not existing ones
    */
   public setGeometryMergingEnabled(enabled: boolean): void {
-    this.geometryMergingEnabled = enabled;
-    console.log(`🔗 Geometry merging ${enabled ? 'enabled' : 'disabled'} (applies to next model load)`);
+    this.optimizations?.setGeometryMergingEnabled(enabled);
   }
 
   /**
    * Get current geometry merging state
    */
   public isGeometryMergingEnabled(): boolean {
-    return this.geometryMergingEnabled;
+    return this.optimizations?.isGeometryMergingEnabled() ?? true;
   }
 
   /**
@@ -2075,81 +1442,15 @@ export class WebGPURendererModule {
    * Common values: 512, 1024, 2048, 4096
    */
   public setShadowMapResolution(resolution: number): void {
-    if (!this.shadowLight || !this.proxyScene) {
-      return;
-    }
-    
-    const currentSize = this.shadowLight.shadow.mapSize.x;
-    
-    // Only update if resolution actually changed
-    if (currentSize === resolution) {
-      return;
-    }
-    
-    // Store current shadow configuration
-    const savedPosition = this.shadowLight.position.clone();
-    const savedTargetPosition = this.shadowLight.target.position.clone();
-    const savedIntensity = this.shadowLight.intensity;
-    const savedBias = this.shadowLight.shadow.bias;
-    const savedNormalBias = this.shadowLight.shadow.normalBias;
-    const shadowCam = this.shadowLight.shadow.camera;
-    const savedCamLeft = shadowCam.left;
-    const savedCamRight = shadowCam.right;
-    const savedCamTop = shadowCam.top;
-    const savedCamBottom = shadowCam.bottom;
-    const savedCamNear = shadowCam.near;
-    const savedCamFar = shadowCam.far;
-    
-    // WebGPU SAFETY: Remove the old light from the scene
-    // Don't dispose the shadow map - just remove the light entirely
-    // and let garbage collection handle cleanup
-    this.proxyScene.remove(this.shadowLight);
-    this.proxyScene.remove(this.shadowLight.target);
-    
-    // Create a completely new shadow light with the new resolution
-    const newLight = new THREE.DirectionalLight(0xffffff, savedIntensity);
-    newLight.name = 'webgpu-shadow-light';
-    newLight.position.copy(savedPosition);
-    newLight.target.position.copy(savedTargetPosition);
-    
-    if (this.shadowsEnabled) {
-      newLight.castShadow = true;
-      
-      // Set the new shadow map size
-      newLight.shadow.mapSize.width = resolution;
-      newLight.shadow.mapSize.height = resolution;
-      
-      // Restore shadow camera frustum
-      const newShadowCam = newLight.shadow.camera;
-      newShadowCam.left = savedCamLeft;
-      newShadowCam.right = savedCamRight;
-      newShadowCam.top = savedCamTop;
-      newShadowCam.bottom = savedCamBottom;
-      newShadowCam.near = savedCamNear;
-      newShadowCam.far = savedCamFar;
-      newShadowCam.updateProjectionMatrix();
-      
-      // Restore bias settings
-      newLight.shadow.bias = savedBias;
-      newLight.shadow.normalBias = savedNormalBias;
-    }
-    
-    // Add new light to scene
-    this.proxyScene.add(newLight);
-    this.proxyScene.add(newLight.target);
-    
-    // Store reference
-    this.shadowLight = newLight;
-    this.shadowMapNeedsUpdate = true;
-    
-    console.log(`🌑 Shadow map resolution set to ${resolution}x${resolution}`);
+    if (!this.proxyScene) return;
+    this.shadowManager.setShadowMapResolution(this.proxyScene, resolution);
   }
 
   /**
    * Get current shadow map resolution
    */
   public getShadowMapResolution(): number {
-    return this.shadowLight?.shadow?.mapSize?.x ?? 2048;
+    return this.shadowManager.getShadowMapResolution();
   }
 
   /**
@@ -2247,31 +1548,66 @@ export class WebGPURendererModule {
     console.log('🔄 Rebuilding WebGPU proxy scene...');
     
     // Store current settings
-    const wasEdgesEnabled = this.edgesEnabled;
-    const wasGroundPlaneEnabled = this.groundPlaneEnabled;
+    const wasEdgesEnabled = this.edgeManager.isEdgesEnabled();
+    const wasGroundPlaneEnabled = this.shadowManager.isGroundPlaneEnabled();
     
     // PERFORMANCE OPTIMIZATION: Don't dispose old resources until the new scene is ready.
     // This prevents the "empty screen" or "lost model" effect during long rebuilds.
     const oldGeometries = [...this.createdGeometries];
-    const oldGroundPlane = this.groundPlane;
+    const oldGroundPlane = this.shadowManager.getGroundPlane();
     const oldProxyScene = this.proxyScene;
-    const oldEdgeLines = [...this.edgeLines];
+    const oldEdgeLines = [...this.edgeManager.getEdgeLines()];
     
     // Reset tracking arrays for the NEW scene
     this.createdGeometries = [];
-    this.mergedMeshes = [];
     this.modelGroups = [];
-    this.edgeLines = []; // Clear this so createEdges() starts fresh
+    this.edgeManager.clearEdgeLines(); // Clear this so createEdges() starts fresh
     this.meshCategoryMap.clear();
     
-    // Temporarily enable ground plane so it gets created during rebuild
-    this.groundPlaneEnabled = wasGroundPlaneEnabled;
+    // Reset builder tracking without disposing (old resources still in use)
+    this.proxySceneBuilder.clear();
     
+    // Reset color picker before building scene to clear old IDs
+    if (this.colorPicker) {
+      this.colorPicker.reset();
+    }
+
     // Build new proxy scene (this also sets up ground plane via updateShadowBounds)
-    // This method will set this.proxyScene at the end.
-    const success = await this.tryBuildProxySceneFromFragments(this.scene);
+    if (!this.components) return;
+    const result = await this.proxySceneBuilder.tryBuildProxySceneFromFragments(this.scene, this.components, {
+      frustumCulling: this.optimizations?.isFrustumCullingEnabled() ?? true,
+      shadows: this.shadowManager.isShadowsEnabled(),
+      modelsVisible: this.modelsVisible,
+      geometryMerging: this.optimizations?.isGeometryMergingEnabled() ?? true,
+      colorPickingEnabled: this.colorPicker?.isEnabled() ?? true,
+      colorPicker: this.colorPicker,
+      elementSelector: this.elementSelector,
+      ghostModeActive: this.ghostModeActive,
+      getGhostMaterial: () => this.getOrCreateGhostMaterial(),
+      colorSplashActive: this.colorSplashActive,
+      colorSplashColors: this.colorSplashColors,
+      hiddenCategories: this.hiddenCategories,
+      hiddenElements: this.hiddenElements,
+      isolatedElements: this.isolatedElements,
+      slicerActive: this.slicerActive,
+      slicerColors: this.slicerColors,
+      setupShadowLight: (scene) => this.setupShadowLight(scene),
+      updateShadowBounds: () => this.updateShadowBounds(),
+    });
     
-    if (success && this.proxyScene) {
+    if (result) {
+      // Update proxy scene reference
+      this.proxyScene = result.scene;
+      this.proxySceneKind = result.kind;
+      this.createdGeometries = this.proxySceneBuilder.createdGeometries;
+      this.modelGroups = this.proxySceneBuilder.modelGroups;
+
+      // Re-initialize managers with new scene
+      this.initializeOutlineManager();
+      this.initializeColorPicker();
+      this.initializeFog();
+      this.initializeLOD();
+
       // Dispose old proxy scene resources NOW that the new one is ready
       
       // Clean up old edges from the old scene
@@ -2287,7 +1623,10 @@ export class WebGPURendererModule {
         geo.dispose();
       }
       
-      if (oldGroundPlane && oldGroundPlane !== this.groundPlane) {
+      // Update optimizations with new merged meshes
+      this.optimizations?.setMergedMeshes(this.proxySceneBuilder.mergedMeshes);
+      
+      if (oldGroundPlane && oldGroundPlane !== this.shadowManager.getGroundPlane()) {
         oldGroundPlane.geometry.dispose();
         (oldGroundPlane.material as THREE.Material).dispose();
       }
@@ -2358,1173 +1697,13 @@ export class WebGPURendererModule {
   }
 
   /**
-   * Try to clone fragment meshes directly from the original scene, preserving
-   * the actual rendered materials/colors. This produces exact visual parity with WebGL.
-   */
-  private async tryCloneFragmentMeshes(
-    originalScene: THREE.Scene,
-    fragments: any
-  ): Promise<boolean> {
-    const proxy = new THREE.Scene();
-    const bg = originalScene.background as any;
-    proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
-
-    // Copy lights (but we'll add our own shadow light)
-    let copiedLights = 0;
-    originalScene.traverse((obj) => {
-      if ((obj as any).isLight) {
-        try {
-          const light = obj.clone(true) as THREE.Light;
-          // Disable shadows on copied lights - we use our own shadow light
-          (light as any).castShadow = false;
-          proxy.add(light);
-          if ((light as any).isDirectionalLight && (light as any).target) {
-            proxy.add((light as any).target);
-          }
-          copiedLights++;
-        } catch { /* ignore */ }
-      }
-    });
-
-    // Always add ambient light for fill
-    proxy.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-    // Add shadow-casting directional light
-    this.setupShadowLight(proxy);
-
-    const root = new THREE.Group();
-    root.name = 'webgpu-fragments-cloned';
-    proxy.add(root);
-
-    let clonedMeshes = 0;
-    let skippedMeshes = 0;
-    const materialCache = new Map<string, THREE.MeshStandardMaterial>();
-
-    // Helper to convert any material to WebGPU-compatible MeshStandardMaterial
-    const toStandardMaterial = (mat: THREE.Material): THREE.MeshStandardMaterial => {
-      const c = (mat as any).color as THREE.Color | undefined;
-      const r = c ? Math.round(c.r * 255) : 200;
-      const g = c ? Math.round(c.g * 255) : 200;
-      const b = c ? Math.round(c.b * 255) : 200;
-      const opacity = typeof (mat as any).opacity === 'number' ? (mat as any).opacity : 1;
-      const transparent = !!(mat as any).transparent || opacity < 1;
-      const side = (mat as any).side ?? THREE.DoubleSide;
-
-      const key = `${r},${g},${b},${opacity.toFixed(3)},${transparent ? 1 : 0},${side}`;
-      const cached = materialCache.get(key);
-      if (cached) return cached;
-
-      const newMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(r / 255, g / 255, b / 255),
-        roughness: 1,
-        metalness: 0,
-        opacity,
-        transparent,
-        side,
-        alphaToCoverage: transparent,
-        depthWrite: !transparent
-      });
-      materialCache.set(key, newMat);
-      return newMat;
-    };
-
-    // Iterate over fragment models
-    for (const [modelId, model] of fragments.list as Map<string, any>) {
-      const modelObj = model?.object as THREE.Object3D | undefined;
-      if (!modelObj) continue;
-
-      const modelGroup = new THREE.Group();
-      modelGroup.name = `webgpu-clone-${modelId}`;
-      modelObj.updateMatrixWorld(true);
-      modelGroup.position.copy(modelObj.position);
-      modelGroup.quaternion.copy(modelObj.quaternion);
-      modelGroup.scale.copy(modelObj.scale);
-      // Add to clipping group if available, otherwise to root
-      // Sectioning not supported - add directly to root
-      root.add(modelGroup);
-
-      // Traverse the model's scene graph and clone meshes
-      modelObj.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return;
-
-        const srcGeo = child.geometry as THREE.BufferGeometry;
-        if (!srcGeo) {
-          skippedMeshes++;
-          return;
-        }
-
-        const srcPos = srcGeo.getAttribute('position');
-        if (!srcPos) {
-          skippedMeshes++;
-          return;
-        }
-
-        // We need the raw array. If it's an InterleavedBufferAttribute or lacks .array, skip.
-        let posArray: Float32Array | null = null;
-        if (srcPos.array instanceof Float32Array) {
-          posArray = srcPos.array;
-        } else if (srcPos.array instanceof Float64Array) {
-          posArray = new Float32Array(srcPos.array);
-        } else if ((srcPos as any).data?.array) {
-          // Interleaved: extract into flat array
-          const data = (srcPos as any).data.array;
-          const itemSize = srcPos.itemSize;
-          const offset = (srcPos as any).offset ?? 0;
-          const stride = (srcPos as any).data.stride ?? itemSize;
-          const count = srcPos.count;
-          posArray = new Float32Array(count * 3);
-          for (let i = 0; i < count; i++) {
-            posArray[i * 3] = data[i * stride + offset];
-            posArray[i * 3 + 1] = data[i * stride + offset + 1];
-            posArray[i * 3 + 2] = data[i * stride + offset + 2];
-          }
-        }
-
-        if (!posArray || posArray.length === 0) {
-          skippedMeshes++;
-          return;
-        }
-
-        // Build a new geometry
-        const newGeo = new THREE.BufferGeometry();
-        newGeo.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
-
-        // Normals
-        const srcNorm = srcGeo.getAttribute('normal');
-        if (srcNorm) {
-          let normArray: Float32Array | null = null;
-          if (srcNorm.array instanceof Float32Array) {
-            normArray = srcNorm.array;
-          } else if (srcNorm.array instanceof Float64Array) {
-            normArray = new Float32Array(srcNorm.array);
-          } else if (srcNorm.array instanceof Int16Array) {
-            // Packed normals
-            const n = srcNorm.array;
-            normArray = new Float32Array(n.length);
-            const scale = 1 / 32767;
-            for (let i = 0; i < n.length; i++) normArray[i] = n[i] * scale;
-          } else if ((srcNorm as any).data?.array) {
-            const data = (srcNorm as any).data.array;
-            const itemSize = srcNorm.itemSize;
-            const offset = (srcNorm as any).offset ?? 0;
-            const stride = (srcNorm as any).data.stride ?? itemSize;
-            const count = srcNorm.count;
-            normArray = new Float32Array(count * 3);
-            for (let i = 0; i < count; i++) {
-              normArray[i * 3] = data[i * stride + offset];
-              normArray[i * 3 + 1] = data[i * stride + offset + 1];
-              normArray[i * 3 + 2] = data[i * stride + offset + 2];
-            }
-          }
-          if (normArray && normArray.length > 0) {
-            newGeo.setAttribute('normal', new THREE.Float32BufferAttribute(normArray, 3));
-          } else {
-            newGeo.computeVertexNormals();
-          }
-        } else {
-          newGeo.computeVertexNormals();
-        }
-
-        // Index
-        const srcIdx = srcGeo.getIndex();
-        if (srcIdx && srcIdx.array) {
-          newGeo.setIndex(new THREE.Uint32BufferAttribute(new Uint32Array(srcIdx.array), 1));
-        }
-
-        // Material
-        const srcMat = Array.isArray(child.material) ? child.material[0] : child.material;
-        const newMat = toStandardMaterial(srcMat);
-
-        const newMesh = new THREE.Mesh(newGeo, newMat);
-
-        // Apply world transform relative to model
-        child.updateMatrixWorld(true);
-        const localMatrix = new THREE.Matrix4().copy(modelObj.matrixWorld).invert().multiply(child.matrixWorld);
-        newMesh.applyMatrix4(localMatrix);
-
-        newMesh.frustumCulled = this.frustumCullingEnabled;
-        newMesh.castShadow = this.shadowsEnabled;
-        newMesh.receiveShadow = this.shadowsEnabled;
-        modelGroup.add(newMesh);
-        this.createdGeometries.push(newGeo);
-        clonedMeshes++;
-      });
-    }
-
-    if (clonedMeshes === 0) {
-      console.log('⚠️ tryCloneFragmentMeshes: no meshes cloned');
-      return false;
-    }
-
-    console.log(`✅ WebGPU cloned fragment meshes: cloned=${clonedMeshes}, skipped=${skippedMeshes}, lights=${copiedLights}`);
-
-    this.proxyScene = proxy;
-    this.proxySceneKind = 'fragments';
-    
-    // Adjust shadow camera to fit the model
-    this.updateShadowBounds();
-    
-    return true;
-  }
-
-  /**
-   * ==========================================================================
-   * BUILD PROXY SCENE FROM FRAGMENTS
-   * ==========================================================================
-   * 
-   * This is the core method that translates OBC's fragment model to WebGPU.
-   * 
-   * WHY WE NEED THIS:
-   * OBC stores geometry in a special LOD (Level of Detail) format optimized
-   * for WebGL. WebGPU can't directly render these meshes, so we rebuild them.
-   * 
-   * THE PROCESS:
-   * 1. Get all items with geometry from the model
-   * 2. For each item, get its raw geometry data (positions, normals, indices)
-   * 3. Build new THREE.BufferGeometry from this data
-   * 4. Look up the correct material color using: sampleId → sample → material
-   * 5. Create a new mesh and add it to our proxy scene
-   * 
-   * COLOR RESOLUTION CHAIN:
-   * meshData.sampleId → model.getSamples().get(sampleId).material → model.getMaterials().get(materialId)
-   * 
-   * This gives us the actual IFC material colors (20+ unique colors) instead
-   * of the broken getItemsMaterialDefinition() which only returns ~4 grays.
-   */
-  private async tryBuildProxySceneFromFragments(originalScene: THREE.Scene): Promise<boolean> {
-    if (!this.components) return false;
-
-    let fragments: any = null;
-    try {
-      fragments = this.components.get(OBC.FragmentsManager);
-    } catch {
-      return false;
-    }
-
-    if (!fragments?.list || fragments.list.size === 0) {
-      return false;
-    }
-
-    // =====================================================================
-    // Build a WebGPU proxy scene from FragmentsModel typed geometry arrays.
-    // OBC's fragment meshes use a special LOD/tiled structure that doesn't
-    // expose standard BufferGeometry, so we rebuild from getItemsGeometry().
-    // =====================================================================
-
-    const proxy = new THREE.Scene();
-    const bg = originalScene.background as any;
-    proxy.background = bg instanceof THREE.Color ? bg.clone() : bg;
-
-    // Initialize and build GPU picking scene BEFORE registering elements
-    if (this.colorPicker && this.colorPickingEnabled && this.container && this.webgpuRenderer && this.camera) {
-      // Initialize with renderer, scene, camera, container
-      this.colorPicker.initialize(
-        this.webgpuRenderer,
-        proxy,
-        this.camera,
-        this.container
-      );
-      
-      // Initialize element selector for shader-based highlighting
-      if (!this.elementSelector) {
-        this.elementSelector = new WebGPUElementSelector();
-      }
-      this.elementSelector.initialize(proxy, this.camera, this.container);
-      
-      // Wire up click handling: use color picker to get element, then select in element selector
-      this.setupElementSelectionHandlers();
-    }
-
-    // -------------------------------------------------------------------------
-    // STEP 1: Copy lights from original scene
-    // MeshStandardMaterial requires lights. Since we're rendering a separate
-    // proxy scene, we must copy lights (camera headlight won't be traversed).
-    // -------------------------------------------------------------------------
-    let copiedLights = 0;
-    originalScene.traverse((obj) => {
-      if ((obj as any).isLight) {
-        try {
-          const light = obj.clone(true) as THREE.Light;
-          // Disable shadows on copied lights - we use our own shadow light
-          (light as any).castShadow = false;
-          proxy.add(light);
-
-          // DirectionalLight has a target object that must be in the scene.
-          if ((light as any).isDirectionalLight && (light as any).target) {
-            proxy.add((light as any).target);
-          }
-
-          copiedLights++;
-        } catch {
-          // ignore
-        }
-      }
-    });
-
-    // Always add ambient light for fill
-    proxy.add(new THREE.AmbientLight(0xffffff, 0.5));
-
-    // Add shadow-casting directional light
-    this.setupShadowLight(proxy);
-
-    const root = new THREE.Group();
-    root.name = 'webgpu-fragments-proxy';
-    proxy.add(root);
-    this.modelGroups.push(root);
-    root.visible = this.modelsVisible;
-
-    // Fallback material for meshes without color info
-    const sharedMaterial = new THREE.MeshStandardMaterial({
-      color: 0xbfc8d4,
-      roughness: 1,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
-
-    const materialCache = new Map<string, THREE.MeshStandardMaterial>();
-    const getOrCreateMaterialFromDefinition = (definition: any): THREE.MeshStandardMaterial => {
-      const rawColor = definition?.color;
-      const color = (() => {
-        if (!rawColor) return null;
-        // THREE.Color or THREE-like
-        if (typeof rawColor === 'object' && typeof rawColor.r === 'number' && typeof rawColor.g === 'number' && typeof rawColor.b === 'number') {
-          const r = rawColor.r;
-          const g = rawColor.g;
-          const b = rawColor.b;
-          // r/g/b are typically 0..1
-          if (r <= 1 && g <= 1 && b <= 1) return new THREE.Color(r, g, b);
-          // sometimes serialized as 0..255
-          return new THREE.Color(r / 255, g / 255, b / 255);
-        }
-        if (Array.isArray(rawColor) && rawColor.length >= 3) {
-          const [r, g, b] = rawColor;
-          if (typeof r === 'number' && typeof g === 'number' && typeof b === 'number') {
-            if (r <= 1 && g <= 1 && b <= 1) return new THREE.Color(r, g, b);
-            return new THREE.Color(r / 255, g / 255, b / 255);
-          }
-        }
-        if (typeof rawColor === 'number') {
-          return new THREE.Color(rawColor);
-        }
-        return null;
-      })();
-
-      const opacity = typeof definition?.opacity === 'number' ? definition.opacity : 1;
-      const transparent = !!definition?.transparent || opacity < 1;
-      const renderedFaces = definition?.renderedFaces;
-      const side = renderedFaces === 0 ? THREE.FrontSide : THREE.DoubleSide; // RenderedFaces.ONE=0, TWO=1
-
-      const r = color ? Math.round(color.r * 255) : 191;
-      const g = color ? Math.round(color.g * 255) : 200;
-      const b = color ? Math.round(color.b * 255) : 212;
-      const key = `${r},${g},${b},${opacity.toFixed(3)},${transparent ? 1 : 0},${side}`;
-
-      const cached = materialCache.get(key);
-      if (cached) return cached;
-
-      const mat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(r / 255, g / 255, b / 255),
-        roughness: 1,
-        metalness: 0,
-        opacity,
-        transparent,
-        side,
-        alphaToCoverage: transparent,
-        depthWrite: !transparent
-      });
-      materialCache.set(key, mat);
-      return mat;
-    };
-
-    let modelCount = 0;
-    let itemCount = 0;
-    let meshCount = 0;
-    let itemsWithNoGeometry = 0;
-
-    const getItemIdsWithGeometry = async (model: any): Promise<number[]> => {
-      // Current API (FragmentsModel)
-      if (typeof model?.getItemsIdsWithGeometry === 'function') {
-        const ids = await model.getItemsIdsWithGeometry();
-        return Array.isArray(ids) ? ids : [];
-      }
-
-      // Older/alternative API variants (defensive)
-      if (typeof model?.getItemsWithGeometry === 'function') {
-        const result = await model.getItemsWithGeometry();
-        if (Array.isArray(result)) {
-          // Some versions return Item[] objects, others return localId numbers.
-          if (result.length === 0) return [];
-          if (typeof result[0] === 'number') return result as number[];
-          return (result as any[])
-            .map((it) => (typeof it === 'number' ? it : it?.localId ?? it?.id ?? null))
-            .filter((v) => typeof v === 'number') as number[];
-        }
-      }
-
-      // Legacy name used in some code/comments
-      if (typeof model?.getAllItemsWithGeometry === 'function') {
-        const ids = await model.getAllItemsWithGeometry();
-        return Array.isArray(ids) ? ids : [];
-      }
-
-      return [];
-    };
-
-    for (const [modelId, model] of fragments.list as Map<string, any>) {
-      modelCount++;
-
-      const modelGroup = new THREE.Group();
-      modelGroup.name = `webgpu-model-${modelId}`;
-      // Sectioning not supported - add directly to root
-      root.add(modelGroup);
-
-      const modelObj = model?.object as THREE.Object3D | undefined;
-      if (modelObj) {
-        modelObj.updateMatrixWorld(true);
-        modelGroup.position.copy(modelObj.position);
-        modelGroup.quaternion.copy(modelObj.quaternion);
-        modelGroup.scale.copy(modelObj.scale);
-      }
-
-      let itemIds: number[] = [];
-      try {
-        itemIds = await getItemIdsWithGeometry(model);
-      } catch (e) {
-        console.warn(`⚠️ WebGPU: failed to get item IDs with geometry for model ${modelId}`, e);
-        continue;
-      }
-
-      // Fetch per-item material definitions (colors/opacity/sidedness) in bulk.
-      const localIdToMaterialDef = new Map<number, any>();
-      const forEachNumericId = (ids: any, cb: (id: number) => void): void => {
-        if (!ids) return;
-        if (Array.isArray(ids)) {
-          for (const v of ids) if (typeof v === 'number') cb(v);
-          return;
-        }
-        if (ids instanceof Set) {
-          for (const v of ids) if (typeof v === 'number') cb(v);
-          return;
-        }
-        // TypedArrays
-        if (ArrayBuffer.isView(ids) && !(ids instanceof DataView)) {
-          const view = ids as unknown as ArrayLike<number>;
-          for (let i = 0; i < view.length; i++) {
-            const v = (view as any)[i];
-            if (typeof v === 'number') cb(v);
-          }
-          return;
-        }
-        // Generic iterable
-        if (typeof ids[Symbol.iterator] === 'function') {
-          for (const v of ids as Iterable<any>) if (typeof v === 'number') cb(v);
-        }
-      };
-
-      const addMaterialDefsForIds = async (ids: number[]): Promise<void> => {
-        if (typeof model?.getItemsMaterialDefinition !== 'function') return;
-        const pending = ids.filter((id) => typeof id === 'number' && !localIdToMaterialDef.has(id));
-        if (pending.length === 0) return;
-
-        // Chunk requests defensively; some implementations may return partial results for huge lists.
-        const chunkSize = 250;
-        for (let i = 0; i < pending.length; i += chunkSize) {
-          const chunk = pending.slice(i, i + chunkSize);
-          try {
-            const defs = await model.getItemsMaterialDefinition(chunk);
-            if (!Array.isArray(defs)) continue;
-            for (const entry of defs) {
-              const def = entry?.definition;
-              const localIds = entry?.localIds;
-              if (!def || !localIds) continue;
-              forEachNumericId(localIds, (id) => localIdToMaterialDef.set(id, def));
-            }
-          } catch {
-            // ignore; fall back to shared material
-          }
-        }
-      };
-
-      if (itemIds.length > 0) {
-        await addMaterialDefsForIds(itemIds);
-      }
-
-      // If definitions end up effectively uniform (common when models have no true material colors),
-      // fall back to category-based colors to match the app's "color by type" behavior.
-      const uniqueDefKeys = new Set<string>();
-      const uniqueRgbKeys = new Set<string>();
-      let minRgb = 255;
-      let maxRgb = 0;
-
-      for (const def of localIdToMaterialDef.values()) {
-        const mat = getOrCreateMaterialFromDefinition(def);
-        const c = mat.color;
-        const r = Math.round(c.r * 255);
-        const g = Math.round(c.g * 255);
-        const b = Math.round(c.b * 255);
-
-        uniqueRgbKeys.add(`${r},${g},${b}`);
-        uniqueDefKeys.add(`${r},${g},${b},${mat.opacity.toFixed(3)},${mat.transparent ? 1 : 0},${mat.side}`);
-
-        minRgb = Math.min(minRgb, r, g, b);
-        maxRgb = Math.max(maxRgb, r, g, b);
-
-        if (uniqueDefKeys.size >= 64 && uniqueRgbKeys.size >= 16) break;
-      }
-
-      const rgbSpread = maxRgb - minRgb;
-      // Prefer category colors when material colors are not meaningfully varied.
-      // If the model only has a handful of distinct RGB values (e.g. all gray), category
-      // coloring (matching ColorSplash) gives a far more informative visual.
-      // Threshold: <=8 unique RGB values means "effectively monochrome", use categories.
-      const shouldUseCategoryColors = uniqueRgbKeys.size <= 8;
-      const localIdToCategory = new Map<number, string>();
-      const categoryMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
-      const getOrCreateCategoryMaterial = (category: string): THREE.MeshStandardMaterial => {
-        const cached = categoryMaterialCache.get(category);
-        if (cached) return cached;
-
-        // Match the app's existing WebGL ColorSplash palette.
-        const palette: Record<string, number> = {
-          'IFCWALL': 0xFFE066,
-          'IFCWALLSTANDARDCASE': 0xFFD700,
-          'IFCSLAB': 0xB0B0B0,
-          'IFCBEAM': 0xFF3366,
-          'IFCCOLUMN': 0x00D9FF,
-          'IFCDOOR': 0x8B4513,
-          'IFCWINDOW': 0x00BFFF,
-          'IFCROOF': 0xDC143C,
-          'IFCSTAIR': 0xFF6F00,
-          'IFCSTAIRFLIGHT': 0xFF8C00,
-          'IFCRAILING': 0xE0E0E0,
-          'IFCFURNISHINGELEMENT': 0xAB47BC,
-          'IFCFOOTING': 0x795548,
-          'IFCRAMP': 0xFFA726,
-          'IFCRAMPFLIGHT': 0xFF9800,
-          'IFCCURTAINWALL': 0x26C6DA,
-          'IFCPLATE': 0x90CAF9,
-          'IFCCOVERING': 0xFFAB91,
-
-          'IFCDUCTFITTING': 0x2196F3,
-          'IFCDUCTSEGMENT': 0x42A5F5,
-          'IFCDUCT': 0x1976D2,
-          'IFCAIRTERM': 0x03A9F4,
-          'IFCAIRTERMINAL': 0x00B0FF,
-          'IFCDAMPER': 0x0288D1,
-          'IFCFAN': 0x00E5FF,
-          'IFCCOIL': 0x2979FF,
-          'IFCCHILLER': 0x00C853,
-          'IFCBOILER': 0xFF5722,
-          'IFCHEATER': 0xFF6E40,
-          'IFCHUMIDIFIER': 0x26C6DA,
-
-          'IFCPIPEFITTING': 0x00E676,
-          'IFCPIPESEGMENT': 0x4CAF50,
-          'IFCPIPE': 0x2E7D32,
-          'IFCVALVE': 0x00FF00,
-          'IFCPUMP': 0x1DE9B6,
-          'IFCFLOWMETER': 0x00BFA5,
-          'IFCFILTER': 0x64DD17,
-          'IFCTANK': 0x00897B,
-
-          'IFCCABLEFITTING': 0xFFAB00,
-          'IFCCABLESEGMENT': 0xFF9100,
-          'IFCCABLE': 0xFFD600,
-          'IFCCABLECARRIERFITTING': 0xFFEA00,
-          'IFCCABLECARRIERSEGMENT': 0xFFC107,
-          'IFCCABLETRAY': 0xFFB300,
-          'IFCRACEWAY': 0xFFD54F,
-          'IFCLIGHTFIXTURE': 0xFFFF00,
-          'IFCLIGHT': 0xFFFF8D,
-          'IFCOUTLET': 0xFF6F00,
-          'IFCSWITCH': 0xFF9800,
-          'IFCTRANSFORMER': 0xF57C00,
-          'IFCMOTOR': 0xFF4081,
-          'IFCPROTECTIVEDEVICE': 0xE91E63,
-          'IFCJUNCTIONBOX': 0xFFB74D,
-
-          'IFCSENSOR': 0xE040FB,
-          'IFCCONTROLLER': 0xAB47BC,
-          'IFCACTUATOR': 0x9C27B0,
-          'IFCALARM': 0xFF1744,
-
-          'IFCEQUIPMENT': 0x9E9E9E,
-          'IFCFLOWFITTING': 0x757575,
-          'IFCFLOWSEGMENT': 0xBDBDBD,
-          'IFCFLOWTERMINAL': 0x78909C,
-          'IFCFLOWCONTROLLER': 0x546E7A,
-          'IFCDISTRIBUTIONELEMENT': 0x90A4AE,
-
-          'IFCSPACE': 0xE3F2FD,
-          'IFCSITE': 0x8D6E63,
-          'IFCBUILDING': 0xBCAAA4,
-          'IFCBUILDINGSTOREY': 0xD7CCC8,
-        };
-
-        const colorHex = palette[category] ?? 0x9E9E9E;
-        const color = new THREE.Color(colorHex);
-
-        const mat = new THREE.MeshStandardMaterial({
-          color,
-          roughness: 1,
-          metalness: 0,
-          opacity: 1,
-          transparent: false,
-          side: THREE.DoubleSide,
-        });
-        categoryMaterialCache.set(category, mat);
-        return mat;
-      };
-
-      // Always load categories for hidden category checking (e.g., IFCSPACE)
-      // This is needed even if we're not using category colors
-      if (typeof model?.getItemsWithGeometryCategories === 'function') {
-        try {
-          const cats = await model.getItemsWithGeometryCategories();
-          if (Array.isArray(cats) && cats.length > 0) {
-            const n = Math.min(itemIds.length, cats.length);
-            for (let i = 0; i < n; i++) {
-              const id = itemIds[i];
-              const cat = cats[i];
-              if (typeof id === 'number' && typeof cat === 'string' && cat.length) {
-                localIdToCategory.set(id, cat);
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      let coloredMeshesInModel = 0;
-      let categoryColoredMeshesInModel = 0;
-      let missingMaterialDefsInModel = 0;
-
-      // =====================================================================
-      // STEP 2: Load REAL material colors using model.getMaterials()
-      // =====================================================================
-      // 
-      // IMPORTANT: getItemsMaterialDefinition() is BROKEN - it only returns
-      // ~4 gray colors even when the model has 24+ materials with 20+ unique colors.
-      // 
-      // The CORRECT way to get material colors:
-      // 1. model.getMaterials() → Map<materialId, {r, g, b, a}> (the real colors!)
-      // 2. model.getSamples() → Map<sampleId, {material: materialId, ...}>
-      // 3. meshData.sampleId → look up in samples → get materialId → get color
-      //
-      // This chain: sampleId → sample.material → realMaterialsMap gives us the
-      // actual IFC material colors that match what WebGL renders.
-      // =====================================================================
-      const realMaterialsMap = new Map<number, { r: number; g: number; b: number; a?: number }>();
-      try {
-        if (typeof model?.getMaterials === 'function') {
-          const allMats = await model.getMaterials();
-          if (allMats instanceof Map) {
-            for (const [matId, rawMat] of allMats) {
-              const r = (rawMat as any)?.r ?? 200;
-              const g = (rawMat as any)?.g ?? 200;
-              const b = (rawMat as any)?.b ?? 200;
-              const a = (rawMat as any)?.a;
-              realMaterialsMap.set(matId, { r, g, b, a });
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('⚠️ Failed to load materials from model.getMaterials():', e);
-      }
-
-      // =====================================================================
-      // STEP 3: Build sampleId → materialId mapping
-      // Each mesh has a sampleId; each sample points to a materialId
-      // =====================================================================
-      const sampleToMaterialId = new Map<number, number>();
-      try {
-        if (typeof model?.getSamples === 'function') {
-          const allSamples = await model.getSamples();
-          if (allSamples instanceof Map) {
-            for (const [sampleId, sample] of allSamples) {
-              const matId = (sample as any)?.material;
-              if (typeof matId === 'number') {
-                sampleToMaterialId.set(sampleId, matId);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('⚠️ Failed to load samples from model.getSamples():', e);
-      }
-
-      console.log('✅ WebGPU materials loaded:', realMaterialsMap.size, 'samples:', sampleToMaterialId.size);
-
-      // Helper to create MeshStandardMaterial from raw color data
-      const realMaterialCache = new Map<string, THREE.MeshStandardMaterial>();
-      const getOrCreateRealMaterial = (matId: number): THREE.MeshStandardMaterial | null => {
-        const rawMat = realMaterialsMap.get(matId);
-        if (!rawMat) return null;
-
-        const { r, g, b, a } = rawMat;
-        const opacity = typeof a === 'number' ? a / 255 : 1;
-        const transparent = opacity < 1;
-        const key = `${r},${g},${b},${opacity.toFixed(3)}`;
-
-        const cached = realMaterialCache.get(key);
-        if (cached) return cached;
-
-        const mat = new THREE.MeshStandardMaterial({
-          color: new THREE.Color(r / 255, g / 255, b / 255),
-          roughness: 1,
-          metalness: 0,
-          opacity,
-          transparent,
-          side: THREE.DoubleSide,
-          alphaToCoverage: transparent,
-          depthWrite: !transparent
-        });
-        realMaterialCache.set(key, mat);
-        return mat;
-      };
-
-      // Helper to get material from sampleId (the key to correct colors!)
-      const getMaterialFromSampleId = (sampleId: number): THREE.MeshStandardMaterial | null => {
-        const matId = sampleToMaterialId.get(sampleId);
-        if (typeof matId !== 'number') return null;
-        return getOrCreateRealMaterial(matId);
-      };
-
-      // Helper to get Color Splash material for a category
-      const getColorSplashMaterial = (category: string): THREE.MeshStandardMaterial | null => {
-        if (!this.colorSplashActive) return null;
-        
-        const color = this.colorSplashColors.get(category);
-        if (!color) return null;
-        
-        const key = `splash_${category}_${color.getHexString()}`;
-        const cached = realMaterialCache.get(key);
-        if (cached) return cached;
-        
-        const mat = new THREE.MeshStandardMaterial({
-          color: color.clone(),
-          roughness: 1,
-          metalness: 0,
-          side: THREE.DoubleSide,
-        });
-        realMaterialCache.set(key, mat);
-        return mat;
-      };
-
-      // Helper to get Slicer material for a specific color
-      const getOrCreateSlicerMaterial = (color: THREE.Color): THREE.MeshStandardMaterial => {
-        const key = `slicer_${color.getHexString()}`;
-        const cached = realMaterialCache.get(key);
-        if (cached) return cached;
-        
-        const mat = new THREE.MeshStandardMaterial({
-          color: color.clone(),
-          roughness: 1,
-          metalness: 0,
-          side: THREE.DoubleSide,
-          opacity: 0.85,
-          transparent: true,
-          alphaToCoverage: true,
-          depthWrite: false
-        });
-        realMaterialCache.set(key, mat);
-        return mat;
-      };
-
-      // =====================================================================
-      // STEP 4: Build geometry for each item
-      // =====================================================================
-      // For each IFC item:
-      // 1. Get raw geometry data via model.getItemsGeometry()
-      // 2. meshData contains: positions, normals, indices, transform, sampleId, localId
-      // 3. Build a new THREE.BufferGeometry from this data
-      // 4. Look up color using meshData.sampleId → getMaterialFromSampleId()
-      // 5. Handle normals carefully (WebGPU requires Float32, not Int16)
-      // =====================================================================
-      
-      // PERFORMANCE OPTIMIZATION: Collect geometries by material for batching
-      // Instead of creating thousands of individual meshes (one per IFC item),
-      // we group geometries by material and merge them into fewer large meshes.
-      // This dramatically reduces draw calls (e.g., 10000 → 50).
-      const geometriesByMaterial = new Map<string, { 
-        geometries: THREE.BufferGeometry[]; 
-        material: THREE.Material;
-      }>();
-      
-      // Helper to get material key for batching
-      const getMaterialKey = (mat: THREE.Material, category?: string): string => {
-        if (this.colorSplashActive && category) {
-          return `splash_${category}`;
-        }
-        if (mat instanceof THREE.MeshStandardMaterial) {
-          const c = mat.color;
-          return `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${mat.opacity.toFixed(3)},${mat.transparent ? 1 : 0}`;
-        }
-        return mat.uuid;
-      };
-      
-      // Track skipped items for hidden categories
-      let skippedByCategory = 0;
-
-      // PERFORMANCE OPTIMIZATION: Batch getItemsGeometry calls
-      // Instead of calling getItemsGeometry for every single item (which is extremely slow
-      // for large models), we process items in chunks. This dramatically reduces the number
-      // of async calls and allows the browser to stay responsive during the rebuild.
-      const CHUNK_SIZE = 100;
-      for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
-        const chunkIds = itemIds.slice(i, i + CHUNK_SIZE);
-        
-        // Filter out hidden items from the chunk to avoid unnecessary geometry fetching
-        const activeChunkIds = chunkIds.filter(id => {
-          const cat = localIdToCategory.get(id);
-          if (cat && this.hiddenCategories.has(cat)) {
-            skippedByCategory++;
-            return false;
-          }
-          const hidden = this.hiddenElements.get(modelId);
-          if (hidden && hidden.has(id)) return false;
-          return true;
-        });
-
-        if (activeChunkIds.length === 0) {
-          itemCount += chunkIds.length;
-          continue;
-        }
-
-        let geometriesArray: any[] = [];
-        try {
-          // Batch fetch geometry for the entire chunk
-          geometriesArray = await model.getItemsGeometry(activeChunkIds);
-        } catch (e) {
-          console.warn(`⚠️ WebGPU: failed to get geometries for chunk in model ${modelId}`, e);
-          itemCount += chunkIds.length;
-          continue;
-        }
-
-        for (let j = 0; j < activeChunkIds.length; j++) {
-          const itemId = activeChunkIds[j];
-          let geometries = geometriesArray[j];
-          itemCount++;
-          
-          const itemCategory = localIdToCategory.get(itemId);
-          let isGhost = false;
-          
-          // Check if isolation is active
-          if (this.isolatedElements) {
-            const isolatedIds = this.isolatedElements.get(modelId);
-            if (!isolatedIds || !isolatedIds.has(itemId)) {
-              isGhost = true;
-            }
-          }
-
-          if (!geometries || geometries.length === 0) {
-            try {
-              const children = await model.getItemsChildren([itemId]);
-              if (children && children.length > 0) {
-                // Ensure children materials are also available
-                await addMaterialDefsForIds(children);
-                const childrenGeometriesArray = await model.getItemsGeometry(children);
-                geometries = childrenGeometriesArray.flat();
-              }
-            } catch {
-              // ignore
-            }
-          }
-
-          if (!geometries || geometries.length === 0) {
-            itemsWithNoGeometry++;
-            continue;
-          }
-
-          for (const meshData of geometries) {
-            if (!meshData?.positions) continue;
-
-            const localIdForMesh = typeof meshData.localId === 'number' ? meshData.localId : itemId;
-            const meshCategory = localIdToCategory.get(localIdForMesh) || itemCategory;
-            
-            // -----------------------------------------------------------------
-            // RESOLVE MATERIAL
-            // -----------------------------------------------------------------
-            let materialForMesh: THREE.MeshStandardMaterial | null = null;
-
-            // Priority 0: Ghost Mode
-            if (isGhost) {
-              materialForMesh = this.getOrCreateGhostMaterial();
-            }
-
-            // Priority 1: Color Splash
-            if (!materialForMesh && this.colorSplashActive && meshCategory) {
-              materialForMesh = getColorSplashMaterial(meshCategory);
-            }
-
-            // Priority 1.5: Slicer Colors
-            if (!materialForMesh && this.slicerActive) {
-              const modelSlicerColors = this.slicerColors.get(modelId);
-              if (modelSlicerColors) {
-                const customColor = modelSlicerColors.get(localIdForMesh);
-                if (customColor) {
-                  materialForMesh = getOrCreateSlicerMaterial(customColor);
-                }
-              }
-            }
-
-            // Priority 2: Real material colors
-            if (!materialForMesh) {
-              const sampleId = (meshData as any).sampleId;
-              if (typeof sampleId === 'number' && sampleToMaterialId.size > 0) {
-                materialForMesh = getMaterialFromSampleId(sampleId);
-                if (materialForMesh) coloredMeshesInModel++;
-              }
-            }
-
-            // Priority 3: Category colors (fallback)
-            if (!materialForMesh && shouldUseCategoryColors && meshCategory) {
-              materialForMesh = getOrCreateCategoryMaterial(meshCategory);
-              if (materialForMesh) categoryColoredMeshesInModel++;
-            }
-
-            // Priority 4: Shared material (last resort)
-            if (!materialForMesh) {
-              const defForMesh = localIdToMaterialDef.get(localIdForMesh);
-              if (defForMesh) {
-                materialForMesh = getOrCreateMaterialFromDefinition(defForMesh);
-              } else {
-                missingMaterialDefsInModel++;
-              }
-            }
-
-            // Final fallback
-            if (!materialForMesh) {
-              materialForMesh = sharedMaterial;
-            }
-
-            // -----------------------------------------------------------------
-            // BUILD GEOMETRY
-            // -----------------------------------------------------------------
-            const geometry = new THREE.BufferGeometry();
-            
-            // Positions: ensure Float32 (WebGPU prefers this)
-            const posArray = meshData.positions instanceof Float64Array
-              ? new Float32Array(meshData.positions)
-              : (meshData.positions as Float32Array | Float64Array);
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(posArray, 3));
-
-            // -----------------------------------------------------------------
-            // NORMALS: Critical WebGPU compatibility fix!
-            // -----------------------------------------------------------------
-            if (meshData.normals && meshData.normals.length > 0) {
-              const n = meshData.normals;
-              const out = new Float32Array(n.length);
-              const scale = 1 / 32767; // Int16 normalized range
-              for (let i = 0; i < n.length; i++) out[i] = n[i] * scale;
-              geometry.setAttribute('normal', new THREE.Float32BufferAttribute(out, 3));
-            } else {
-              geometry.computeVertexNormals();
-            }
-
-            // Indices
-            if (meshData.indices) {
-              geometry.setIndex(new THREE.Uint32BufferAttribute(meshData.indices, 1));
-            }
-
-            // -----------------------------------------------------------------
-            // GPU COLOR PICKING: Add element ID as vertex color attribute
-            // -----------------------------------------------------------------
-            // Register the element with the color picker and encode its ID
-            // as a vertex color attribute.
-            // -----------------------------------------------------------------
-            if (this.colorPicker && this.colorPickingEnabled) {
-              const elementId = this.colorPicker.registerElement({
-                localId: localIdForMesh,
-                modelId,
-                category: localIdToCategory.get(localIdForMesh) || localIdToCategory.get(itemId),
-              });
-              this.colorPicker.createElementColorAttribute(geometry, elementId);
-              // Store elementId in userData for tracking during merge
-              geometry.userData.elementId = elementId;
-            }
-
-            // GEOMETRY MERGING OPTIMIZATION:
-            if (this.geometryMergingEnabled) {
-              if (meshData.transform) {
-                geometry.applyMatrix4(meshData.transform);
-              }
-              
-              geometry.computeBoundingSphere();
-              
-              const matKey = getMaterialKey(materialForMesh, meshCategory);
-              if (!geometriesByMaterial.has(matKey)) {
-                geometriesByMaterial.set(matKey, { geometries: [], material: materialForMesh });
-              }
-              geometriesByMaterial.get(matKey)!.geometries.push(geometry);
-              meshCount++;
-            } else {
-              if (meshData.transform) {
-                geometry.applyMatrix4(meshData.transform);
-              }
-
-              geometry.computeBoundingSphere();
-
-              const mesh = new THREE.Mesh(geometry, materialForMesh);
-              mesh.castShadow = this.shadowsEnabled;
-              mesh.receiveShadow = this.shadowsEnabled;
-              mesh.frustumCulled = this.frustumCullingEnabled;
-
-              modelGroup.add(mesh);
-              this.createdGeometries.push(geometry);
-              
-              if (this.elementSelector && geometry.userData.elementId) {
-                const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
-                this.elementSelector.registerElementLocation(geometry.userData.elementId, mesh, 0, count);
-              }
-              
-              meshCount++;
-            }
-          }
-        }
-
-        // Yield to UI after each chunk to keep animations (like zoom) smooth
-        await new Promise<void>((r) => setTimeout(() => r(), 0));
-      }
-      
-      // =====================================================================
-      // STEP 5: Merge geometries by material (PERFORMANCE OPTIMIZATION)
-      // =====================================================================
-      // After collecting all geometries grouped by material, merge each group
-      // into a single large mesh. This is the key optimization that reduces
-      // draw calls from thousands to tens.
-      // =====================================================================
-      if (this.geometryMergingEnabled && geometriesByMaterial.size > 0) {
-        let mergedMeshCount = 0;
-        
-        for (const [matKey, { geometries, material }] of geometriesByMaterial) {
-          if (geometries.length === 0) continue;
-          
-          // PERFORMANCE OPTIMIZATION: Use smaller chunks for ghosts to allow better frustum culling.
-          // Also disable shadows for ghosts to save GPU cycles.
-          const isGhost = material === this.ghostMaterial;
-          const maxVertices = isGhost ? 65535 : 65535 * 3;
-          
-          // Split into chunks if too many vertices (prevent GPU memory issues)
-          let currentBatch: THREE.BufferGeometry[] = [];
-          let currentVertexCount = 0;
-          
-          const flushBatch = () => {
-            if (currentBatch.length === 0) return;
-            
-            try {
-              const merged = currentBatch.length === 1 
-                ? currentBatch[0] 
-                : mergeGeometries(currentBatch, false);
-              
-              if (merged) {
-                const mesh = new THREE.Mesh(merged, material);
-                
-                // PERFORMANCE OPTIMIZATION: Ghosts don't need shadows
-                mesh.castShadow = isGhost ? false : this.shadowsEnabled;
-                mesh.receiveShadow = isGhost ? false : this.shadowsEnabled;
-                
-                mesh.frustumCulled = this.frustumCullingEnabled;
-                mesh.name = `merged-batch-${matKey}-${mergedMeshCount}`;
-                modelGroup.add(mesh);
-                this.createdGeometries.push(merged);
-                this.mergedMeshes.push(mesh);
-                
-                // Track element locations for instant highlighting
-                if (this.elementSelector) {
-                  let currentOffset = 0;
-                  let registeredCount = 0;
-                  for (const geo of currentBatch) {
-                    const eid = geo.userData.elementId;
-                    const count = geo.index ? geo.index.count : geo.attributes.position.count;
-                    if (eid) {
-                      this.elementSelector.registerElementLocation(eid, mesh, currentOffset, count);
-                      registeredCount++;
-                    }
-                    currentOffset += count;
-                  }
-                }
-                
-                mergedMeshCount++;
-              }
-            } catch (e) {
-              // Fallback: add geometries individually if merge fails
-              console.warn('⚠️ Geometry merge failed, adding individually:', e);
-              for (const geo of currentBatch) {
-                const mesh = new THREE.Mesh(geo, material);
-                mesh.castShadow = isGhost ? false : this.shadowsEnabled;
-                mesh.receiveShadow = isGhost ? false : this.shadowsEnabled;
-                modelGroup.add(mesh);
-                this.createdGeometries.push(geo);
-                mergedMeshCount++;
-              }
-            }
-            
-            currentBatch = [];
-            currentVertexCount = 0;
-          };
-          
-          for (const geo of geometries) {
-            const vertexCount = geo.attributes.position?.count || 0;
-            
-            if (currentVertexCount + vertexCount > maxVertices && currentBatch.length > 0) {
-              flushBatch();
-            }
-            
-            currentBatch.push(geo);
-            currentVertexCount += vertexCount;
-          }
-          
-          // Flush remaining
-          flushBatch();
-        }
-        
-        console.log(`✅ WebGPU geometry merging: ${meshCount} geometries → ${mergedMeshCount} merged meshes (${geometriesByMaterial.size} material groups)`);
-      }
-
-      // Log color statistics for debugging
-      console.log('🎨 WebGPU proxy color stats', {
-        modelId,
-        mappedLocalIds: localIdToMaterialDef.size,
-        coloredMeshes: coloredMeshesInModel,
-        categoryColoredMeshes: categoryColoredMeshesInModel,
-        missingMaterialDefs: missingMaterialDefsInModel,
-        uniqueMaterialDefsSampled: uniqueDefKeys.size,
-        uniqueRgbSampled: uniqueRgbKeys.size,
-        rgbSpread,
-        usingCategoryColors: shouldUseCategoryColors,
-        totalMeshesSoFar: meshCount,
-      });
-    }
-
-    console.log('✅ WebGPU fragments proxy built', {
-      modelCount,
-      itemCount,
-      meshCount,
-      itemsWithNoGeometry,
-      copiedLights,
-    });
-
-    this.proxyScene = proxy;
-    this.proxySceneKind = 'fragments';
-
-    // Adjust shadow camera to fit the model
-    this.updateShadowBounds();
-
-    // Build the picking scene with cloned meshes using picking material
-    if (this.colorPicker && this.colorPickingEnabled) {
-      this.colorPicker.buildPickingScene();
-      console.log(`🎯 GPU color picker ready with ${this.colorPicker.getElementCount()} elements`);
-    }
-
-    return true;
-  }
-
-  /**
    * Dispose proxy scene
    */
   private disposeProxyScene(): void {
+    if (this.proxySceneBuilder) {
+      this.proxySceneBuilder.dispose();
+    }
+
     if (this.proxySceneKind === 'fragments') {
       this.proxyScene = null;
       this.proxySceneKind = 'in-place';
@@ -3657,16 +1836,15 @@ export class WebGPURendererModule {
       this.webgpuRenderer.toneMappingExposure = 1.0;
 
       // Enable shadow mapping
-      if (this.shadowsEnabled) {
+      if (this.shadowManager.isShadowsEnabled()) {
         this.webgpuRenderer.shadowMap.enabled = true;
         this.webgpuRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
       }
 
       // Initialize GPU color picker BEFORE proxy scene is built
       // This allows elements to be registered during geometry creation
-      if (this.colorPickingEnabled) {
-        this.colorPicker = new WebGPUColorPicker();
-        // Initialize happens later after proxy scene is ready
+      if (this.colorPicker?.isEnabled()) {
+        // Already instantiated in constructor, will be initialized after proxy scene is ready
       }
       
       // Create proxy scene with compatible materials
@@ -3730,6 +1908,9 @@ export class WebGPURendererModule {
       // Setup model load listener to update proxy scene when new models are added
       this.setupModelLoadListener();
 
+      // Initialize Color Picker (CRITICAL: Must be initialized before OutlineManager)
+      this.initializeColorPicker();
+
       // Initialize outline/selection highlighting
       this.initializeOutlineManager();
 
@@ -3784,6 +1965,22 @@ export class WebGPURendererModule {
       }
     }
 
+    // Dispose material factory (MUST be before renderer disposal to avoid usedTimes error)
+    if (this.materialFactory) {
+      this.materialFactory.dispose();
+    }
+
+    // Dispose managers that have materials
+    if (this.edgeManager) {
+      this.edgeManager.dispose();
+    }
+    if (this.outlineManager) {
+      this.outlineManager.dispose();
+    }
+    if (this.elementSelector) {
+      this.elementSelector.dispose();
+    }
+
     // Dispose renderer
     if (this.webgpuRenderer) {
       try {
@@ -3794,23 +1991,13 @@ export class WebGPURendererModule {
       this.webgpuRenderer = null;
     }
 
-    // Dispose edge material
-    if (this.edgeMaterial) {
-      this.edgeMaterial.dispose();
-      this.edgeMaterial = null;
-    }
-
-    if (this.elementSelector) {
-      this.elementSelector.reset();
-    }
-
     // Remove selection event listeners
     if (this.selectionEventTarget) {
       if (this.selectionClickHandler) {
-        this.selectionEventTarget.removeEventListener('pointerup', this.selectionClickHandler, { capture: true });
+        this.selectionEventTarget.removeEventListener('pointerup', this.selectionClickHandler as EventListener, { capture: true });
       }
       if (this.selectionPointerDownHandler) {
-        this.selectionEventTarget.removeEventListener('pointerdown', this.selectionPointerDownHandler, { capture: true });
+        this.selectionEventTarget.removeEventListener('pointerdown', this.selectionPointerDownHandler as EventListener, { capture: true });
       }
     }
     if (this.selectionEscHandler) {
@@ -3825,37 +2012,26 @@ export class WebGPURendererModule {
     // Dispose color picker
     if (this.colorPicker) {
       this.colorPicker.dispose();
-      this.colorPicker = null;
     }
 
     // Dispose element selector
     if (this.elementSelector) {
       this.elementSelector.dispose();
-      this.elementSelector = null;
     }
 
     // Dispose fog
     if (this.fogManager) {
       this.fogManager.dispose();
-      this.fogManager = null;
     }
 
     // Dispose LOD
     if (this.lodManager) {
       this.lodManager.dispose();
-      this.lodManager = null;
     }
 
     // Dispose stats manager
     if (this.statsManager) {
       this.statsManager.dispose();
-      this.statsManager = null;
-    }
-
-    // Dispose material factory
-    if (this.materialFactory) {
-      this.materialFactory.dispose();
-      this.materialFactory = null;
     }
 
     // Show original canvas
@@ -3901,7 +2077,6 @@ export class WebGPURendererModule {
     // Dispose outline manager
     if (this.outlineManager) {
       this.outlineManager.dispose();
-      this.outlineManager = null;
     }
     
     this.components = null;
@@ -3960,19 +2135,6 @@ export class WebGPURendererModule {
       // Track frame time for stats - use stats manager if available
       if (this.statsManager) {
         this.statsManager.updateFrame(currentTime);
-      } else if (this.statsEnabled) {
-        const delta = currentTime - this.lastFrameTime;
-        this.lastFrameTime = currentTime;
-        this.frameTime = delta;
-        this.frameCount++;
-        
-        // Update FPS every 500ms
-        if (currentTime - this.lastFpsUpdate >= 500) {
-          this.fps = Math.round((this.frameCount * 1000) / (currentTime - this.lastFpsUpdate));
-          this.frameCount = 0;
-          this.lastFpsUpdate = currentTime;
-          this.updateStatsDisplay();
-        }
       }
 
       // Update camera world matrix before rendering.
@@ -3981,7 +2143,7 @@ export class WebGPURendererModule {
       this.camera.updateMatrixWorld();
       
       // Check if camera has moved significantly
-      const cameraMoved = this.hasCameraMoved();
+      const cameraMoved = this.optimizations?.hasCameraMoved(this.camera) ?? true;
       
       // Ensure cluster group is in the scene if it exists
       // We do this before frustum culling so cluster meshes are correctly handled
@@ -4018,20 +2180,12 @@ export class WebGPURendererModule {
       
       // Apply frustum culling for performance
       // Sectioning not supported in WebGPU mode, so no need to bypass culling
-      if (this.frustumCullingEnabled && cameraMoved) {
-        this.performFrustumCulling();
+      if (cameraMoved && this.optimizations && this.proxyScene && this.camera) {
+        this.optimizations.performFrustumCulling(this.proxyScene, this.camera);
       }
       
       // Only update shadow map when needed (static scene optimization)
-      if (this.shadowLight && this.shadowsEnabled) {
-        // Update shadow map less frequently if camera hasn't moved much
-        if (cameraMoved || this.shadowMapNeedsUpdate) {
-          this.shadowLight.shadow.needsUpdate = true;
-          this.shadowMapNeedsUpdate = false;
-        } else {
-          this.shadowLight.shadow.needsUpdate = false;
-        }
-      }
+      this.shadowManager.updateShadowMap(cameraMoved);
 
       // Render the proxy scene
       try {
@@ -4041,7 +2195,7 @@ export class WebGPURendererModule {
         }
         
         // Update LOD based on camera distance - pass current camera to ensure fresh reference
-        if (this.lodEnabled && this.lodManager && this.camera) {
+        if (this.lodManager && this.camera) {
           this.lodManager.update(this.camera);
         }
         
@@ -4061,72 +2215,6 @@ export class WebGPURendererModule {
     };
 
     render();
-  }
-
-  /**
-   * Check if camera has moved significantly since last frame
-   */
-  private hasCameraMoved(): boolean {
-    if (!this.camera) return true;
-    
-    const pos = this.camera.position;
-    const quat = this.camera.quaternion;
-    
-    const posDiff = pos.distanceToSquared(this.lastCameraPosition);
-    const quatDiff = Math.abs(1 - Math.abs(quat.dot(this.lastCameraQuaternion)));
-    
-    const moved = posDiff > this.cameraMovedThreshold || quatDiff > 0.0001;
-    
-    if (moved) {
-      this.lastCameraPosition.copy(pos);
-      this.lastCameraQuaternion.copy(quat);
-    }
-    
-    return moved;
-  }
-  
-  /**
-   * Perform frustum culling to hide objects outside camera view
-   */
-  private performFrustumCulling(): void {
-    if (!this.proxyScene || !this.camera) return;
-    
-    // Ensure world matrices are up to date before culling
-    this.proxyScene.updateMatrixWorld();
-    
-    // Update frustum from camera
-    this.projScreenMatrix.multiplyMatrices(
-      (this.camera as THREE.PerspectiveCamera).projectionMatrix,
-      this.camera.matrixWorldInverse
-    );
-    this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
-    
-    // Cull meshes outside frustum
-    this.proxyScene.traverse((obj) => {
-      // Skip ground plane and cluster group from culling
-      if (obj.name === 'webgpu-ground-plane') return;
-      
-      // If clustering is active, don't cull cluster meshes or anything in the cluster group
-      // We check for isClusterMesh flag which we added to all cluster-related objects
-      if (obj.userData && obj.userData.isClusterMesh) {
-        obj.visible = true;
-        // We continue traversal to ensure children are also processed, 
-        // but we skip the frustum check for them below.
-      }
-
-      if (obj instanceof THREE.Mesh && !(obj.userData && obj.userData.isClusterMesh)) {
-        // Use bounding sphere for fast culling
-        if (!obj.geometry.boundingSphere) {
-          obj.geometry.computeBoundingSphere();
-        }
-        
-        if (obj.geometry.boundingSphere) {
-          const sphere = obj.geometry.boundingSphere.clone();
-          sphere.applyMatrix4(obj.matrixWorld);
-          obj.visible = this.frustum.intersectsSphere(sphere);
-        }
-      }
-    });
   }
 
   /**
@@ -4344,825 +2432,24 @@ export class WebGPURendererModule {
    * Note: Uses WebGPUStatsManager for modular stats handling when available
    */
   public setStatsEnabled(enabled: boolean): void {
-    this.statsEnabled = enabled;
-    
-    // Use modular stats manager if available
-    if (this.statsManager) {
-      this.statsManager.setEnabled(enabled);
-      console.log(`📊 Stats ${enabled ? 'enabled' : 'disabled'} (using StatsManager)`);
-      return;
-    }
-    
-    // Fallback to inline stats implementation
-    if (enabled) {
-      this.createStatsOverlay();
-      this.countSceneObjects();
-      this.lastFpsUpdate = performance.now();
-      this.lastFrameTime = performance.now();
-      this.frameCount = 0;
-    } else {
-      this.removeStatsOverlay();
-    }
-    
-    console.log(`📊 Stats ${enabled ? 'enabled' : 'disabled'}`);
+    this.statsManager?.setEnabled(enabled);
   }
 
   /**
-   * Get current stats enabled state
+   * Check if stats are enabled
    */
   public isStatsEnabled(): boolean {
-    if (this.statsManager) {
-      return this.statsManager.isEnabled();
-    }
-    return this.statsEnabled;
+    return this.statsManager?.isEnabled() ?? false;
   }
 
   /**
    * Create the stats overlay element
    */
-  private createStatsOverlay(): void {
-    if (this.statsOverlay) return;
-    
-    this.statsOverlay = document.createElement('div');
-    this.statsOverlay.id = 'webgpu-stats-overlay';
-    this.statsOverlay.innerHTML = `
-      <div class="stats-header">📊 WebGPU Performance</div>
-      
-      <div class="stats-section-title">⚡ Timing</div>
-      <div class="stats-row">
-        <span class="stats-label">FPS:</span>
-        <span class="stats-value" id="stats-fps">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Frame Time:</span>
-        <span class="stats-value" id="stats-frametime">-- ms</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Avg Frame:</span>
-        <span class="stats-value" id="stats-avgframe">-- ms</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Min/Max FPS:</span>
-        <span class="stats-value" id="stats-minmaxfps">--/--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">🎨 Scene</div>
-      <div class="stats-row">
-        <span class="stats-label">Meshes:</span>
-        <span class="stats-value" id="stats-meshes">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Visible:</span>
-        <span class="stats-value" id="stats-visible">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Triangles:</span>
-        <span class="stats-value" id="stats-triangles">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Vertices:</span>
-        <span class="stats-value" id="stats-vertices">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Draw Calls:</span>
-        <span class="stats-value" id="stats-drawcalls">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Lines:</span>
-        <span class="stats-value" id="stats-lines">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Lights:</span>
-        <span class="stats-value" id="stats-lights">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">📦 Memory</div>
-      <div class="stats-row">
-        <span class="stats-label">Geometries:</span>
-        <span class="stats-value" id="stats-geometries">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Materials:</span>
-        <span class="stats-value" id="stats-materials">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Textures:</span>
-        <span class="stats-value" id="stats-textures">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">JS Heap:</span>
-        <span class="stats-value" id="stats-jsheap">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">🚀 Optimizations</div>
-      <div class="stats-row">
-        <span class="stats-label">Frustum Cull:</span>
-        <span class="stats-value" id="stats-frustum">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Geo Merging:</span>
-        <span class="stats-value" id="stats-merging">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Merged Meshes:</span>
-        <span class="stats-value" id="stats-mergedcount">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Shadow Res:</span>
-        <span class="stats-value" id="stats-shadowres">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">📐 LOD System</div>
-      <div class="stats-row">
-        <span class="stats-label">LOD Status:</span>
-        <span class="stats-value" id="stats-lod-status">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">LOD Objects:</span>
-        <span class="stats-value" id="stats-lod-objects">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Full/Simp/Imp:</span>
-        <span class="stats-value" id="stats-lod-levels">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">LOD Triangles:</span>
-        <span class="stats-value" id="stats-lod-tris">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">LOD Savings:</span>
-        <span class="stats-value" id="stats-lod-savings">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">⚙️ Settings</div>
-      <div class="stats-row">
-        <span class="stats-label">Shadows:</span>
-        <span class="stats-value" id="stats-shadows">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Edges:</span>
-        <span class="stats-value" id="stats-edges">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Ground:</span>
-        <span class="stats-value" id="stats-ground">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Tone Map:</span>
-        <span class="stats-value" id="stats-tonemap">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Spaces:</span>
-        <span class="stats-value" id="stats-spaces">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">📷 Camera</div>
-      <div class="stats-row">
-        <span class="stats-label">Position:</span>
-        <span class="stats-value stats-small" id="stats-campos">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">To Center:</span>
-        <span class="stats-value" id="stats-camdist">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">To Nearest:</span>
-        <span class="stats-value" id="stats-camnearest">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">FOV:</span>
-        <span class="stats-value" id="stats-fov">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">🖥️ Display</div>
-      <div class="stats-row">
-        <span class="stats-label">Resolution:</span>
-        <span class="stats-value" id="stats-resolution">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Pixel Ratio:</span>
-        <span class="stats-value" id="stats-pixelratio">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-section-title">🖥️ Hardware</div>
-      <div class="stats-row">
-        <span class="stats-label">CPU Cores:</span>
-        <span class="stats-value" id="stats-cpucores">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Memory:</span>
-        <span class="stats-value" id="stats-devmemory">--</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">Battery:</span>
-        <span class="stats-value" id="stats-battery">--</span>
-      </div>
-      
-      <div class="stats-row stats-divider"></div>
-      <div class="stats-row">
-        <span class="stats-label">Renderer:</span>
-        <span class="stats-value stats-highlight" id="stats-renderer">WebGPU</span>
-      </div>
-      <div class="stats-row">
-        <span class="stats-label">GPU:</span>
-        <span class="stats-value stats-small" id="stats-gpu">--</span>
-      </div>
-    `;
-    
-    // Apply styles
-    Object.assign(this.statsOverlay.style, {
-      position: 'absolute',
-      top: '10px',
-      left: '10px',
-      background: 'rgba(0, 0, 0, 0.75)',
-      backdropFilter: 'blur(8px)',
-      color: '#fff',
-      padding: '12px 16px',
-      borderRadius: '10px',
-      fontFamily: 'Monaco, Consolas, monospace',
-      fontSize: '11px',
-      lineHeight: '1.6',
-      zIndex: '10000',
-      minWidth: '160px',
-      maxHeight: 'calc(100vh - 100px)',
-      overflowY: 'auto',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-      border: '1px solid rgba(255,255,255,0.1)',
-      cursor: 'move',
-      userSelect: 'none',
-    });
-    
-    // Make draggable
-    this.makeStatsDraggable();
-    
-    // Style the header
-    const header = this.statsOverlay.querySelector('.stats-header') as HTMLElement;
-    if (header) {
-      Object.assign(header.style, {
-        fontWeight: 'bold',
-        fontSize: '12px',
-        marginBottom: '8px',
-        paddingBottom: '6px',
-        borderBottom: '1px solid rgba(255,255,255,0.2)',
-        color: '#69db7c',
-        position: 'sticky',
-        top: '-12px',
-        background: 'rgba(0, 0, 0, 0.9)',
-        marginTop: '-12px',
-        paddingTop: '12px',
-        zIndex: '1',
-      });
-    }
-    
-    // Add custom scrollbar styles
-    const styleId = 'webgpu-stats-scrollbar-style';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        #webgpu-stats-overlay::-webkit-scrollbar {
-          width: 6px;
-        }
-        #webgpu-stats-overlay::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 3px;
-        }
-        #webgpu-stats-overlay::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 3px;
-        }
-        #webgpu-stats-overlay::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    // Style the rows
-    const rows = this.statsOverlay.querySelectorAll('.stats-row');
-    rows.forEach(row => {
-      Object.assign((row as HTMLElement).style, {
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: '12px',
-      });
-    });
-    
-    // Style dividers
-    const dividers = this.statsOverlay.querySelectorAll('.stats-divider');
-    dividers.forEach(divider => {
-      Object.assign((divider as HTMLElement).style, {
-        height: '1px',
-        background: 'rgba(255,255,255,0.1)',
-        margin: '6px 0',
-      });
-    });
-    
-    // Style labels
-    const labels = this.statsOverlay.querySelectorAll('.stats-label');
-    labels.forEach(label => {
-      Object.assign((label as HTMLElement).style, {
-        color: 'rgba(255,255,255,0.6)',
-      });
-    });
-    
-    // Style values
-    const values = this.statsOverlay.querySelectorAll('.stats-value');
-    values.forEach(value => {
-      Object.assign((value as HTMLElement).style, {
-        color: '#fff',
-        fontWeight: '600',
-      });
-    });
-    
-    // Style section titles
-    const sectionTitles = this.statsOverlay.querySelectorAll('.stats-section-title');
-    sectionTitles.forEach(title => {
-      Object.assign((title as HTMLElement).style, {
-        fontSize: '10px',
-        fontWeight: '600',
-        color: '#69db7c',
-        marginTop: '4px',
-        marginBottom: '4px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-      });
-    });
-    
-    // Style small values
-    const smallValues = this.statsOverlay.querySelectorAll('.stats-small');
-    smallValues.forEach(val => {
-      Object.assign((val as HTMLElement).style, {
-        fontSize: '9px',
-        maxWidth: '90px',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      });
-    });
-    
-    // Style highlighted values
-    const highlights = this.statsOverlay.querySelectorAll('.stats-highlight');
-    highlights.forEach(hl => {
-      Object.assign((hl as HTMLElement).style, {
-        color: '#69db7c',
-        fontWeight: '700',
-      });
-    });
-    
-    // Add to container
-    if (this.container) {
-      this.container.appendChild(this.statsOverlay);
-    } else {
-      document.body.appendChild(this.statsOverlay);
-    }
-  }
+  // Stats overlay methods removed - now handled by WebGPUStatsManager
 
-  /**
-   * Remove the stats overlay
-   */
-  private removeStatsOverlay(): void {
-    if (this.statsOverlay) {
-      // Clean up drag handlers
-      if ((this.statsOverlay as any)._dragCleanup) {
-        (this.statsOverlay as any)._dragCleanup();
-      }
-      this.statsOverlay.remove();
-      this.statsOverlay = null;
-    }
-  }
-
-  /**
-   * Make the stats overlay draggable
-   */
-  private makeStatsDraggable(): void {
-    if (!this.statsOverlay) return;
-    
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-    
-    const overlay = this.statsOverlay;
-    
-    const onMouseDown = (e: MouseEvent) => {
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      
-      const rect = overlay.getBoundingClientRect();
-      const parentRect = overlay.parentElement?.getBoundingClientRect() || { left: 0, top: 0 };
-      initialLeft = rect.left - parentRect.left;
-      initialTop = rect.top - parentRect.top;
-      
-      overlay.style.transition = 'none';
-      overlay.style.opacity = '0.9';
-      
-      e.preventDefault();
-    };
-    
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-      
-      let newLeft = initialLeft + deltaX;
-      let newTop = initialTop + deltaY;
-      
-      // Constrain to container bounds
-      const parent = overlay.parentElement;
-      if (parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const overlayRect = overlay.getBoundingClientRect();
-        
-        const maxLeft = parentRect.width - overlayRect.width;
-        const maxTop = parentRect.height - overlayRect.height;
-        
-        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-        newTop = Math.max(0, Math.min(newTop, maxTop));
-      }
-      
-      overlay.style.left = `${newLeft}px`;
-      overlay.style.top = `${newTop}px`;
-    };
-    
-    const onMouseUp = () => {
-      if (isDragging) {
-        isDragging = false;
-        overlay.style.opacity = '1';
-      }
-    };
-    
-    overlay.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-    
-    // Store cleanup function
-    (overlay as any)._dragCleanup = () => {
-      overlay.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-  }
-
-  /**
-   * Update the stats display with current values
-   */
-  private updateStatsDisplay(): void {
-    if (!this.statsOverlay) return;
-    
-    // Track frame time for average calculation
-    if (this.frameTime > 0) {
-      this.frameTimeHistory.push(this.frameTime);
-      if (this.frameTimeHistory.length > 60) {
-        this.frameTimeHistory.shift();
-      }
-    }
-    const avgFrameTime = this.frameTimeHistory.length > 0 
-      ? this.frameTimeHistory.reduce((a, b) => a + b, 0) / this.frameTimeHistory.length 
-      : 0;
-    
-    // Track min/max FPS
-    if (this.fps > 0) {
-      this.fpsHistory.push(this.fps);
-      if (this.fpsHistory.length > 120) { // Track over ~1 minute
-        this.fpsHistory.shift();
-      }
-      if (this.fps < this.minFps && this.fps > 0) this.minFps = this.fps;
-      if (this.fps > this.maxFps) this.maxFps = this.fps;
-    }
-    
-    // Count visible meshes for frustum culling stats
-    this.visibleMeshCount = 0;
-    if (this.proxyScene) {
-      this.proxyScene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.visible && obj.name !== 'webgpu-ground-plane') {
-          this.visibleMeshCount++;
-        }
-      });
-    }
-    
-    // Timing stats
-    const fpsEl = this.statsOverlay.querySelector('#stats-fps');
-    const frametimeEl = this.statsOverlay.querySelector('#stats-frametime');
-    const avgframeEl = this.statsOverlay.querySelector('#stats-avgframe');
-    const minmaxfpsEl = this.statsOverlay.querySelector('#stats-minmaxfps');
-    
-    if (fpsEl) {
-      fpsEl.textContent = this.fps.toString();
-      // Color code FPS
-      (fpsEl as HTMLElement).style.color = this.fps >= 55 ? '#69db7c' : this.fps >= 30 ? '#fbbf24' : '#f87171';
-    }
-    
-    if (frametimeEl) {
-      frametimeEl.textContent = `${this.frameTime.toFixed(1)} ms`;
-    }
-    
-    if (avgframeEl) {
-      avgframeEl.textContent = `${avgFrameTime.toFixed(1)} ms`;
-    }
-    
-    if (minmaxfpsEl) {
-      minmaxfpsEl.textContent = `${this.minFps === 999 ? '--' : this.minFps}/${this.maxFps === 0 ? '--' : this.maxFps}`;
-    }
-    
-    // Scene stats
-    const meshesEl = this.statsOverlay.querySelector('#stats-meshes');
-    const visibleEl = this.statsOverlay.querySelector('#stats-visible');
-    const trianglesEl = this.statsOverlay.querySelector('#stats-triangles');
-    const verticesEl = this.statsOverlay.querySelector('#stats-vertices');
-    const drawcallsEl = this.statsOverlay.querySelector('#stats-drawcalls');
-    const linesEl = this.statsOverlay.querySelector('#stats-lines');
-    const lightsEl = this.statsOverlay.querySelector('#stats-lights');
-    
-    if (meshesEl) {
-      meshesEl.textContent = this.formatNumber(this.meshCount);
-    }
-    
-    if (visibleEl) {
-      visibleEl.textContent = this.formatNumber(this.visibleMeshCount);
-      // Color code: green if frustum culling is saving work
-      const culledPercent = this.meshCount > 0 ? ((this.meshCount - this.visibleMeshCount) / this.meshCount) * 100 : 0;
-      (visibleEl as HTMLElement).style.color = culledPercent > 10 ? '#69db7c' : 'inherit';
-    }
-    
-    if (trianglesEl) {
-      trianglesEl.textContent = this.formatNumber(this.triangleCount);
-    }
-    
-    if (verticesEl) {
-      verticesEl.textContent = this.formatNumber(this.vertexCount);
-    }
-    
-    if (drawcallsEl) {
-      drawcallsEl.textContent = this.formatNumber(this.drawCalls);
-    }
-    
-    if (linesEl) {
-      linesEl.textContent = this.formatNumber(this.lineCount);
-    }
-    
-    if (lightsEl) {
-      lightsEl.textContent = this.lightCount.toString();
-    }
-    
-    // Memory stats
-    const geometriesEl = this.statsOverlay.querySelector('#stats-geometries');
-    const materialsEl = this.statsOverlay.querySelector('#stats-materials');
-    const texturesEl = this.statsOverlay.querySelector('#stats-textures');
-    const jsheapEl = this.statsOverlay.querySelector('#stats-jsheap');
-    
-    if (geometriesEl) {
-      geometriesEl.textContent = this.formatNumber(this.geometryCount);
-    }
-    
-    if (materialsEl) {
-      materialsEl.textContent = this.formatNumber(this.materialCount);
-    }
-    
-    if (texturesEl) {
-      texturesEl.textContent = this.textureCount.toString();
-    }
-    
-    // JS Heap (only available in Chrome)
-    if (jsheapEl) {
-      const perf = (performance as any);
-      if (perf.memory) {
-        const usedMB = perf.memory.usedJSHeapSize / (1024 * 1024);
-        const totalMB = perf.memory.jsHeapSizeLimit / (1024 * 1024);
-        jsheapEl.textContent = `${usedMB.toFixed(0)}/${totalMB.toFixed(0)} MB`;
-      } else {
-        jsheapEl.textContent = 'N/A';
-      }
-    }
-    
-    // Optimization stats
-    const frustumEl = this.statsOverlay.querySelector('#stats-frustum');
-    const mergingEl = this.statsOverlay.querySelector('#stats-merging');
-    const mergedcountEl = this.statsOverlay.querySelector('#stats-mergedcount');
-    const shadowresEl = this.statsOverlay.querySelector('#stats-shadowres');
-    
-    if (frustumEl) {
-      frustumEl.textContent = this.frustumCullingEnabled ? 'ON' : 'OFF';
-      (frustumEl as HTMLElement).style.color = this.frustumCullingEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (mergingEl) {
-      mergingEl.textContent = this.geometryMergingEnabled ? 'ON' : 'OFF';
-      (mergingEl as HTMLElement).style.color = this.geometryMergingEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (mergedcountEl) {
-      mergedcountEl.textContent = this.mergedMeshes.length.toString();
-    }
-    
-    if (shadowresEl) {
-      const res = this.shadowLight?.shadow?.mapSize?.x ?? 2048;
-      shadowresEl.textContent = `${res}x${res}`;
-    }
-    
-    // LOD stats
-    const lodStatusEl = this.statsOverlay.querySelector('#stats-lod-status');
-    const lodObjectsEl = this.statsOverlay.querySelector('#stats-lod-objects');
-    const lodLevelsEl = this.statsOverlay.querySelector('#stats-lod-levels');
-    const lodTrisEl = this.statsOverlay.querySelector('#stats-lod-tris');
-    const lodSavingsEl = this.statsOverlay.querySelector('#stats-lod-savings');
-    
-    if (lodStatusEl) {
-      lodStatusEl.textContent = this.lodEnabled ? 'ON' : 'OFF';
-      (lodStatusEl as HTMLElement).style.color = this.lodEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (this.lodEnabled && this.lodManager) {
-      const lodStats = this.lodManager.getStats();
-      
-      if (lodObjectsEl) {
-        lodObjectsEl.textContent = lodStats.totalObjects.toString();
-      }
-      
-      if (lodLevelsEl) {
-        lodLevelsEl.textContent = `${lodStats.fullDetail}/${lodStats.simplified}/${lodStats.impostor}`;
-      }
-      
-      if (lodTrisEl) {
-        lodTrisEl.textContent = `${lodStats.currentTriangles.toLocaleString()}`;
-      }
-      
-      if (lodSavingsEl) {
-        const savedPercent = lodStats.originalTriangles > 0 
-          ? Math.round((lodStats.trianglesSaved / lodStats.originalTriangles) * 100) 
-          : 0;
-        lodSavingsEl.textContent = `${lodStats.trianglesSaved.toLocaleString()} (${savedPercent}%)`;
-        (lodSavingsEl as HTMLElement).style.color = savedPercent > 0 ? '#69db7c' : 'rgba(255,255,255,0.5)';
-      }
-    } else {
-      if (lodObjectsEl) lodObjectsEl.textContent = '--';
-      if (lodLevelsEl) lodLevelsEl.textContent = '--';
-      if (lodTrisEl) lodTrisEl.textContent = '--';
-      if (lodSavingsEl) lodSavingsEl.textContent = '--';
-    }
-    
-    // Settings stats
-    const shadowsEl = this.statsOverlay.querySelector('#stats-shadows');
-    const edgesEl = this.statsOverlay.querySelector('#stats-edges');
-    const groundEl = this.statsOverlay.querySelector('#stats-ground');
-    const tonemapEl = this.statsOverlay.querySelector('#stats-tonemap');
-    const spacesEl = this.statsOverlay.querySelector('#stats-spaces');
-    
-    if (shadowsEl) {
-      shadowsEl.textContent = this.shadowsEnabled ? 'ON' : 'OFF';
-      (shadowsEl as HTMLElement).style.color = this.shadowsEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (edgesEl) {
-      edgesEl.textContent = this.edgesEnabled ? 'ON' : 'OFF';
-      (edgesEl as HTMLElement).style.color = this.edgesEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (groundEl) {
-      groundEl.textContent = this.groundPlaneEnabled ? 'ON' : 'OFF';
-      (groundEl as HTMLElement).style.color = this.groundPlaneEnabled ? '#69db7c' : 'rgba(255,255,255,0.5)';
-    }
-    
-    if (tonemapEl) {
-      tonemapEl.textContent = this.getToneMappingName(this.currentToneMapping as THREE.ToneMapping);
-    }
-    
-    if (spacesEl) {
-      const spacesVisible = !this.hiddenCategories.has('IFCSPACE');
-      spacesEl.textContent = spacesVisible ? 'Visible' : 'Hidden';
-      (spacesEl as HTMLElement).style.color = spacesVisible ? '#69db7c' : '#fbbf24';
-    }
-    
-    // Camera stats
-    const camposEl = this.statsOverlay.querySelector('#stats-campos');
-    const camdistEl = this.statsOverlay.querySelector('#stats-camdist');
-    const camnearestEl = this.statsOverlay.querySelector('#stats-camnearest');
-    const fovEl = this.statsOverlay.querySelector('#stats-fov');
-    
-    if (this.camera && camposEl) {
-      const pos = this.camera.position;
-      camposEl.textContent = `${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}`;
-    }
-    
-    if (this.camera && camdistEl) {
-      const dist = this.camera.position.distanceTo(this.sceneCenter);
-      camdistEl.textContent = `${dist.toFixed(1)}m`;
-    }
-    
-    // Calculate distance to nearest visible mesh (for LOD calibration)
-    if (this.camera && camnearestEl && this.proxyScene) {
-      let nearestDist = Infinity;
-      const camPos = this.camera.position;
-      
-      this.proxyScene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh && obj.visible) {
-          // Get world position of the mesh
-          const meshPos = new THREE.Vector3();
-          obj.getWorldPosition(meshPos);
-          const dist = camPos.distanceTo(meshPos);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-          }
-        }
-      });
-      
-      if (nearestDist < Infinity) {
-        camnearestEl.textContent = `${nearestDist.toFixed(1)}m`;
-      } else {
-        camnearestEl.textContent = '--';
-      }
-    }
-    
-    if (fovEl && this.camera) {
-      const cam = this.camera as THREE.PerspectiveCamera;
-      if (cam.fov) {
-        fovEl.textContent = `${cam.fov.toFixed(0)}°`;
-      } else {
-        fovEl.textContent = 'N/A';
-      }
-    }
-    
-    // Display stats
-    const resolutionEl = this.statsOverlay.querySelector('#stats-resolution');
-    const pixelratioEl = this.statsOverlay.querySelector('#stats-pixelratio');
-    
-    if (resolutionEl && this.webgpuRenderer) {
-      const size = this.webgpuRenderer.getSize(new THREE.Vector2());
-      resolutionEl.textContent = `${Math.round(size.x)}x${Math.round(size.y)}`;
-    }
-    
-    if (pixelratioEl && this.webgpuRenderer) {
-      pixelratioEl.textContent = this.webgpuRenderer.getPixelRatio().toFixed(1);
-    }
-    
-    // Hardware stats
-    const cpucoresEl = this.statsOverlay.querySelector('#stats-cpucores');
-    const devmemoryEl = this.statsOverlay.querySelector('#stats-devmemory');
-    const batteryEl = this.statsOverlay.querySelector('#stats-battery');
-    
-    if (cpucoresEl) {
-      const cores = navigator.hardwareConcurrency;
-      cpucoresEl.textContent = cores ? `${cores} cores` : 'N/A';
-    }
-    
-    if (devmemoryEl) {
-      const nav = navigator as any;
-      if (nav.deviceMemory) {
-        devmemoryEl.textContent = `${nav.deviceMemory} GB`;
-      } else {
-        devmemoryEl.textContent = 'N/A';
-      }
-    }
-    
-    if (batteryEl) {
-      this.updateBatteryStatus(batteryEl as HTMLElement);
-    }
-    
-    // GPU info
-    const gpuEl = this.statsOverlay.querySelector('#stats-gpu');
-    if (gpuEl) {
-      gpuEl.textContent = this.gpuInfo;
-    }
-  }
+  // Stats display methods removed - now handled by WebGPUStatsManager
   
-  /**
-   * Update battery status in stats overlay
-   */
-  private async updateBatteryStatus(element: HTMLElement): Promise<void> {
-    try {
-      const nav = navigator as any;
-      if (nav.getBattery) {
-        const battery = await nav.getBattery();
-        const level = Math.round(battery.level * 100);
-        const charging = battery.charging;
-        
-        element.textContent = `${level}%${charging ? ' ⚡' : ''}`;
-        
-        // Color code battery level
-        if (level > 50) {
-          element.style.color = '#69db7c';
-        } else if (level > 20) {
-          element.style.color = '#fbbf24';
-        } else {
-          element.style.color = '#f87171';
-        }
-      } else {
-        element.textContent = 'N/A';
-      }
-    } catch (e) {
-      element.textContent = 'N/A';
-    }
-  }
+  // Battery status method removed - now handled by WebGPUStatsManager
 
   /**
    * Capture GPU information from WebGPU adapter
@@ -5176,31 +2463,9 @@ export class WebGPURendererModule {
           // Try to get adapter info
           if (adapter.requestAdapterInfo) {
             const info = await adapter.requestAdapterInfo();
-            const vendor = info.vendor || '';
-            const device = info.device || '';
-            const arch = info.architecture || '';
-            const desc = info.description || '';
-            
-            // Build a readable GPU name
-            if (desc) {
-              this.gpuInfo = desc;
-            } else if (device) {
-              this.gpuInfo = `${vendor} ${device}`.trim();
-            } else if (arch) {
-              this.gpuInfo = `${vendor} ${arch}`.trim();
-            } else if (vendor) {
-              this.gpuInfo = vendor;
-            } else {
-              this.gpuInfo = 'WebGPU Adapter';
-            }
-            
+            this.gpuInfo = info.description || info.device || info.vendor || 'WebGPU Adapter';
             console.log('🎮 GPU detected:', this.gpuInfo);
-          } else {
-            // Fallback: try info property directly
-            const info = adapter.info;
-            if (info) {
-              this.gpuInfo = `${info.vendor || ''} ${info.device || info.architecture || ''}`.trim() || 'WebGPU Adapter';
-            }
+            this.statsManager?.setGPUInfo(this.gpuInfo);
           }
         }
       }
@@ -5210,81 +2475,5 @@ export class WebGPURendererModule {
     }
   }
 
-  /**
-   * Count objects in the scene for stats
-   */
-  private countSceneObjects(): void {
-    if (!this.proxyScene) return;
-    
-    this.meshCount = 0;
-    this.triangleCount = 0;
-    this.vertexCount = 0;
-    this.drawCalls = 0;
-    this.lineCount = 0;
-    this.lightCount = 0;
-    
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    const textures = new Set<THREE.Texture>();
-    
-    this.proxyScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        this.meshCount++;
-        this.drawCalls++;
-        
-        const geometry = obj.geometry;
-        if (geometry) {
-          geometries.add(geometry);
-          const index = geometry.index;
-          const position = geometry.attributes.position;
-          
-          if (index) {
-            this.triangleCount += Math.floor(index.count / 3);
-          } else if (position) {
-            this.triangleCount += Math.floor(position.count / 3);
-          }
-          
-          if (position) {
-            this.vertexCount += position.count;
-          }
-        }
-        
-        // Count materials and textures
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach(mat => {
-          if (mat) {
-            materials.add(mat);
-            // Check for textures
-            if ((mat as any).map) textures.add((mat as any).map);
-            if ((mat as any).normalMap) textures.add((mat as any).normalMap);
-            if ((mat as any).roughnessMap) textures.add((mat as any).roughnessMap);
-            if ((mat as any).metalnessMap) textures.add((mat as any).metalnessMap);
-            if ((mat as any).aoMap) textures.add((mat as any).aoMap);
-          }
-        });
-        
-      } else if (obj instanceof THREE.LineSegments || obj instanceof THREE.Line) {
-        this.lineCount++;
-        this.drawCalls++;
-      } else if (obj instanceof THREE.Light) {
-        this.lightCount++;
-      }
-    });
-    
-    this.geometryCount = geometries.size;
-    this.materialCount = materials.size;
-    this.textureCount = textures.size;
-  }
-
-  /**
-   * Format large numbers with K/M suffix
-   */
-  private formatNumber(num: number): string {
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    } else if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
-  }
+  // Scene counting methods removed - now handled by WebGPUStatsManager
 }

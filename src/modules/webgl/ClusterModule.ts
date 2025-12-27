@@ -1,5 +1,5 @@
 /**
- * CLUSTER MODULE (The "Organizer")
+ * CLUSTER MODULE (The "Lego Organizer")
  * --------------------------------------------------------------------------------
  * WHAT IT DOES: 
  * This is one of the most advanced tools. It takes all the objects in the 

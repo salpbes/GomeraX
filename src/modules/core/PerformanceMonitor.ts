@@ -1,5 +1,5 @@
 /**
- * Performance Monitor Module
+ * Performance Monitor Module (The "Athletic Performance Analyst")
  * 
  * This module handles performance monitoring using Stats.js
  * It displays:

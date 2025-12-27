@@ -1,3 +1,20 @@
+/**
+ * VIEWER INITIALIZER (The "Acedemic Director")
+ * --------------------------------------------------------------------------------
+ * WHAT IT DOES: 
+ * This class orchestrates the full initialization of the IFCViewer.
+ * It sets up:
+ * - World and Renderer
+ * - IFC Loader
+ * - Properties Panel
+ * - UI Manager
+ * - Navigation Tools (ViewCube, Minimap, First-Person Controls)
+ * - Analysis Tools (Clipper, Measurement, Clustering)
+ * - Performance Monitoring
+ * 
+ * This separation keeps the main viewer API clean and focused. 
+
+ */
 import * as OBC from '@thatopen/components';
 import { 
   WorldManager, 

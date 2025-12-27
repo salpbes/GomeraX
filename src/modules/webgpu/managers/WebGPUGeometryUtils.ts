@@ -1,5 +1,5 @@
 /**
- * WebGPU Geometry Utilities
+ * WebGPU Geometry Utilities (The "Geometry Doctor")
  * Helper functions for geometry manipulation and conversion
  */
 
