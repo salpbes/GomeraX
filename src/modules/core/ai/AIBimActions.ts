@@ -172,7 +172,12 @@ export class AIBimActions {
   public async zoom(delta: number) {
     const world = this.viewer.worldManager.world;
     if (world && world.camera instanceof OBC.OrthoPerspectiveCamera) {
-      world.camera.controls.zoom(delta, true);
+      const controls = world.camera.controls;
+      // Using dolly instead of zoom for a more natural 3D movement
+      // and to avoid negative zoom values which cause "weird" geometry.
+      // Positive delta = zoom in, Negative delta = zoom out.
+      const factor = delta > 0 ? 0.5 : -0.7;
+      await controls.dolly(factor * controls.distance, true);
     }
   }
 
