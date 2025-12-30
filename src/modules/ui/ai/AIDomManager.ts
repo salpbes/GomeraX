@@ -6,9 +6,12 @@ export class AIDomManager {
   public closeBtn: HTMLButtonElement;
   public minimizeBtn: HTMLButtonElement;
   public historyBtn: HTMLButtonElement;
+  public webllmBtn: HTMLButtonElement;
   public header: HTMLDivElement;
   public headerTitle: HTMLElement;
   public historyPanel: HTMLDivElement;
+  public modelInfo: HTMLSpanElement;
+  public resizeHandle: HTMLDivElement;
 
   constructor() {
     this.container = document.createElement('div');
@@ -16,8 +19,12 @@ export class AIDomManager {
     this.container.className = 'ai-assistant-panel hidden';
     this.container.innerHTML = `
       <div class="ai-header">
-        <h3><i class="fas fa-robot"></i> AI Assistant</h3>
+        <div class="ai-header-left">
+          <h3><i class="fas fa-robot"></i> AI Assistant</h3>
+          <span class="ai-model-info"><i class="fas fa-microchip"></i> DistilBERT</span>
+        </div>
         <div class="ai-header-actions">
+          <button class="ai-webllm-btn" title="Enable Advanced AI" style="display:none;"><i class="fas fa-brain"></i></button>
           <button class="ai-history-btn" title="Command History"><i class="fas fa-history"></i></button>
           <button class="ai-minimize-btn" title="Minimize"><i class="fas fa-minus"></i></button>
           <button class="ai-close-btn" title="Close"><i class="fas fa-times"></i></button>
@@ -39,8 +46,9 @@ export class AIDomManager {
       </div>
       <div class="ai-footer">
         <i class="fas fa-shield-alt"></i> 
-        <span>Local AI: distilbert-base-uncased-mnli. No data leaves your browser.</span>
+        <span>100% Local AI - No data leaves your browser</span>
       </div>
+      <div class="ai-resize-handle"></div>
     `;
 
     this.input = this.container.querySelector('#ai-input') as HTMLInputElement;
@@ -48,10 +56,13 @@ export class AIDomManager {
     this.sendBtn = this.container.querySelector('#ai-send-btn') as HTMLButtonElement;
     this.closeBtn = this.container.querySelector('.ai-close-btn') as HTMLButtonElement;
     this.minimizeBtn = this.container.querySelector('.ai-minimize-btn') as HTMLButtonElement;
+    this.webllmBtn = this.container.querySelector('.ai-webllm-btn') as HTMLButtonElement;
     this.historyBtn = this.container.querySelector('.ai-history-btn') as HTMLButtonElement;
     this.header = this.container.querySelector('.ai-header') as HTMLDivElement;
     this.headerTitle = this.container.querySelector('.ai-header h3') as HTMLElement;
     this.historyPanel = this.container.querySelector('#ai-history-panel') as HTMLDivElement;
+    this.modelInfo = this.container.querySelector('.ai-model-info') as HTMLSpanElement;
+    this.resizeHandle = this.container.querySelector('.ai-resize-handle') as HTMLDivElement;
   }
 
   public appendToBody(): void {
@@ -79,6 +90,15 @@ export class AIDomManager {
       statusSpan.textContent = `(${text})`;
     } else {
       this.headerTitle.querySelector('.ai-status')?.remove();
+    }
+  }
+
+  public updateModelInfo(modelName: string, isAdvanced: boolean = false): void {
+    this.modelInfo.innerHTML = `<i class="fas fa-${isAdvanced ? 'brain' : 'microchip'}"></i> ${modelName}`;
+    if (isAdvanced) {
+      this.modelInfo.style.color = '#69db7c';
+    } else {
+      this.modelInfo.style.color = 'rgba(255, 255, 255, 0.5)';
     }
   }
 }

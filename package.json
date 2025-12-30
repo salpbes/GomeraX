@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@mlc-ai/web-llm": "^0.2.80",
     "@thatopen/components": "^3.2.6",
     "@thatopen/components-front": "^3.2.14",
     "@thatopen/fragments": "^3.2.11",

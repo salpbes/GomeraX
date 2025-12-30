@@ -1,10 +1,11 @@
 import type { AIBimActions } from './AIBimActions';
+import type { ConversationContext } from './ConversationContext';
 
 export class AIIntentEngine {
   private classifier: any = null;
   private isModelLoading: boolean = false;
 
-  constructor(private actions: AIBimActions) {}
+  constructor(private actions: AIBimActions, private context: ConversationContext) {}
 
   public async loadModel(onProgress?: (progress: number) => void): Promise<void> {
     if (this.classifier || this.isModelLoading) return;
@@ -128,23 +129,30 @@ export class AIIntentEngine {
 
         if (action === 'select elements') {
           const count = await this.actions.selectByType(ifcType);
+          this.context.setLastSelection([typeLabel], count, await this.actions.getIdsByType(ifcType));
+          this.context.setLastAction('select', [typeLabel], count);
           return `AI detected you want to select ${label}. I've selected ${count} for you.`;
         } else if (action === 'hide elements') {
           const count = await this.actions.setVisibilityByType(ifcType, false);
+          this.context.setLastAction('hide', [typeLabel], count);
           return `AI detected you want to hide ${label}. I've hidden ${count}.`;
         } else if (action === 'show elements') {
           const count = await this.actions.setVisibilityByType(ifcType, true);
+          this.context.setLastAction('show', [typeLabel], count);
           return `AI detected you want to show ${label}. I've shown ${count}.`;
         } else if (action === 'isolate elements') {
           const count = await this.actions.isolateByType(ifcType);
+          this.context.setLastAction('isolate', [typeLabel], count);
           return `AI detected you want to isolate ${label}. I've isolated ${count}.`;
         } else if (action === 'zoom to elements') {
           const count = await this.actions.zoomToType(ifcType);
+          this.context.setLastAction('zoom', [typeLabel], count);
           return `AI detected you want to focus on ${label}. I've zoomed to ${count} elements.`;
         } else if (action === 'count elements') {
           const idsByModel = await this.actions.getIdsByType(ifcType);
           let total = 0;
           idsByModel.forEach(ids => total += ids.size);
+          this.context.setLastAction('count', [typeLabel], total);
           return `AI detected you want to count ${label}. There are ${total} in the model.`;
         }
       }

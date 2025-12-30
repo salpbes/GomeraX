@@ -9,7 +9,9 @@ export class AIStyleManager {
         position: fixed;
         bottom: 80px;
         right: 20px;
-        width: 300px;
+        width: 420px;
+        min-width: 300px;
+        max-width: 800px;
         background: rgba(25, 25, 25, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
@@ -20,6 +22,8 @@ export class AIStyleManager {
         backdrop-filter: blur(10px);
         color: white;
         font-family: 'Inter', sans-serif;
+        resize: horizontal;
+        overflow: auto;
       }
 
       .ai-assistant-panel.transitioning {
@@ -51,6 +55,13 @@ export class AIStyleManager {
         cursor: move;
         user-select: none;
       }
+
+      .ai-header-left {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        pointer-events: none;
+      }
       
       .ai-header h3 {
         margin: 0;
@@ -59,7 +70,16 @@ export class AIStyleManager {
         display: flex;
         align-items: center;
         gap: 8px;
-        pointer-events: none;
+      }
+
+      .ai-model-info {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 500;
+        letter-spacing: 0.3px;
       }
 
       .ai-header-actions {
@@ -67,17 +87,29 @@ export class AIStyleManager {
         gap: 4px;
       }
       
-      .ai-close-btn, .ai-minimize-btn, .ai-history-btn {
+      .ai-close-btn, .ai-minimize-btn, .ai-history-btn, .ai-webllm-btn {
         background: none;
         border: none;
         color: rgba(255, 255, 255, 0.5);
         cursor: pointer;
-        padding: 4px;
-        transition: color 0.2s;
+        padding: 6px 8px;
+        transition: all 0.2s;
+        font-size: 13px;
+        border-radius: 4px;
       }
       
       .ai-close-btn:hover, .ai-minimize-btn:hover, .ai-history-btn:hover {
         color: white;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .ai-webllm-btn {
+        font-size: 14px;
+      }
+
+      .ai-webllm-btn:hover {
+        background: rgba(105, 219, 124, 0.1);
+        color: #69db7c;
       }
       
       .ai-content {
@@ -148,14 +180,66 @@ export class AIStyleManager {
         background: rgba(255, 255, 255, 0.1);
       }
       
+      .ai-resize-handle {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 20px;
+        height: 20px;
+        cursor: nwse-resize;
+        background: linear-gradient(135deg, transparent 0%, transparent 50%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.1) 100%);
+        border-radius: 0 0 12px 0;
+      }
+
+      .ai-resize-handle:hover {
+        background: linear-gradient(135deg, transparent 0%, transparent 50%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.2) 100%);
+      }
+
       .ai-response-area {
-        height: 200px;
+        height: 280px;
         overflow-y: auto;
         font-size: 13px;
         line-height: 1.5;
         color: rgba(255, 255, 255, 0.8);
         padding-right: 8px;
         white-space: pre-wrap;
+      }
+
+      /* Custom scrollbar for dark theme */
+      .ai-response-area::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .ai-response-area::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+      }
+
+      .ai-response-area::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+      }
+
+      .ai-response-area::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .ai-history-list::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .ai-history-list::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+      }
+
+      .ai-history-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 3px;
+      }
+
+      .ai-history-list::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.25);
       }
       
       .ai-message {
@@ -173,6 +257,81 @@ export class AIStyleManager {
       
       .ai-message:not(.user-message) {
         background: rgba(255, 255, 255, 0.05);
+      }
+
+      .ai-message.streaming .message-content::after {
+        content: '▋';
+        color: #69db7c;
+        animation: blink 1s infinite;
+        margin-left: 2px;
+      }
+
+      @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+      }
+
+      .thinking-section {
+        margin-bottom: 8px;
+        border-left: 2px solid rgba(147, 112, 219, 0.4);
+        padding-left: 8px;
+      }
+
+      .thinking-header {
+        font-size: 11px;
+        color: rgba(147, 112, 219, 0.8);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+        padding: 4px 0;
+        transition: color 0.2s;
+      }
+
+      .thinking-header:hover {
+        color: rgba(147, 112, 219, 1);
+      }
+
+      .thinking-header i {
+        font-size: 10px;
+      }
+
+      .thinking-content {
+        font-size: 11px;
+        color: rgba(147, 112, 219, 0.6);
+        font-style: italic;
+        margin-top: 4px;
+        padding: 6px 8px;
+        background: rgba(147, 112, 219, 0.05);
+        border-radius: 4px;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: max-height 0.3s ease, opacity 0.3s ease, margin-top 0.3s ease;
+      }
+
+      .thinking-section.expanded .thinking-content {
+        max-height: 200px;
+        opacity: 1;
+        overflow-y: auto;
+      }
+
+      .thinking-section.expanded .thinking-header::before {
+        content: '▼ ';
+        font-size: 8px;
+        margin-right: -2px;
+      }
+
+      .thinking-section:not(.expanded) .thinking-header::before {
+        content: '▶ ';
+        font-size: 8px;
+        margin-right: -2px;
+      }
+
+      .response-text {
+        margin-top: 4px;
       }
 
       .ai-badge {
@@ -262,6 +421,116 @@ export class AIStyleManager {
 
       .ai-footer i {
         color: #69db7c;
+      }
+
+      .ai-context-info {
+        margin-bottom: 6px;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        font-style: italic;
+      }
+
+      .context-info-content {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .context-info-content i {
+        color: #74c0fc;
+      }
+
+      .ai-suggestions {
+        margin-top: 8px;
+        padding: 10px;
+        background: rgba(116, 192, 252, 0.08);
+        border: 1px solid rgba(116, 192, 252, 0.2);
+        border-radius: 8px;
+      }
+
+      .suggestions-title {
+        font-size: 11px;
+        color: #74c0fc;
+        margin-bottom: 8px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .suggestions-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .suggestion-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.9);
+        padding: 6px 10px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: left;
+      }
+
+      .suggestion-btn:hover {
+        background: rgba(116, 192, 252, 0.15);
+        border-color: rgba(116, 192, 252, 0.4);
+        transform: translateX(2px);
+      }
+
+      .ai-loading-progress {
+        padding: 12px;
+        background: rgba(105, 219, 124, 0.08);
+        border: 1px solid rgba(105, 219, 124, 0.2);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+
+      .loading-title {
+        font-size: 12px;
+        color: #69db7c;
+        margin-bottom: 8px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .loading-bar {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+
+      .loading-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #69db7c, #51cf66);
+        border-radius: 3px;
+        transition: width 0.3s ease;
+      }
+
+      .loading-text {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+      }
+
+      .ai-message.streaming .message-content::after {
+        content: '▋';
+        animation: blink 1s infinite;
+        margin-left: 2px;
+      }
+
+      @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
       }
     `;
     document.head.appendChild(style);
