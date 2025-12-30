@@ -105,11 +105,106 @@ export class AIStyleManager {
 
       .ai-webllm-btn {
         font-size: 14px;
+        position: relative;
       }
 
       .ai-webllm-btn:hover {
         background: rgba(105, 219, 124, 0.1);
         color: #69db7c;
+      }
+
+      /* Brain button attention animation */
+      .ai-webllm-btn.attention {
+        animation: brain-pulse 2s ease-in-out infinite;
+        color: #69db7c;
+      }
+
+      .ai-webllm-btn.attention::before {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: 8px;
+        background: rgba(105, 219, 124, 0.3);
+        animation: brain-glow 2s ease-in-out infinite;
+        z-index: -1;
+      }
+
+      @keyframes brain-pulse {
+        0%, 100% { 
+          transform: scale(1);
+          color: #69db7c;
+        }
+        50% { 
+          transform: scale(1.15);
+          color: #8ce99a;
+        }
+      }
+
+      @keyframes brain-glow {
+        0%, 100% { 
+          opacity: 0.4;
+          box-shadow: 0 0 8px rgba(105, 219, 124, 0.4);
+        }
+        50% { 
+          opacity: 0.8;
+          box-shadow: 0 0 16px rgba(105, 219, 124, 0.6), 0 0 24px rgba(105, 219, 124, 0.3);
+        }
+      }
+
+      /* Brain tooltip hint - fixed positioning above button */
+      .ai-brain-tooltip {
+        position: fixed;
+        background: rgba(30, 35, 30, 0.98);
+        border: 1px solid rgba(105, 219, 124, 0.5);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 12px;
+        color: #c1c2c5;
+        white-space: nowrap;
+        animation: tooltip-appear 0.4s ease-out;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+        backdrop-filter: blur(10px);
+      }
+
+      .ai-brain-tooltip::before {
+        content: '';
+        position: absolute;
+        bottom: -6px;
+        right: 12px;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid rgba(105, 219, 124, 0.5);
+      }
+
+      .ai-brain-tooltip .tooltip-title {
+        font-weight: 600;
+        color: #69db7c;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .ai-brain-tooltip .tooltip-title i {
+        font-size: 11px;
+      }
+
+      .ai-brain-tooltip .tooltip-desc {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+
+      @keyframes tooltip-appear {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       
       .ai-content {

@@ -210,6 +210,14 @@ export class AIAssistantUIManager {
     this.dom.toggle(this.isVisible);
 
     if (this.isVisible) {
+      // Show brain button attention animation only if WebLLM not already enabled
+      const status = this.aiModule.getWebLLMStatus();
+      if (!status.enabled && !status.loading) {
+        setTimeout(() => {
+          this.dom.showBrainAttention();
+        }, 500);
+      }
+
       // Start loading the AI model when the panel is first opened
       this.aiModule.loadModel((progress) => {
         const percent = Math.round(progress);
@@ -220,6 +228,9 @@ export class AIAssistantUIManager {
           setTimeout(() => this.dom.updateStatus(null), 2000);
         }
       });
+    } else {
+      // Hide attention when panel closes
+      this.dom.hideBrainAttention();
     }
   }
 
@@ -288,6 +299,9 @@ export class AIAssistantUIManager {
   }
 
   private async handleWebLLMToggle(): Promise<void> {
+    // Hide the attention animation when user clicks
+    this.dom.hideBrainAttention();
+    
     const status = this.aiModule.getWebLLMStatus();
     
     if (status.ready) {

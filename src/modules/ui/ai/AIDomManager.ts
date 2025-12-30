@@ -101,4 +101,65 @@ export class AIDomManager {
       this.modelInfo.style.color = 'rgba(255, 255, 255, 0.5)';
     }
   }
+
+  private brainTooltip: HTMLDivElement | null = null;
+  private attentionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  public showBrainAttention(): void {
+    // Only show if brain button is visible and not already enabled
+    if (this.webllmBtn.style.display === 'none') return;
+    if (this.webllmBtn.classList.contains('active')) return;
+
+    // Add pulsing animation
+    this.webllmBtn.classList.add('attention');
+
+    // Create tooltip
+    if (!this.brainTooltip) {
+      this.brainTooltip = document.createElement('div');
+      this.brainTooltip.className = 'ai-brain-tooltip';
+      this.brainTooltip.innerHTML = `
+        <div class="tooltip-title"><i class="fas fa-sparkles"></i> Enable AI Brain</div>
+        <div class="tooltip-desc">Click to unlock smarter, context-aware responses</div>
+      `;
+      
+      // Append to body for fixed positioning
+      document.body.appendChild(this.brainTooltip);
+      
+      // Position above the brain button
+      this.updateTooltipPosition();
+    }
+
+    // Auto-hide after 8 seconds
+    this.attentionTimeout = setTimeout(() => {
+      this.hideBrainAttention();
+    }, 8000);
+  }
+
+  public hideBrainAttention(): void {
+    this.webllmBtn.classList.remove('attention');
+    
+    if (this.brainTooltip) {
+      this.brainTooltip.remove();
+      this.brainTooltip = null;
+    }
+
+    if (this.attentionTimeout) {
+      clearTimeout(this.attentionTimeout);
+      this.attentionTimeout = null;
+    }
+  }
+
+  private updateTooltipPosition(): void {
+    if (!this.brainTooltip) return;
+    
+    const btnRect = this.webllmBtn.getBoundingClientRect();
+    const tooltipRect = this.brainTooltip.getBoundingClientRect();
+    
+    // Position above the button, aligned to the right
+    const top = btnRect.top - tooltipRect.height - 10;
+    const right = window.innerWidth - btnRect.right;
+    
+    this.brainTooltip.style.top = `${top}px`;
+    this.brainTooltip.style.right = `${right}px`;
+  }
 }
