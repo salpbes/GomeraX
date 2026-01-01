@@ -83,8 +83,30 @@ export class AIAssistantModule {
   }
 
   /**
+   * Get WebLLM usage statistics (tokens/sec, latency, GPU info)
+   */
+  public async getWebLLMStats(): Promise<{
+    gpu: string;
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      prefillSpeed: string;
+      decodeSpeed: string;
+      latency: string;
+    } | null;
+  }> {
+    if (!this.webLLM.isLoaded()) {
+      return { gpu: "N/A", usage: null };
+    }
+    const gpu = await this.webLLM.getGPUInfo();
+    const usage = this.webLLM.getUsageStats();
+    return { gpu, usage };
+  }
+
+  /**
    * Processes a natural language command
-   * Priority: WebLLM (if enabled) → Rule-based → AI Classification → Conversational
+   * Priority: WebLLM with Function Calling → Rule-based → AI Classification → Conversational
    * @param command The command string from the user
    * @param onStreamToken Optional callback for streaming responses (called for each token)
    * @returns A response object with text and AI flag
@@ -100,36 +122,70 @@ export class AIAssistantModule {
     const commandToProcess = resolved.resolved;
     const lowerCommand = commandToProcess.toLowerCase().trim();
 
-    // PRIORITY 1: WebLLM HYBRID MODE - AI responds + rule-based executes
-    // AI provides conversational response while rule-based system handles execution
+    // PRIORITY 1: WebLLM with Function Calling - AI decides which action to execute
     if (this.useWebLLM && this.webLLM.isLoaded()) {
       try {
         const bimContext = this.getBIMContext();
         
-        // Get AI response (streaming or regular)
-        let textResponse: string;
-        if (onStreamToken) {
-          textResponse = await this.webLLM.chatStream(commandToProcess, onStreamToken, bimContext);
+        // Let the AI decide - function calling mode enabled
+        // The system prompt instructs the model when to call functions vs respond with text
+        const response = await this.webLLM.chat(commandToProcess, bimContext, true);
+        
+        // Check if AI returned a function call
+        if (typeof response === 'object' && 'name' in response) {
+          // AI decided to call a function - execute it
+          const functionCall = response as BIMFunctionCall;
+          console.log(`🤖 AI decided to call: ${functionCall.name}`, functionCall.arguments);
+          
+          const result = await this.executeBIMFunction(functionCall);
+          
+          // Generate a friendly response based on the action
+          const textResponse = result.message;
+          
+          // If streaming is requested, send the response token by token
+          if (onStreamToken) {
+            for (const char of textResponse) {
+              onStreamToken(char);
+              await new Promise(r => setTimeout(r, 10)); // Small delay for effect
+            }
+          }
+          
+          this.context.addEntry(command, textResponse, { 
+            isAI: true, 
+            executionTime: Date.now() - startTime,
+            action: functionCall.name 
+          });
+          
+          return { 
+            text: textResponse, 
+            isAI: true,
+            contextInfo: resolved.usedContext ? resolved.contextInfo : undefined,
+            actionExecuted: functionCall.name
+          };
         } else {
-          const response = await this.webLLM.chat(commandToProcess, bimContext, false);
-          textResponse = response as string;
+          // AI returned a text response (conversational, no function call)
+          // The AI is instructed via system prompt to say when something is outside its capabilities
+          const textResponse = response as string;
+          
+          // If streaming is requested, send the response token by token
+          if (onStreamToken) {
+            for (const char of textResponse) {
+              onStreamToken(char);
+              await new Promise(r => setTimeout(r, 10));
+            }
+          }
+          
+          this.context.addEntry(command, textResponse, { 
+            isAI: true, 
+            executionTime: Date.now() - startTime 
+          });
+          
+          return { 
+            text: textResponse, 
+            isAI: true,
+            contextInfo: resolved.usedContext ? resolved.contextInfo : undefined
+          };
         }
-        
-        // HYBRID: After AI responds, silently execute any detected BIM commands
-        const actionResult = await this.executeDetectedAction(lowerCommand);
-        
-        this.context.addEntry(command, textResponse, { 
-          isAI: true, 
-          executionTime: Date.now() - startTime,
-          action: actionResult?.action 
-        });
-        
-        return { 
-          text: textResponse, 
-          isAI: true,
-          contextInfo: resolved.usedContext ? resolved.contextInfo : undefined,
-          actionExecuted: actionResult?.action
-        };
       } catch (error) {
         console.error("WebLLM error, falling back to pattern matching:", error);
         // Continue to fallback methods
@@ -166,10 +222,16 @@ export class AIAssistantModule {
       }
     }
 
-    if (lowerCommand.includes('reset') || lowerCommand.includes('show everything') || lowerCommand.includes('unhide everything')) {
+    if (lowerCommand.includes('reset') || lowerCommand.includes('show everything') || lowerCommand.includes('unhide everything') || 
+        lowerCommand.includes('normal view') || lowerCommand.includes('default view') || lowerCommand.includes('exit color') ||
+        lowerCommand.includes('exit cluster') || lowerCommand.includes('back to normal') || lowerCommand.includes('go back')) {
       await this.actions.resetView();
       this.context.clear();
-      const response = "I've reset the view for you. Everything is visible and selection is cleared.";
+      // Also clear WebLLM conversation history for a fresh start
+      if (this.webLLM.isLoaded()) {
+        this.webLLM.clearHistory();
+      }
+      const response = "I've reset the view for you. Everything is visible, color splash and cluster modes are disabled, and selection is cleared.";
       this.context.addEntry(command, response, { action: 'reset', isAI: false });
       return { text: response, isAI: false };
     }
@@ -187,7 +249,11 @@ export class AIAssistantModule {
       return { text: response, isAI: false };
     }
 
-    if (lowerCommand.includes('color by type') || lowerCommand.includes('show colors') || lowerCommand.includes('toggle colors')) {
+    if (lowerCommand.includes('color by type') || lowerCommand.includes('show colors') || lowerCommand.includes('toggle colors') ||
+        lowerCommand.includes('color elements') || lowerCommand.includes('color the elements') ||
+        lowerCommand.includes('color by category') || lowerCommand.includes('colors by type') ||
+        (lowerCommand.includes('color') && lowerCommand.includes('type')) ||
+        (lowerCommand.includes('color') && lowerCommand.includes('category'))) {
       await this.actions.colorByType();
       return { text: "I've toggled the color splash view for you.", isAI: false };
     }
@@ -386,7 +452,11 @@ export class AIAssistantModule {
         case 'resetView': {
           await this.actions.resetView();
           this.context.clear();
-          return { message: "I've reset the view. Everything is visible and selection is cleared." };
+          // Also clear WebLLM history for a fresh start
+          if (this.webLLM.isLoaded()) {
+            this.webLLM.clearHistory();
+          }
+          return { message: "I've reset the view. Everything is visible, color splash and cluster modes are off, and selection is cleared." };
         }
         
         case 'clearSelection': {
@@ -397,7 +467,7 @@ export class AIAssistantModule {
         
         case 'colorByType': {
           await this.actions.colorByType();
-          return { message: "I've toggled the color splash view." };
+          return { message: "I've applied colors by element type. Each category now has its own color!" };
         }
         
         case 'addClippingPlane': {
@@ -586,9 +656,16 @@ export class AIAssistantModule {
       }
 
       // Non-element actions
-      if (lowerCommand.includes('reset') || lowerCommand.includes('show everything')) {
+      if (lowerCommand.includes('reset') || lowerCommand.includes('show everything') || 
+          lowerCommand.includes('normal view') || lowerCommand.includes('default view') ||
+          lowerCommand.includes('go back') || lowerCommand.includes('exit color') || 
+          lowerCommand.includes('exit cluster') || lowerCommand.includes('back to normal')) {
         await this.actions.resetView();
         this.context.clear();
+        // Also clear WebLLM conversation history
+        if (this.webLLM.isLoaded()) {
+          this.webLLM.clearHistory();
+        }
         console.log('[Hybrid] Executed: reset view');
         return { action: 'reset' };
       }
@@ -606,7 +683,11 @@ export class AIAssistantModule {
         return { action: 'clearSelection' };
       }
 
-      if (lowerCommand.includes('color by type') || lowerCommand.includes('show colors')) {
+      if (lowerCommand.includes('color by type') || lowerCommand.includes('show colors') || lowerCommand.includes('toggle colors') ||
+          lowerCommand.includes('color elements') || lowerCommand.includes('color the elements') ||
+          lowerCommand.includes('color by category') || lowerCommand.includes('colors by type') ||
+          (lowerCommand.includes('color') && lowerCommand.includes('type')) ||
+          (lowerCommand.includes('color') && lowerCommand.includes('category'))) {
         await this.actions.colorByType();
         console.log('[Hybrid] Executed: color by type');
         return { action: 'colorByType' };

@@ -10,6 +10,7 @@ export class AIAssistantUIManager {
   private isMinimized: boolean = false;
   private commandHistory: string[] = [];
   private historyIndex: number = -1;
+  private totalTokensUsed: number = 0;
 
   constructor(private aiModule: AIAssistantModule) {
     this.dom = new AIDomManager();
@@ -291,6 +292,9 @@ export class AIAssistantUIManager {
             this.dom.input.focus();
           });
         }
+      } else {
+        // Update stats display when WebLLM is enabled
+        this.updateStatsDisplay();
       }
     } catch (error) {
       this.chat.removeThinkingIndicator(thinkingId);
@@ -340,6 +344,9 @@ export class AIAssistantUIManager {
           this.chat.addMessage("🎉 Advanced AI ready!", 'ai', true);
           this.dom.updateModelInfo(modelInfo.name, true);
           this.updateWebLLMButton();
+          
+          // Initialize stats display with GPU info
+          this.initializeStatsDisplay();
         } catch (error) {
           this.chat.removeLoadingProgress();
           this.chat.addMessage("❌ Failed to load Advanced AI.", 'ai');
@@ -363,6 +370,58 @@ export class AIAssistantUIManager {
       this.dom.webllmBtn.innerHTML = '<i class="fas fa-brain"></i>';
       this.dom.webllmBtn.style.color = 'rgba(255, 255, 255, 0.5)';
       this.dom.webllmBtn.title = 'Advanced AI Off';
+    }
+  }
+
+  /**
+   * Update the stats display in the footer with latest WebLLM metrics
+   */
+  private async updateStatsDisplay(): Promise<void> {
+    try {
+      const stats = await this.aiModule.getWebLLMStats();
+      
+      // Accumulate total tokens used in this session
+      if (stats.usage?.totalTokens) {
+        this.totalTokensUsed += stats.usage.totalTokens;
+      }
+      
+      // Format GPU name (shorten if needed)
+      let gpuName = stats.gpu || '--';
+      if (gpuName.length > 15) {
+        gpuName = gpuName.substring(0, 12) + '...';
+      }
+      
+      this.dom.updateStats({
+        gpu: gpuName,
+        decodeSpeed: stats.usage?.decodeSpeed || '-- tok/s',
+        latency: stats.usage?.latency || '--',
+        totalTokens: this.totalTokensUsed,
+      });
+    } catch (error) {
+      console.error('Failed to update stats:', error);
+    }
+  }
+
+  /**
+   * Initialize stats display when WebLLM is first loaded (show GPU, waiting for first query)
+   */
+  private async initializeStatsDisplay(): Promise<void> {
+    try {
+      const stats = await this.aiModule.getWebLLMStats();
+      
+      // Format GPU name (shorten if needed)
+      let gpuName = stats.gpu || '--';
+      if (gpuName.length > 15) {
+        gpuName = gpuName.substring(0, 12) + '...';
+      }
+      
+      this.dom.updateStats({
+        gpu: gpuName,
+        decodeSpeed: '-- tok/s',
+        latency: 'Ready',
+      });
+    } catch (error) {
+      console.error('Failed to initialize stats:', error);
     }
   }
 

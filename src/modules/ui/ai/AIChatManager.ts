@@ -3,6 +3,87 @@ import { AIDomManager } from './AIDomManager';
 export class AIChatManager {
   constructor(private dom: AIDomManager) {}
 
+  /**
+   * Convert markdown text to HTML
+   * Supports: headers, bold, italic, code, lists, horizontal rules
+   */
+  private renderMarkdown(text: string): string {
+    // Escape HTML first to prevent XSS
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Normalize multiple newlines to double newlines (paragraph breaks)
+    html = html.replace(/\n{3,}/g, '\n\n');
+
+    // Horizontal rules (---, ***,___)
+    html = html.replace(/^[\-\*\_]{3,}$/gm, '<hr class="md-hr">');
+
+    // Headers (### Header) - handle emoji and bold in headers
+    html = html.replace(/^#{4,}\s*(.*)$/gm, '<h4 class="md-h4">$1</h4>');
+    html = html.replace(/^###\s*(.*)$/gm, '<h3 class="md-h3">$1</h3>');
+    html = html.replace(/^##\s*(.*)$/gm, '<h2 class="md-h2">$1</h2>');
+    html = html.replace(/^#\s*(.*)$/gm, '<h1 class="md-h1">$1</h1>');
+
+    // Code blocks (```code```)
+    html = html.replace(/```([\s\S]*?)```/g, '<pre class="md-code-block"><code>$1</code></pre>');
+
+    // Inline code (`code`)
+    html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+
+    // Bold (**text** or __text__)
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="md-bold">$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong class="md-bold">$1</strong>');
+
+    // Italic (*text* or _text_) - be careful not to match ** or __
+    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em class="md-italic">$1</em>');
+    html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em class="md-italic">$1</em>');
+
+    // Numbered lists (1. item, 2. item) - wrap in <ol>
+    html = html.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="md-numbered">$2</li>');
+    // Wrap consecutive <li class="md-numbered"> in <ol>
+    html = html.replace(/((?:<li class="md-numbered">.*<\/li>\n?)+)/g, '<ol class="md-ol">$1</ol>');
+
+    // Bullet lists (- item or * item)
+    html = html.replace(/^[\-\*]\s+(.*)$/gm, '<li class="md-bullet">$1</li>');
+    // Wrap consecutive <li class="md-bullet"> in <ul>
+    html = html.replace(/((?:<li class="md-bullet">.*<\/li>\n?)+)/g, '<ul class="md-ul">$1</ul>');
+
+    // Clean up newlines inside list containers
+    html = html.replace(/<\/li>\n<li/g, '</li><li');
+    html = html.replace(/<ol class="md-ol">\n/g, '<ol class="md-ol">');
+    html = html.replace(/<ul class="md-ul">\n/g, '<ul class="md-ul">');
+    html = html.replace(/\n<\/ol>/g, '</ol>');
+    html = html.replace(/\n<\/ul>/g, '</ul>');
+
+    // Convert double newlines to paragraph breaks
+    html = html.replace(/\n\n+/g, '</p><p class="md-para">');
+    
+    // Convert remaining single newlines to <br> only for regular text
+    html = html.replace(/\n(?!<)/g, '<br>');
+    
+    // Clean up <br> around block elements
+    html = html.replace(/<\/(h[1-4]|ul|ol|pre|hr)><br>/g, '</$1>');
+    html = html.replace(/<br><(h[1-4]|ul|ol|pre)/g, '<$1');
+    html = html.replace(/<\/p><p class="md-para"><(h[1-4]|ul|ol|pre)/g, '<$1');
+    html = html.replace(/<\/(h[1-4]|ul|ol|pre)><\/p><p class="md-para">/g, '</$1>');
+    
+    // Clean up empty paragraphs
+    html = html.replace(/<p class="md-para"><\/p>/g, '');
+    html = html.replace(/<p class="md-para"><br><\/p>/g, '');
+
+    // Wrap in paragraph if it starts with text
+    if (!html.startsWith('<')) {
+      html = '<p class="md-para">' + html;
+    }
+    if (!html.endsWith('>')) {
+      html = html + '</p>';
+    }
+
+    return html;
+  }
+
   public addMessage(text: string, sender: 'user' | 'ai', isAI: boolean = false): void {
     const msg = document.createElement('div');
     msg.className = `ai-message ${sender}-message`;
@@ -16,7 +97,14 @@ export class AIChatManager {
 
     const content = document.createElement('div');
     content.className = 'message-content';
-    content.textContent = text;
+    
+    // Render markdown for AI messages, plain text for user
+    if (sender === 'ai') {
+      content.innerHTML = this.renderMarkdown(text);
+    } else {
+      content.textContent = text;
+    }
+    
     msg.appendChild(content);
 
     this.dom.responseArea.appendChild(msg);
@@ -231,7 +319,8 @@ export class AIChatManager {
     responseText.className = 'response-text';
     
     if (parsed.response) {
-      responseText.textContent = parsed.response;
+      // Render markdown for the response
+      responseText.innerHTML = this.renderMarkdown(parsed.response);
     } else if (parsed.hasIncomplete) {
       // Streaming thinking in progress - show placeholder
       responseText.innerHTML = '<span style="color: rgba(255,255,255,0.3); font-style: italic;">Generating response...</span>';

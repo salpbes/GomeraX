@@ -162,6 +162,16 @@ export class AIBimActions {
       clipper.deleteAll();
       clipper.enabled = false;
     }
+
+    // Exit color splash mode if active
+    if (this.viewer.colorSplash?.isColorSplashActive()) {
+      await this.viewer.colorSplash.toggleColorSplash();
+    }
+
+    // Exit cluster mode if active
+    if (this.viewer.cluster?.isClusteringActive()) {
+      await this.viewer.cluster.exitToColorView();
+    }
   }
 
   public async hideEverything() {

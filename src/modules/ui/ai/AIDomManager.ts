@@ -12,6 +12,8 @@ export class AIDomManager {
   public historyPanel: HTMLDivElement;
   public modelInfo: HTMLSpanElement;
   public resizeHandle: HTMLDivElement;
+  public footer: HTMLDivElement;
+  public statsBar: HTMLDivElement;
 
   constructor() {
     this.container = document.createElement('div');
@@ -45,8 +47,28 @@ export class AIDomManager {
         </div>
       </div>
       <div class="ai-footer">
-        <i class="fas fa-shield-alt"></i> 
-        <span>100% Local AI - No data leaves your browser</span>
+        <div class="ai-footer-privacy">
+          <i class="fas fa-shield-alt"></i> 
+          <span>100% Local AI</span>
+        </div>
+        <div class="ai-stats-bar" id="ai-stats-bar">
+          <div class="ai-stat" id="ai-stat-tokens" title="Total Tokens Used">
+            <i class="fas fa-coins"></i>
+            <span>0 tokens</span>
+          </div>
+          <div class="ai-stat" id="ai-stat-speed" title="Decode Speed">
+            <i class="fas fa-tachometer-alt"></i>
+            <span>-- tok/s</span>
+          </div>
+          <div class="ai-stat" id="ai-stat-latency" title="Response Time">
+            <i class="fas fa-clock"></i>
+            <span>--</span>
+          </div>
+          <div class="ai-stat ai-stat-gpu" id="ai-stat-gpu" title="GPU">
+            <i class="fas fa-microchip"></i>
+            <span>--</span>
+          </div>
+        </div>
       </div>
       <div class="ai-resize-handle"></div>
     `;
@@ -63,6 +85,8 @@ export class AIDomManager {
     this.historyPanel = this.container.querySelector('#ai-history-panel') as HTMLDivElement;
     this.modelInfo = this.container.querySelector('.ai-model-info') as HTMLSpanElement;
     this.resizeHandle = this.container.querySelector('.ai-resize-handle') as HTMLDivElement;
+    this.footer = this.container.querySelector('.ai-footer') as HTMLDivElement;
+    this.statsBar = this.container.querySelector('#ai-stats-bar') as HTMLDivElement;
   }
 
   public appendToBody(): void {
@@ -76,6 +100,39 @@ export class AIDomManager {
     } else {
       this.container.classList.add('hidden');
     }
+  }
+
+  public updateStats(stats: {
+    gpu?: string;
+    decodeSpeed?: string;
+    latency?: string;
+    totalTokens?: number;
+  }): void {
+    if (stats.totalTokens !== undefined) {
+      const tokensEl = this.statsBar.querySelector('#ai-stat-tokens span');
+      if (tokensEl) {
+        // Format large numbers with K suffix
+        const formatted = stats.totalTokens >= 1000 
+          ? `${(stats.totalTokens / 1000).toFixed(1)}K` 
+          : stats.totalTokens.toString();
+        tokensEl.textContent = `${formatted} tokens`;
+      }
+    }
+    if (stats.gpu) {
+      const gpuEl = this.statsBar.querySelector('#ai-stat-gpu span');
+      if (gpuEl) gpuEl.textContent = stats.gpu;
+    }
+    if (stats.decodeSpeed) {
+      const speedEl = this.statsBar.querySelector('#ai-stat-speed span');
+      if (speedEl) speedEl.textContent = stats.decodeSpeed;
+    }
+    if (stats.latency) {
+      const latencyEl = this.statsBar.querySelector('#ai-stat-latency span');
+      if (latencyEl) latencyEl.textContent = stats.latency;
+    }
+    
+    // Show stats bar when we have data
+    this.statsBar.classList.add('visible');
   }
 
   public updateStatus(text: string | null): void {

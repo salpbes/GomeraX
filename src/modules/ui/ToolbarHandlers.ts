@@ -3282,4 +3282,54 @@ export class ToolbarHandlers {
       panel.remove();
     }
   }
+
+  /**
+   * Handle color splash mode being disabled (called via callback from module)
+   * Hides the color picker panel and updates button state
+   */
+  public handleColorSplashDisabled(): void {
+    // Hide color picker panel
+    this.hideColorPickerPanel();
+    
+    // Hide property table if visible
+    if (this.colorSplash) {
+      this.colorSplash.hidePropertyTable();
+    }
+    
+    // Update button appearance
+    const btn = document.getElementById('colorSplashMainBtn');
+    if (btn) {
+      btn.classList.remove('active');
+    }
+    
+    console.log('🎨 Color splash UI cleaned up');
+  }
+
+  /**
+   * Handle cluster mode being exited (called via callback from module)
+   * Hides the cluster UI and updates button state
+   */
+  public handleClusterModeExited(): void {
+    // Hide property table if visible
+    if (this.colorSplash) {
+      this.colorSplash.hidePropertyTable();
+    }
+    
+    // Update button appearance
+    const clusterBtn = document.getElementById('clusterMainBtn');
+    if (clusterBtn) {
+      clusterBtn.classList.remove('active');
+    }
+    
+    // Also update the clusterBtn in the dropdown if it exists
+    const clusterBtnDropdown = document.getElementById('clusterBtn');
+    if (clusterBtnDropdown) {
+      const label = clusterBtnDropdown.querySelector('.label');
+      if (label) label.textContent = 'Cluster';
+      clusterBtnDropdown.style.background = '';
+      clusterBtnDropdown.style.color = '';
+    }
+    
+    console.log('🎯 Cluster UI cleaned up');
+  }
 }

@@ -201,6 +201,11 @@ export class UIManager {
       this.hideLoading();
     };
     
+    // Set up callback to hide cluster UI when cluster mode is exited
+    cluster.onClusterModeExited = () => {
+      this.toolbarHandlers.handleClusterModeExited();
+    };
+    
     console.log('✅ Cluster module set in UI');
   }
 
@@ -224,6 +229,11 @@ export class UIManager {
       this.toolbarHandlers.showColorPickerPanel(categories, modelGroups);
     };
     
+    // Set up callback to hide color picker when color splash is disabled
+    colorSplash.onColorSplashDisabled = () => {
+      this.toolbarHandlers.handleColorSplashDisabled();
+    };
+    
     // Set up loading callbacks
     colorSplash.onLoadingStart = () => {
       this.showLoading('Applying colors...', 50);
@@ -234,6 +244,100 @@ export class UIManager {
     };
     
     console.log('✅ Color splash module set in UI');
+  }
+
+  /**
+   * Get WebLLM usage stats (GPU info, tokens/sec, latency)
+   * Usage: window.viewer.uiManager.getWebLLMStats().then(console.log)
+   */
+  public async getWebLLMStats(): Promise<{
+    gpu: string;
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      prefillSpeed: string;
+      decodeSpeed: string;
+      latency: string;
+    } | null;
+  }> {
+    return this.aiAssistantModule.getWebLLMStats();
+  }
+
+  /**
+   * Display WebLLM stats in a floating panel
+   * Usage: window.viewer.uiManager.showWebLLMStats()
+   */
+  public async showWebLLMStats(): Promise<void> {
+    const stats = await this.getWebLLMStats();
+    
+    // Remove existing panel if any
+    const existing = document.getElementById('webllm-stats-panel');
+    if (existing) existing.remove();
+    
+    // Create stats panel
+    const panel = document.createElement('div');
+    panel.id = 'webllm-stats-panel';
+    panel.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 16px 20px;
+      border-radius: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      z-index: 10000;
+      min-width: 220px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
+    `;
+    
+    if (!stats.usage) {
+      panel.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-weight: 600; font-size: 14px;">🧠 WebLLM Stats</span>
+          <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 18px;">&times;</button>
+        </div>
+        <div style="color: #888;">No stats yet. Send a message first!</div>
+        <div style="margin-top: 8px; color: #666;">GPU: ${stats.gpu}</div>
+      `;
+    } else {
+      panel.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-weight: 600; font-size: 14px;">🧠 WebLLM Stats</span>
+          <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 18px;">&times;</button>
+        </div>
+        <div style="display: grid; gap: 8px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #888;">GPU</span>
+            <span style="color: #4ade80;">${stats.gpu}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #888;">Prefill</span>
+            <span style="color: #60a5fa;">${stats.usage.prefillSpeed}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #888;">Decode</span>
+            <span style="color: #60a5fa;">${stats.usage.decodeSpeed}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: #888;">Latency</span>
+            <span style="color: #fbbf24;">${stats.usage.latency}</span>
+          </div>
+          <div style="border-top: 1px solid #333; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between;">
+            <span style="color: #888;">Tokens</span>
+            <span>${stats.usage.promptTokens} → ${stats.usage.completionTokens}</span>
+          </div>
+        </div>
+      `;
+    }
+    
+    document.body.appendChild(panel);
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => panel.remove(), 10000);
   }
 
   /**

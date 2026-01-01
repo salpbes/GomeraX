@@ -1410,6 +1410,9 @@ export class ClusterModule {
   // Callbacks for loading state
   public onLoadingStart: (() => void) | null = null;
   public onLoadingEnd: (() => void) | null = null;
+  
+  // Callback for when cluster mode is exited (to hide UI panels)
+  public onClusterModeExited: (() => void) | null = null;
 
   constructor(worldManager: WorldManager) {
     this.worldManager = worldManager;
@@ -1649,6 +1652,11 @@ export class ClusterModule {
       // Await the animation to complete before proceeding
       await this.clusterManager.hideClusters();
       this.isActive = false;
+      
+      // Notify UI to hide panels
+      if (this.onClusterModeExited) {
+        this.onClusterModeExited();
+      }
       
       // Re-enable sectioning if it was enabled before cluster mode
       if (this.clipperModule && this.clipperWasEnabled) {

@@ -100,7 +100,7 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
   {
     name: "resetView",
     description:
-      "Reset the view (clear selection, show everything, remove clipping planes)",
+      "Reset the view completely: exit color splash mode, exit cluster mode, clear selection, show everything, remove clipping planes. Use when user says 'reset', 'normal view', 'go back', 'exit cluster', 'exit color', 'default view', 'back to normal'.",
     parameters: {
       type: "object",
       properties: {},
@@ -116,7 +116,7 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
   },
   {
     name: "colorByType",
-    description: "Toggle color splash mode (color elements by their type)",
+    description: "Toggle color splash mode - colors all elements by their IFC type/category. Use when user wants to see elements colored by type, category, or wants visual differentiation of element types.",
     parameters: {
       type: "object",
       properties: {},

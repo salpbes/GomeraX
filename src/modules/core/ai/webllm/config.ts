@@ -6,7 +6,7 @@
 /**
  * Model identifier for WebLLM
  */
-export const MODEL_ID = "Qwen3-0.6B-q4f32_1-MLC";
+export const MODEL_ID = "Qwen3-8B-q4f16_1-MLC";
 
 /**
  * Maximum number of conversation pairs to keep in history
@@ -41,9 +41,10 @@ export const LOG_LEVEL = "INFO" as const;
 /**
  * Whether to enable thinking mode for Qwen3
  * When true, model outputs <think>...</think> tags with reasoning
+ * Disabled for faster responses - thinking adds latency
  */
 export const ENABLE_THINKING = {
-  chat: true,
+  chat: false,
   stream: false,
 };
 
@@ -52,8 +53,8 @@ export const ENABLE_THINKING = {
  */
 export const MODEL_INFO = {
   id: MODEL_ID,
-  name: "Qwen3-0.6B",
-  size: "~1.2GB",
+  name: MODEL_ID,
+  size: "~4.5GB",
   description:
-    "Advanced reasoning model with visible thinking process (100% local, privacy-preserving)",
+    "Advanced reasoning model (100% local, privacy-preserving)",
 } as const;

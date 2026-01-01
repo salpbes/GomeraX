@@ -20,6 +20,19 @@ import { getBIMFunctionsAsTools } from "./functions";
 import { buildSystemPrompt } from "./prompts";
 
 /**
+ * Strip Qwen3 thinking blocks from response
+ * The model outputs <think>...</think> tags with reasoning that should not be shown to users
+ */
+function stripThinkingBlock(response: string): string {
+  // Remove <think>...</think> blocks (including multiline)
+  let cleaned = response.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  // Also handle unclosed thinking blocks (model sometimes doesn't close them)
+  cleaned = cleaned.replace(/<think>[\s\S]*$/gi, "");
+  // Trim whitespace and newlines
+  return cleaned.trim();
+}
+
+/**
  * WebLLM Engine for local, privacy-preserving AI inference
  * Uses Qwen3-0.6B with advanced reasoning capabilities
  *
@@ -36,6 +49,17 @@ export class WebLLMEngine {
   private isInitializing = false;
   private isReady = false;
   private conversationHistory: ConversationMessage[] = [];
+  
+  // Track usage stats from last request
+  private lastUsageStats: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    prefillTokensPerSec: number;
+    decodeTokensPerSec: number;
+    timeToFirstToken: number;
+    e2eLatency: number;
+  } | null = null;
 
   /**
    * Initialize the WebLLM engine with progress tracking
@@ -107,7 +131,8 @@ export class WebLLMEngine {
   }
 
   /**
-   * Generate a conversational response with BIM context and function calling
+   * Generate a conversational response with BIM context
+   * Uses structured output parsing instead of native function calling
    */
   async chat(
     userMessage: string,
@@ -132,6 +157,7 @@ export class WebLLMEngine {
         userMsg,
       ];
 
+      // Don't use native function calling - let the model output structured text
       const response = await this.engine!.chat.completions.create({
         messages,
         temperature: TEMPERATURE,
@@ -139,40 +165,95 @@ export class WebLLMEngine {
         extra_body: {
           enable_thinking: ENABLE_THINKING.chat,
         },
-        ...(enableFunctionCalling && { tools: getBIMFunctionsAsTools() }),
       } as any);
 
       const choice = response.choices[0];
-      const toolCalls = (choice.message as any)?.tool_calls;
-
-      // Check if AI wants to call a function
-      if (enableFunctionCalling && toolCalls && toolCalls.length > 0) {
-        const functionCall = toolCalls[0].function;
-        const functionArgs =
-          typeof functionCall.arguments === "string"
-            ? JSON.parse(functionCall.arguments)
-            : functionCall.arguments;
-
-        this.addToHistory(userMsg, {
-          role: "assistant",
-          content: `Calling function: ${functionCall.name}`,
-        });
-
-        return {
-          name: functionCall.name,
-          arguments: functionArgs,
+      let textContent = choice.message?.content || "";
+      
+      // Capture usage stats from response
+      const usage = response.usage;
+      if (usage) {
+        this.lastUsageStats = {
+          promptTokens: usage.prompt_tokens || 0,
+          completionTokens: usage.completion_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+          prefillTokensPerSec: (usage.extra as any)?.prefill_tokens_per_s || 0,
+          decodeTokensPerSec: (usage.extra as any)?.decode_tokens_per_s || 0,
+          timeToFirstToken: (usage.extra as any)?.time_to_first_token_s || 0,
+          e2eLatency: (usage.extra as any)?.e2e_latency_s || 0,
         };
+      }
+      
+      // Strip thinking blocks
+      textContent = stripThinkingBlock(textContent);
+
+      // Log for debugging
+      console.log("[WebLLM] Response:", textContent.substring(0, 200));
+
+      // Parse [ACTION: functionName(args)] from response
+      if (enableFunctionCalling) {
+        // Match both [ACTION: func(args)] and [ACTION: func()]
+        const actionMatch = textContent.match(/\[ACTION:\s*(\w+)\(([^)]*)\)\]/i);
+        if (actionMatch) {
+          const functionName = actionMatch[1];
+          let args: any = {};
+          
+          // Parse arguments
+          const argsStr = actionMatch[2].trim();
+          if (argsStr) {
+            try {
+              // Try to parse as JSON array for element types
+              const parsed = JSON.parse(argsStr);
+              if (Array.isArray(parsed)) {
+                args = { elementTypes: parsed };
+              } else if (typeof parsed === 'string') {
+                // For setView("front") or zoom("in")
+                if (functionName === 'setView') {
+                  args = { view: parsed };
+                } else if (functionName === 'zoom') {
+                  args = { direction: parsed };
+                }
+              }
+            } catch {
+              // If not valid JSON, try as plain string
+              const cleanArg = argsStr.replace(/['"`]/g, '').trim();
+              if (cleanArg) {
+                if (functionName === 'setView') {
+                  args = { view: cleanArg };
+                } else if (functionName === 'zoom') {
+                  args = { direction: cleanArg };
+                } else if (cleanArg.startsWith('[') || cleanArg.includes('IFC')) {
+                  // Try to extract IFC types
+                  const types = cleanArg.match(/IFC\w+/gi) || [];
+                  if (types.length > 0) {
+                    args = { elementTypes: types };
+                  }
+                }
+              }
+            }
+          }
+
+          console.log(`[WebLLM] Parsed action: ${functionName}`, JSON.stringify(args));
+
+          this.addToHistory(userMsg, {
+            role: "assistant",
+            content: `Calling function: ${functionName}`,
+          });
+
+          return {
+            name: functionName,
+            arguments: args,
+          };
+        }
       }
 
       // Regular text response
-      const assistantMessage = choice.message?.content || "";
-
       this.addToHistory(userMsg, {
         role: "assistant",
-        content: assistantMessage,
+        content: textContent,
       });
 
-      return assistantMessage;
+      return textContent;
     } catch (error) {
       console.error("WebLLM chat error:", error);
       throw error;
@@ -225,12 +306,15 @@ export class WebLLMEngine {
         }
       }
 
+      // Strip any thinking blocks from the response before storing
+      const cleanedResponse = stripThinkingBlock(fullResponse);
+
       this.addToHistory(userMsg, {
         role: "assistant",
-        content: fullResponse,
+        content: cleanedResponse,
       });
 
-      return fullResponse;
+      return cleanedResponse;
     } catch (error) {
       console.error("WebLLM streaming error:", error);
       throw error;
@@ -278,6 +362,47 @@ export class WebLLMEngine {
       this.engine = null;
       this.isReady = false;
       this.conversationHistory = [];
+    }
+  }
+
+  /**
+   * Get usage statistics from the last request
+   * Uses the new ChatCompletion.usage API instead of deprecated runtimeStatsText
+   */
+  getUsageStats(): {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    prefillSpeed: string;
+    decodeSpeed: string;
+    latency: string;
+  } | null {
+    if (!this.lastUsageStats) {
+      return null;
+    }
+    return {
+      promptTokens: this.lastUsageStats.promptTokens,
+      completionTokens: this.lastUsageStats.completionTokens,
+      totalTokens: this.lastUsageStats.totalTokens,
+      prefillSpeed: `${this.lastUsageStats.prefillTokensPerSec.toFixed(1)} tok/s`,
+      decodeSpeed: `${this.lastUsageStats.decodeTokensPerSec.toFixed(1)} tok/s`,
+      latency: `${(this.lastUsageStats.e2eLatency * 1000).toFixed(0)}ms`,
+    };
+  }
+
+  /**
+   * Get GPU vendor information
+   */
+  async getGPUInfo(): Promise<string> {
+    if (!this.engine) {
+      return "WebLLM not initialized";
+    }
+    try {
+      const vendor = await this.engine.getGPUVendor();
+      return vendor;
+    } catch (error) {
+      console.error("Error getting GPU info:", error);
+      return "Unable to get GPU info";
     }
   }
 

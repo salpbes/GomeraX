@@ -429,6 +429,107 @@ export class AIStyleManager {
         margin-top: 4px;
       }
 
+      /* Markdown Styles */
+      .message-content .md-h1 {
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        margin: 8px 0 4px 0;
+        padding-bottom: 2px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .message-content .md-h2 {
+        font-size: 14px;
+        font-weight: 700;
+        color: #fff;
+        margin: 6px 0 3px 0;
+      }
+
+      .message-content .md-h3 {
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.95);
+        margin: 5px 0 2px 0;
+      }
+
+      .message-content .md-h4 {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+        margin: 4px 0 2px 0;
+      }
+
+      .message-content .md-bold {
+        font-weight: 600;
+        color: #fff;
+      }
+
+      .message-content .md-italic {
+        font-style: italic;
+        color: rgba(255, 255, 255, 0.85);
+      }
+
+      .message-content .md-inline-code {
+        background: rgba(116, 192, 252, 0.15);
+        color: #74c0fc;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        font-size: 11px;
+      }
+
+      .message-content .md-code-block {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin: 4px 0;
+        overflow-x: auto;
+      }
+
+      .message-content .md-code-block code {
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        font-size: 11px;
+        color: #e599f7;
+      }
+
+      .message-content .md-ul,
+      .message-content .md-ol {
+        margin: 3px 0;
+        padding-left: 18px;
+      }
+
+      .message-content .md-ul {
+        list-style-type: disc;
+      }
+
+      .message-content .md-ol {
+        list-style-type: decimal;
+      }
+
+      .message-content .md-bullet,
+      .message-content .md-numbered {
+        margin: 1px 0;
+        color: rgba(255, 255, 255, 0.9);
+        line-height: 1.4;
+      }
+
+      .message-content .md-hr {
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        margin: 8px 0;
+      }
+
+      .message-content .md-para {
+        margin: 0 0 6px 0;
+      }
+
+      .message-content .md-para:last-child {
+        margin-bottom: 0;
+      }
+
       .ai-badge {
         font-size: 9px;
         text-transform: uppercase;
@@ -510,8 +611,59 @@ export class AIStyleManager {
         color: rgba(255, 255, 255, 0.4);
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: space-between;
+        gap: 8px;
         border-radius: 0 0 12px 12px;
+      }
+
+      .ai-footer-privacy {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .ai-footer-privacy i {
+        color: #69db7c;
+      }
+
+      .ai-stats-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .ai-stats-bar.visible {
+        opacity: 1;
+      }
+
+      .ai-stat {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.5);
+        cursor: default;
+      }
+
+      .ai-stat i {
+        font-size: 8px;
+      }
+
+      #ai-stat-tokens i { color: #e599f7; }
+      #ai-stat-gpu i { color: #69db7c; }
+      #ai-stat-speed i { color: #74c0fc; }
+      #ai-stat-latency i { color: #ffd43b; }
+
+      #ai-stat-tokens span { color: #e599f7; }
+      #ai-stat-gpu span { color: #69db7c; }
+      #ai-stat-speed span { color: #74c0fc; }
+      #ai-stat-latency span { color: #ffd43b; }
+
+      .ai-stat-gpu {
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        padding-left: 10px;
       }
 
       .ai-footer i {

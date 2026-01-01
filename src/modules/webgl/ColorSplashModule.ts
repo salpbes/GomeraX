@@ -53,6 +53,9 @@ export class ColorSplashModule {
   // Callback for when cluster view is exited (to hide property table)
   public onClusterViewExited: (() => void) | null = null;
 
+  // Callback for when color splash mode is disabled (to hide UI panels)
+  public onColorSplashDisabled: (() => void) | null = null;
+
   // Callbacks for loading state
   public onLoadingStart: (() => void) | null = null;
   public onLoadingEnd: (() => void) | null = null;
@@ -83,6 +86,10 @@ export class ColorSplashModule {
     if (this.isActive) {
       await this.restoreOriginalColors();
       this.isActive = false;
+      // Notify UI to hide panels
+      if (this.onColorSplashDisabled) {
+        this.onColorSplashDisabled();
+      }
       console.log('✅ Color splash disabled');
     } else {
       await this.applyColorByType();
