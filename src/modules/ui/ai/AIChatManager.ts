@@ -17,6 +17,13 @@ export class AIChatManager {
     // Normalize multiple newlines to double newlines (paragraph breaks)
     html = html.replace(/\n{3,}/g, '\n\n');
 
+    // CRITICAL: Collapse blank lines between numbered list items so they group together
+    // This ensures "1. item\n\n2. item" becomes "1. item\n2. item"
+    html = html.replace(/^(\d+\.\s+.*)$\n\n(?=\d+\.\s+)/gm, '$1\n');
+    
+    // Same for bullet lists
+    html = html.replace(/^([\-\*]\s+.*)$\n\n(?=[\-\*]\s+)/gm, '$1\n');
+
     // Horizontal rules (---, ***,___)
     html = html.replace(/^[\-\*\_]{3,}$/gm, '<hr class="md-hr">');
 
@@ -32,14 +39,7 @@ export class AIChatManager {
     // Inline code (`code`)
     html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
 
-    // Bold (**text** or __text__)
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="md-bold">$1</strong>');
-    html = html.replace(/__([^_]+)__/g, '<strong class="md-bold">$1</strong>');
-
-    // Italic (*text* or _text_) - be careful not to match ** or __
-    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em class="md-italic">$1</em>');
-    html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em class="md-italic">$1</em>');
-
+    // IMPORTANT: Process lists BEFORE bold/italic to preserve number matching
     // Numbered lists (1. item, 2. item) - wrap in <ol>
     html = html.replace(/^(\d+)\.\s+(.*)$/gm, '<li class="md-numbered">$2</li>');
     // Wrap consecutive <li class="md-numbered"> in <ol>
@@ -56,6 +56,14 @@ export class AIChatManager {
     html = html.replace(/<ul class="md-ul">\n/g, '<ul class="md-ul">');
     html = html.replace(/\n<\/ol>/g, '</ol>');
     html = html.replace(/\n<\/ul>/g, '</ul>');
+
+    // Bold (**text** or __text__) - process AFTER lists
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="md-bold">$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong class="md-bold">$1</strong>');
+
+    // Italic (*text* or _text_) - be careful not to match ** or __
+    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em class="md-italic">$1</em>');
+    html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em class="md-italic">$1</em>');
 
     // Convert double newlines to paragraph breaks
     html = html.replace(/\n\n+/g, '</p><p class="md-para">');
@@ -111,22 +119,37 @@ export class AIChatManager {
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
   }
 
+  private thinkingTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+
   public addThinkingIndicator(): string {
     const id = 'thinking-' + Date.now();
+    const startTime = Date.now();
     const msg = document.createElement('div');
     msg.id = id;
     msg.className = 'ai-message ai-thinking';
-    msg.innerHTML = `
-      <div class="typing-indicator">
-        <span></span><span></span><span></span>
-      </div>
-    `;
+    msg.innerHTML = `<div class="typing-indicator"><span></span><span></span><span></span></div><div class="thinking-timer"></div>`;
     this.dom.responseArea.appendChild(msg);
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
+    
+    // Update timer every 500ms after 1 second delay
+    const timerInterval = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      const timerEl = msg.querySelector('.thinking-timer');
+      if (timerEl && elapsed >= 1) {
+        timerEl.textContent = `${elapsed}s`;
+      }
+    }, 500);
+    this.thinkingTimers.set(id, timerInterval);
+    
     return id;
   }
 
   public removeThinkingIndicator(id: string): void {
+    const interval = this.thinkingTimers.get(id);
+    if (interval) {
+      clearInterval(interval);
+      this.thinkingTimers.delete(id);
+    }
     const indicator = document.getElementById(id);
     indicator?.remove();
   }

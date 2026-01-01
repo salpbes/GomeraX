@@ -127,9 +127,21 @@ export class AIAssistantModule {
       try {
         const bimContext = this.getBIMContext();
         
-        // Let the AI decide - function calling mode enabled
-        // The system prompt instructs the model when to call functions vs respond with text
-        const response = await this.webLLM.chat(commandToProcess, bimContext, true);
+        // Use streaming for immediate feedback
+        let streamedContent = '';
+        const response = await this.webLLM.chatStreamWithActions(
+          commandToProcess, 
+          (token: string) => {
+            streamedContent += token;
+            // Only stream to UI if it's a text response (not an action)
+            // We detect action pattern early to avoid showing it
+            if (!streamedContent.includes('[ACTION:') && onStreamToken) {
+              onStreamToken(token);
+            }
+          },
+          bimContext, 
+          true
+        );
         
         // Check if AI returned a function call
         if (typeof response === 'object' && 'name' in response) {
@@ -141,14 +153,6 @@ export class AIAssistantModule {
           
           // Generate a friendly response based on the action
           const textResponse = result.message;
-          
-          // If streaming is requested, send the response token by token
-          if (onStreamToken) {
-            for (const char of textResponse) {
-              onStreamToken(char);
-              await new Promise(r => setTimeout(r, 10)); // Small delay for effect
-            }
-          }
           
           this.context.addEntry(command, textResponse, { 
             isAI: true, 
@@ -164,16 +168,7 @@ export class AIAssistantModule {
           };
         } else {
           // AI returned a text response (conversational, no function call)
-          // The AI is instructed via system prompt to say when something is outside its capabilities
           const textResponse = response as string;
-          
-          // If streaming is requested, send the response token by token
-          if (onStreamToken) {
-            for (const char of textResponse) {
-              onStreamToken(char);
-              await new Promise(r => setTimeout(r, 10));
-            }
-          }
           
           this.context.addEntry(command, textResponse, { 
             isAI: true, 

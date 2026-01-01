@@ -11,8 +11,9 @@ export const MODEL_ID = "Qwen3-8B-q4f16_1-MLC";
 /**
  * Maximum number of conversation pairs to keep in history
  * (each pair = 1 user message + 1 assistant message)
+ * Lower = faster prefill, Higher = more context memory
  */
-export const MAX_HISTORY_PAIRS = 10;
+export const MAX_HISTORY_PAIRS = 5;
 
 /**
  * Context window size for the model
@@ -21,10 +22,12 @@ export const CONTEXT_WINDOW_SIZE = 32000;
 
 /**
  * Maximum tokens for generation
+ * Lower = faster responses, Higher = longer outputs
  */
 export const MAX_TOKENS = {
-  chat: 8192,
-  stream: 4096,
+  chat: 1024,      // For action responses
+  stream: 2048,    // For conversational responses
+  longForm: 4096,  // For detailed explanations (if needed)
 };
 
 /**

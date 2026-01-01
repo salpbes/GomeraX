@@ -546,6 +546,9 @@ export class AIStyleManager {
         background: rgba(255, 255, 255, 0.02) !important;
         padding: 12px !important;
         width: fit-content;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
 
       .typing-indicator {
@@ -563,6 +566,12 @@ export class AIStyleManager {
 
       .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
       .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+      
+      .thinking-timer {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        min-width: 20px;
+      }
 
       @keyframes typing {
         0%, 100% { transform: translateY(0); opacity: 0.4; }

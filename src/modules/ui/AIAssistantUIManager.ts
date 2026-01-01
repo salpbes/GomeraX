@@ -249,24 +249,44 @@ export class AIAssistantUIManager {
     this.dom.input.value = '';
     this.toggleHistory(false);
 
+    // Show thinking indicator IMMEDIATELY
     const thinkingId = this.chat.addThinkingIndicator();
+    
+    // Check if WebLLM is enabled
+    const webllmStatus = this.aiModule.getWebLLMStatus();
+
+    // CRITICAL: Force browser to paint the thinking dots before starting heavy LLM work
+    // We use double-yield: setTimeout to flush the macrotask queue, then rAF to wait for paint
+    // This ensures the DOM updates are visible to the user before we block on prefill
+    await new Promise<void>(resolve => {
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          // Second rAF to ensure the first frame with dots is committed
+          requestAnimationFrame(() => resolve());
+        });
+      }, 0);
+    });
 
     try {
-      // Check if WebLLM is enabled for streaming
-      const webllmStatus = this.aiModule.getWebLLMStatus();
       let streamingId: string | null = null;
       let fullResponse = '';
+      let isAction = false;
       
       const response = await this.aiModule.processCommand(command, webllmStatus.enabled ? (token: string) => {
         // On first token, replace thinking indicator with streaming message
-        if (!streamingId) {
+        if (!streamingId && !isAction) {
           this.chat.removeThinkingIndicator(thinkingId);
           streamingId = this.chat.addStreamingMessage('ai');
         }
         // Append token and update display
         fullResponse += token;
-        this.chat.updateStreamingMessage(streamingId!, fullResponse);
+        if (streamingId) {
+          this.chat.updateStreamingMessage(streamingId, fullResponse);
+        }
       } : undefined);
+      
+      // Check if this was an action (response already handled)
+      isAction = !!response.actionExecuted;
       
       // If we used streaming, finalize it
       if (streamingId) {

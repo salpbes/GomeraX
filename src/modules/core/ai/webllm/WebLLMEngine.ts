@@ -261,6 +261,147 @@ export class WebLLMEngine {
   }
 
   /**
+   * Generate a streaming response with function calling support
+   * Shows tokens in real-time for immediate feedback
+   */
+  async chatStreamWithActions(
+    userMessage: string,
+    onToken: (token: string) => void,
+    bimContext?: BIMContext,
+    enableFunctionCalling: boolean = false
+  ): Promise<string | BIMFunctionCall> {
+    if (!this.isLoaded()) {
+      throw new Error("WebLLM not initialized. Call initialize() first.");
+    }
+
+    try {
+      const systemPrompt = buildSystemPrompt(bimContext, enableFunctionCalling);
+
+      const userMsg: ConversationMessage = {
+        role: "user",
+        content: userMessage,
+      };
+
+      const messages: ConversationMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...this.conversationHistory,
+        userMsg,
+      ];
+
+      let fullResponse = "";
+      const startTime = performance.now();
+      let firstTokenTime: number | null = null;
+
+      // Create the stream - this is where prefill happens and can take time
+      const asyncChunkGenerator = (await this.engine!.chat.completions.create({
+        messages,
+        temperature: TEMPERATURE,
+        max_tokens: MAX_TOKENS.chat,
+        stream: true,
+        extra_body: {
+          enable_thinking: ENABLE_THINKING.chat,
+        },
+      } as any)) as unknown as AsyncIterable<webllm.ChatCompletionChunk>;
+
+      let tokenCount = 0;
+      for await (const chunk of asyncChunkGenerator) {
+        const token = chunk.choices[0]?.delta?.content || "";
+        if (token) {
+          // Track first token time for stats
+          if (firstTokenTime === null) {
+            firstTokenTime = performance.now();
+          }
+          tokenCount++;
+          fullResponse += token;
+          onToken(token);
+        }
+      }
+
+      const endTime = performance.now();
+      
+      // Strip thinking blocks
+      let cleanedResponse = stripThinkingBlock(fullResponse);
+      
+      // Track actual usage stats
+      const totalTime = (endTime - startTime) / 1000;
+      const timeToFirstToken = firstTokenTime ? (firstTokenTime - startTime) / 1000 : totalTime;
+      const decodeTime = firstTokenTime ? (endTime - firstTokenTime) / 1000 : totalTime;
+      
+      this.lastUsageStats = {
+        promptTokens: 0,
+        completionTokens: tokenCount,
+        totalTokens: tokenCount,
+        prefillTokensPerSec: 0,
+        decodeTokensPerSec: decodeTime > 0 ? tokenCount / decodeTime : 0,
+        timeToFirstToken: timeToFirstToken,
+        e2eLatency: totalTime,
+      };
+
+      // Parse [ACTION: functionName(args)] from response
+      if (enableFunctionCalling) {
+        const actionMatch = cleanedResponse.match(/\[ACTION:\s*(\w+)\(([^)]*)\)\]/i);
+        if (actionMatch) {
+          const functionName = actionMatch[1];
+          let args: any = {};
+          
+          const argsStr = actionMatch[2].trim();
+          if (argsStr) {
+            try {
+              const parsed = JSON.parse(argsStr);
+              if (Array.isArray(parsed)) {
+                args = { elementTypes: parsed };
+              } else if (typeof parsed === 'string') {
+                if (functionName === 'setView') {
+                  args = { view: parsed };
+                } else if (functionName === 'zoom') {
+                  args = { direction: parsed };
+                }
+              }
+            } catch {
+              const cleanArg = argsStr.replace(/['"`]/g, '').trim();
+              if (cleanArg) {
+                if (functionName === 'setView') {
+                  args = { view: cleanArg };
+                } else if (functionName === 'zoom') {
+                  args = { direction: cleanArg };
+                } else if (cleanArg.startsWith('[') || cleanArg.includes('IFC')) {
+                  const types = cleanArg.match(/IFC\w+/gi) || [];
+                  if (types.length > 0) {
+                    args = { elementTypes: types };
+                  }
+                }
+              }
+            }
+          }
+
+          console.log(`[WebLLM Stream] Parsed action: ${functionName}`, JSON.stringify(args));
+
+          this.addToHistory(userMsg, {
+            role: "assistant",
+            content: `Calling function: ${functionName}`,
+          });
+
+          return {
+            name: functionName,
+            arguments: args,
+          };
+        }
+      }
+
+      // Regular text response
+      this.addToHistory(userMsg, {
+        role: "assistant",
+        content: cleanedResponse,
+      });
+
+      return cleanedResponse;
+    } catch (error) {
+      console.error("WebLLM streaming chat error:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate a streaming response (for real-time display)
    */
   async chatStream(
