@@ -730,43 +730,155 @@ export class AIStyleManager {
       }
 
       .ai-loading-progress {
-        padding: 12px;
+        padding: 6px 10px;
         background: rgba(105, 219, 124, 0.08);
         border: 1px solid rgba(105, 219, 124, 0.2);
-        border-radius: 8px;
-        margin-bottom: 8px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        white-space: normal !important;
+        line-height: 1.3 !important;
       }
 
-      .loading-title {
-        font-size: 12px;
+      .ai-loading-progress .loading-header {
+        font-size: 11px;
         color: #69db7c;
-        margin-bottom: 8px;
-        font-weight: 600;
+        margin: 0 0 4px 0;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
+      }
+
+      .ai-loading-progress .loading-header i {
+        font-size: 10px;
+      }
+
+      .ai-loading-progress .loading-header strong {
+        flex: 1;
+      }
+
+      .ai-loading-progress .loading-percent {
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.7);
       }
 
       .loading-bar {
         width: 100%;
-        height: 6px;
+        height: 4px;
         background: rgba(255, 255, 255, 0.05);
-        border-radius: 3px;
+        border-radius: 2px;
         overflow: hidden;
-        margin-bottom: 6px;
+        margin-bottom: 3px;
       }
 
       .loading-fill {
         height: 100%;
         background: linear-gradient(90deg, #69db7c, #51cf66);
-        border-radius: 3px;
+        border-radius: 2px;
         transition: width 0.3s ease;
       }
 
       .loading-text {
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Download Confirmation Card - Ultra Compact */
+      .ai-confirm-download {
+        background: linear-gradient(135deg, rgba(116, 192, 252, 0.1), rgba(147, 112, 219, 0.1)) !important;
+        border: 1px solid rgba(116, 192, 252, 0.3);
+        padding: 6px 10px !important;
+        margin-bottom: 6px !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+      }
+
+      .ai-confirm-download .confirm-header {
+        font-size: 11px;
+        color: #74c0fc;
+        margin: 0 0 3px 0;
+      }
+
+      .ai-confirm-download .confirm-header i {
+        margin-right: 4px;
+      }
+
+      .ai-confirm-download .confirm-header strong {
+        color: #74c0fc;
+      }
+
+      .ai-confirm-download .confirm-model {
         font-size: 10px;
-        color: rgba(255, 255, 255, 0.6);
-        text-align: center;
+        color: rgba(255, 255, 255, 0.7);
+        font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        margin: 0 0 3px 0;
+      }
+
+      .ai-confirm-download .confirm-note {
+        font-size: 9px;
+        color: rgba(255, 255, 255, 0.5);
+        margin: 0 0 2px 0;
+      }
+
+      .ai-confirm-download .confirm-note i {
+        color: rgba(255, 255, 255, 0.4);
+        margin-right: 3px;
+        font-size: 8px;
+      }
+
+      .ai-confirm-download .confirm-local {
+        font-size: 9px;
+        color: rgba(105, 219, 124, 0.8);
+        margin: 0 0 6px 0;
+      }
+
+      .ai-confirm-download .confirm-local i {
+        color: rgba(105, 219, 124, 0.6);
+        margin-right: 3px;
+        font-size: 8px;
+      }
+
+      .ai-confirm-download .confirm-buttons {
+        display: flex;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+      }
+
+      .ai-confirm-download .confirm-btn {
+        flex: 1;
+        padding: 4px 8px;
+        border: none;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.15s ease;
+      }
+
+      .ai-confirm-download .confirm-btn.confirm-yes {
+        background: linear-gradient(135deg, #69db7c, #51cf66);
+        color: #1a1b1e;
+      }
+
+      .ai-confirm-download .confirm-btn.confirm-yes:hover {
+        filter: brightness(1.1);
+      }
+
+      .ai-confirm-download .confirm-btn.confirm-no {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .ai-confirm-download .confirm-btn.confirm-no:hover {
+        background: rgba(255, 255, 255, 0.15);
       }
 
       .ai-message.streaming .message-content::after {

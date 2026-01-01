@@ -321,38 +321,61 @@ export class AIAssistantUIManager {
         this.dom.updateModelInfo(modelInfo.name, true);
       }
     } else if (!status.loading) {
+      // Show in-chat confirmation instead of browser confirm()
       const modelInfo = AIAssistantModule.getWebLLMModelInfo();
-      const confirmed = confirm(
-        `Enable Advanced AI?\n\n` +
-        `Download ${modelInfo.name} (${modelInfo.size})\n\n` +
-        `✅ 100% Local\n` +
-        `✅ Offline capable\n` +
-        `✅ Better conversations\n\n` +
-        `One-time download, cached in browser.`
-      );
+      this.showDownloadConfirmation(modelInfo);
+    }
+  }
+
+  private showDownloadConfirmation(modelInfo: { name: string; size: string; description: string }): void {
+    // Create ultra-compact confirmation message in chat
+    const confirmContainer = document.createElement('div');
+    confirmContainer.className = 'ai-message ai-confirm-download';
+    confirmContainer.innerHTML = 
+      `<div class="confirm-header"><i class="fas fa-brain"></i> <strong>Enable Advanced AI?</strong></div>` +
+      `<div class="confirm-model">${modelInfo.name} • ${modelInfo.size}</div>` +
+      `<div class="confirm-note"><i class="fas fa-info-circle"></i> One-time download, cached for future use</div>` +
+      `<div class="confirm-local"><i class="fas fa-laptop"></i> Local AI runs on your web browser</div>` +
+      `<div class="confirm-buttons"><button class="confirm-btn confirm-yes"><i class="fas fa-download"></i> Download</button><button class="confirm-btn confirm-no">Cancel</button></div>`;
+
+    this.dom.responseArea.appendChild(confirmContainer);
+    this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
+
+    // Handle button clicks
+    const yesBtn = confirmContainer.querySelector('.confirm-yes') as HTMLButtonElement;
+    const noBtn = confirmContainer.querySelector('.confirm-no') as HTMLButtonElement;
+
+    yesBtn.addEventListener('click', async () => {
+      confirmContainer.remove();
+      await this.startWebLLMDownload();
+    });
+
+    noBtn.addEventListener('click', () => {
+      confirmContainer.remove();
+      this.chat.addMessage("No problem! Click the brain icon anytime to enable.", 'ai');
+    });
+  }
+
+  private async startWebLLMDownload(): Promise<void> {
+    this.chat.addMessage("🚀 Downloading AI model...", 'ai');
+    
+    try {
+      await this.aiModule.initializeWebLLM((progress) => {
+        this.chat.addLoadingProgress(progress);
+      });
       
-      if (confirmed) {
-        this.chat.addMessage("🚀 Downloading AI model...", 'ai');
-        
-        try {
-          await this.aiModule.initializeWebLLM((progress) => {
-            this.chat.addLoadingProgress(progress);
-          });
-          
-          const modelInfo = AIAssistantModule.getWebLLMModelInfo();
-          this.chat.removeLoadingProgress();
-          this.chat.addMessage("🎉 Advanced AI ready!", 'ai', true);
-          this.dom.updateModelInfo(modelInfo.name, true);
-          this.updateWebLLMButton();
-          
-          // Initialize stats display with GPU info
-          this.initializeStatsDisplay();
-        } catch (error) {
-          this.chat.removeLoadingProgress();
-          this.chat.addMessage("❌ Failed to load Advanced AI.", 'ai');
-          console.error("WebLLM init failed:", error);
-        }
-      }
+      const modelInfo = AIAssistantModule.getWebLLMModelInfo();
+      this.chat.removeLoadingProgress();
+      this.chat.addMessage("🎉 Advanced AI ready!", 'ai', true);
+      this.dom.updateModelInfo(modelInfo.name, true);
+      this.updateWebLLMButton();
+      
+      // Initialize stats display with GPU info
+      this.initializeStatsDisplay();
+    } catch (error) {
+      this.chat.removeLoadingProgress();
+      this.chat.addMessage("❌ Failed to load Advanced AI.", 'ai');
+      console.error("WebLLM init failed:", error);
     }
   }
 

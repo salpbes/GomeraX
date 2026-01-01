@@ -183,23 +183,20 @@ export class AIChatManager {
     if (!progressEl) {
       progressEl = document.createElement('div');
       progressEl.className = 'ai-loading-progress';
-      progressEl.innerHTML = `
-        <div class="loading-title">
-          <i class="fas fa-download"></i> Loading AI Model...
-        </div>
-        <div class="loading-bar">
-          <div class="loading-fill"></div>
-        </div>
-        <div class="loading-text"></div>
-      `;
+      progressEl.innerHTML = 
+        `<div class="loading-header"><i class="fas fa-download"></i> <strong>Downloading AI Model...</strong> <span class="loading-percent">0%</span></div>` +
+        `<div class="loading-bar"><div class="loading-fill"></div></div>` +
+        `<div class="loading-text"></div>`;
       this.dom.responseArea.appendChild(progressEl);
     }
 
     const fill = progressEl.querySelector('.loading-fill') as HTMLDivElement;
     const text = progressEl.querySelector('.loading-text') as HTMLDivElement;
+    const percent = progressEl.querySelector('.loading-percent') as HTMLSpanElement;
     
     if (fill) fill.style.width = `${progress.progress}%`;
     if (text) text.textContent = progress.text;
+    if (percent) percent.textContent = `${progress.progress}%`;
     
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
   }
