@@ -166,6 +166,76 @@ export class AIChatManager {
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
   }
 
+  /**
+   * Add an action confirmation message with icon
+   */
+  public addActionMessage(actionName: string, description: string): void {
+    const msg = document.createElement('div');
+    msg.className = 'ai-message action-message';
+    
+    // Map action names to icons and categories
+    const actionIcons: Record<string, string> = {
+      // View actions
+      setView: 'fa-video',
+      resetView: 'fa-undo',
+      fitToView: 'fa-expand',
+      zoom: 'fa-search-plus',
+      rotateCamera: 'fa-sync',
+      toggleFirstPersonMode: 'fa-walking',
+      
+      // Visibility actions  
+      hideElementTypes: 'fa-eye-slash',
+      showOnlyElementTypes: 'fa-filter',
+      showAllElements: 'fa-eye',
+      setElementTransparency: 'fa-tint',
+      
+      // Clipping actions
+      addClippingPlane: 'fa-cut',
+      removeAllClippingPlanes: 'fa-trash',
+      toggleClipper: 'fa-cut',
+      
+      // Measurement actions
+      enableMeasurement: 'fa-ruler',
+      disableMeasurement: 'fa-ruler',
+      clearMeasurements: 'fa-eraser',
+      
+      // Cluster actions
+      showClusters: 'fa-cubes',
+      exitClusterMode: 'fa-compress',
+      toggleClusters: 'fa-cubes',
+      
+      // Color actions
+      colorByStorey: 'fa-palette',
+      colorByType: 'fa-palette',
+      exitColorSplashMode: 'fa-palette',
+      
+      // Floor plan actions
+      showFloorPlans: 'fa-layer-group',
+      showFloorPlan: 'fa-map',
+      
+      // UI actions
+      toggleMinimapCamera: 'fa-map-marker',
+      showModelDashboard: 'fa-chart-bar'
+    };
+    
+    const icon = actionIcons[actionName] || 'fa-check-circle';
+    
+    msg.innerHTML = '<div class="action-badge"><i class="fas fa-robot"></i> Action Executed</div>' +
+      '<div class="action-content"><div class="action-icon"><i class="fas ' + icon + '"></i></div>' +
+      '<div class="action-text">' + description + '</div></div>';
+    
+    this.dom.responseArea.appendChild(msg);
+    this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
+  }
+
+  /**
+   * Remove any streaming message (used when action is detected mid-stream)
+   */
+  public removeStreamingMessage(id: string): void {
+    const msg = document.getElementById(id);
+    msg?.remove();
+  }
+
   public addSuggestions(suggestions: string[], onClick: (suggestion: string) => void): void {
     // Remove any existing suggestions first
     const existingSuggestions = this.dom.responseArea.querySelector('.ai-suggestions');

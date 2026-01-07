@@ -129,14 +129,37 @@ export class AIAssistantModule {
         
         // Use streaming for immediate feedback
         let streamedContent = '';
+        let tokenBuffer = '';
+        let isDefinitelyNotAction = false;
+        
         const response = await this.webLLM.chatStreamWithActions(
           commandToProcess, 
           (token: string) => {
             streamedContent += token;
-            // Only stream to UI if it's a text response (not an action)
-            // We detect action pattern early to avoid showing it
-            if (!streamedContent.includes('[ACTION:') && onStreamToken) {
+            
+            // If we already detected it's not an action, stream directly
+            if (isDefinitelyNotAction && onStreamToken) {
               onStreamToken(token);
+              return;
+            }
+            
+            // Buffer tokens until we can determine if it's an action or not
+            tokenBuffer += token;
+            
+            // If buffer contains [ACTION:, don't stream anything
+            if (tokenBuffer.includes('[ACTION:') || tokenBuffer.includes('[ACTION ')) {
+              return; // Don't stream action tokens
+            }
+            
+            // If buffer is long enough without [ACTION pattern, it's safe to stream
+            // Or if the content clearly isn't starting with [ or action-like pattern
+            if (tokenBuffer.length > 10 || 
+                (tokenBuffer.length > 0 && !tokenBuffer.trimStart().startsWith('[') && !tokenBuffer.trimStart().toLowerCase().startsWith('action'))) {
+              isDefinitelyNotAction = true;
+              if (onStreamToken) {
+                onStreamToken(tokenBuffer);
+              }
+              tokenBuffer = '';
             }
           },
           bimContext, 
@@ -466,8 +489,14 @@ export class AIAssistantModule {
         }
         
         case 'addClippingPlane': {
-          await this.actions.addClippingPlane();
-          return { message: "I've added a clipping plane. You can move it to see inside the model." };
+          const axis = (args.axis as 'x' | 'y' | 'z') || 'z';
+          await this.actions.addClippingPlane(axis);
+          const axisDescriptions = {
+            x: 'vertical cut (left/right)',
+            y: 'vertical cut (front/back)',
+            z: 'horizontal cut (floor level)',
+          };
+          return { message: `I've added a ${axisDescriptions[axis]} clipping plane. You can drag it to move the section.` };
         }
         
         case 'setView': {
@@ -486,6 +515,148 @@ export class AIAssistantModule {
           const delta = direction === 'in' ? 2 : -2;
           await this.actions.zoom(delta);
           return { message: `Zoomed ${direction}.` };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Visibility
+        // ============================================================================
+        case 'showAll': {
+          await this.actions.showAll();
+          return { message: "I've shown all elements in the model." };
+        }
+
+        case 'hideAll': {
+          await this.actions.hideAll();
+          return { message: "I've hidden all elements. Use 'show all' to see them again." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Camera
+        // ============================================================================
+        case 'rotateCamera': {
+          const angle = (args.angle as number) || 90;
+          await this.actions.rotate(angle);
+          return { message: `I've rotated the camera by ${angle} degrees.` };
+        }
+
+        case 'toggleFirstPerson': {
+          await this.actions.toggleFirstPerson();
+          return { message: "First-person walk mode toggled. Use WASD to move and mouse to look around. Right-click to lock/unlock the mouse." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Measurement
+        // ============================================================================
+        case 'enableMeasurement': {
+          const mode = (args.mode as 'length' | 'area' | 'volume') || 'length';
+          await this.actions.enableMeasurement(mode);
+          const modeDescriptions = {
+            length: 'Click two points to measure the distance between them.',
+            area: 'Click points to outline an area, then double-click to complete.',
+            volume: 'Click points to define a volume.',
+          };
+          return { message: `${mode.charAt(0).toUpperCase() + mode.slice(1)} measurement enabled. ${modeDescriptions[mode]}` };
+        }
+
+        case 'disableMeasurement': {
+          await this.actions.disableMeasurement();
+          return { message: "Measurement mode disabled." };
+        }
+
+        case 'clearMeasurements': {
+          await this.actions.clearMeasurements();
+          return { message: "I've cleared all measurements from the view." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Clipping
+        // ============================================================================
+        case 'clearClippingPlanes': {
+          await this.actions.clearClippingPlanes();
+          return { message: "I've removed all clipping planes." };
+        }
+
+        case 'toggleClipper': {
+          const enabled = args.enabled as boolean | undefined;
+          await this.actions.toggleClipper(enabled);
+          return { message: enabled !== undefined 
+            ? `Clipping tool ${enabled ? 'enabled' : 'disabled'}.`
+            : "Clipping tool toggled." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Visualization Modes
+        // ============================================================================
+        case 'toggleClusterView': {
+          await this.actions.toggleClusterView();
+          return { message: "Cluster view toggled. Elements are now organized by type into separate groups." };
+        }
+
+        case 'toggleSpaceVisibility': {
+          await this.actions.toggleSpaceVisibility();
+          return { message: "Space/room visibility toggled." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Model Information
+        // ============================================================================
+        case 'getModelInfo': {
+          const info = await this.actions.getModelInfo();
+          return { 
+            message: `**Model Information:**\n- Models loaded: ${info.modelCount}\n- Total elements: ${info.totalElements}\n- Categories: ${info.categories.length}\n\nCategories present: ${info.categories.slice(0, 10).map(c => c.replace('IFC', '')).join(', ')}${info.categories.length > 10 ? '...' : ''}`,
+            count: info.totalElements
+          };
+        }
+
+        case 'listElementTypes': {
+          const types = await this.actions.listElementTypes();
+          const cleanTypes = types.map(t => t.replace('IFC', ''));
+          return { 
+            message: `**Element Types in Model (${types.length}):**\n${cleanTypes.join(', ')}`,
+            count: types.length
+          };
+        }
+
+        case 'getStoreys': {
+          const storeys = await this.actions.getStoreys();
+          if (storeys.length === 0) {
+            return { message: "No building storeys found in this model.", count: 0 };
+          }
+          const storeyList = storeys.map(s => `- ${s.name} (elevation: ${s.elevation.toFixed(2)}m)`).join('\n');
+          return { 
+            message: `**Building Storeys (${storeys.length}):**\n${storeyList}`,
+            count: storeys.length
+          };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Floor Plans
+        // ============================================================================
+        case 'showFloorPlan': {
+          const storeyName = args.storeyName as string | undefined;
+          const success = await this.actions.showFloorPlan(storeyName);
+          if (success) {
+            return { message: storeyName 
+              ? `Showing floor plan for "${storeyName}". You're now in 2D plan view.`
+              : "Showing floor plan. You're now in 2D plan view." };
+          }
+          return { message: "Couldn't show floor plan. No storeys found in the model." };
+        }
+
+        case 'exitFloorPlan': {
+          await this.actions.exitFloorPlan();
+          return { message: "Exited floor plan mode. Back to 3D view." };
+        }
+
+        // ============================================================================
+        // NEW FUNCTIONS: Utility
+        // ============================================================================
+        case 'takeScreenshot': {
+          const dataUrl = await this.actions.takeScreenshot();
+          if (dataUrl) {
+            return { message: "Screenshot saved! Check your downloads folder." };
+          }
+          return { message: "Couldn't take screenshot. Please try again." };
         }
         
         default:

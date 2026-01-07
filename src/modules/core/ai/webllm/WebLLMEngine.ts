@@ -34,7 +34,7 @@ function stripThinkingBlock(response: string): string {
 
 /**
  * WebLLM Engine for local, privacy-preserving AI inference
- * Uses Qwen3-0.6B with advanced reasoning capabilities
+ * Uses Qwen3 with advanced reasoning capabilities
  *
  * Features:
  * - 100% local processing (no data sent to cloud)
@@ -190,60 +190,19 @@ export class WebLLMEngine {
       // Log for debugging
       console.log("[WebLLM] Response:", textContent.substring(0, 200));
 
-      // Parse [ACTION: functionName(args)] from response
+      // Parse function calls from response
       if (enableFunctionCalling) {
-        // Match both [ACTION: func(args)] and [ACTION: func()]
-        const actionMatch = textContent.match(/\[ACTION:\s*(\w+)\(([^)]*)\)\]/i);
-        if (actionMatch) {
-          const functionName = actionMatch[1];
-          let args: any = {};
-          
-          // Parse arguments
-          const argsStr = actionMatch[2].trim();
-          if (argsStr) {
-            try {
-              // Try to parse as JSON array for element types
-              const parsed = JSON.parse(argsStr);
-              if (Array.isArray(parsed)) {
-                args = { elementTypes: parsed };
-              } else if (typeof parsed === 'string') {
-                // For setView("front") or zoom("in")
-                if (functionName === 'setView') {
-                  args = { view: parsed };
-                } else if (functionName === 'zoom') {
-                  args = { direction: parsed };
-                }
-              }
-            } catch {
-              // If not valid JSON, try as plain string
-              const cleanArg = argsStr.replace(/['"`]/g, '').trim();
-              if (cleanArg) {
-                if (functionName === 'setView') {
-                  args = { view: cleanArg };
-                } else if (functionName === 'zoom') {
-                  args = { direction: cleanArg };
-                } else if (cleanArg.startsWith('[') || cleanArg.includes('IFC')) {
-                  // Try to extract IFC types
-                  const types = cleanArg.match(/IFC\w+/gi) || [];
-                  if (types.length > 0) {
-                    args = { elementTypes: types };
-                  }
-                }
-              }
-            }
-          }
+        const parsedAction = this.parseActionFromResponse(textContent);
+        if (parsedAction) {
+          console.log(`[WebLLM] Parsed action: ${parsedAction.name}`, JSON.stringify(parsedAction.arguments));
 
-          console.log(`[WebLLM] Parsed action: ${functionName}`, JSON.stringify(args));
-
+          // Store the proper format in history to maintain consistency
           this.addToHistory(userMsg, {
             role: "assistant",
-            content: `Calling function: ${functionName}`,
+            content: `[ACTION: ${parsedAction.name}(${JSON.stringify(parsedAction.arguments)})]`,
           });
 
-          return {
-            name: functionName,
-            arguments: args,
-          };
+          return parsedAction;
         }
       }
 
@@ -322,6 +281,25 @@ export class WebLLMEngine {
       // Strip thinking blocks
       let cleanedResponse = stripThinkingBlock(fullResponse);
       
+      // Debug: log the cleaned response to see what we're trying to parse
+      console.log(`[WebLLM Stream] Full response: "${cleanedResponse}"`);
+      
+      // Parse function calls from response
+      if (enableFunctionCalling) {
+        const parsedAction = this.parseActionFromResponse(cleanedResponse);
+        if (parsedAction) {
+          console.log(`[WebLLM Stream] Parsed action: ${parsedAction.name}`, JSON.stringify(parsedAction.arguments));
+
+          // Store the proper format in history to maintain consistency
+          this.addToHistory(userMsg, {
+            role: "assistant",
+            content: `[ACTION: ${parsedAction.name}(${JSON.stringify(parsedAction.arguments)})]`,
+          });
+
+          return parsedAction;
+        }
+      }
+      
       // Track actual usage stats
       const totalTime = (endTime - startTime) / 1000;
       const timeToFirstToken = firstTokenTime ? (firstTokenTime - startTime) / 1000 : totalTime;
@@ -336,57 +314,6 @@ export class WebLLMEngine {
         timeToFirstToken: timeToFirstToken,
         e2eLatency: totalTime,
       };
-
-      // Parse [ACTION: functionName(args)] from response
-      if (enableFunctionCalling) {
-        const actionMatch = cleanedResponse.match(/\[ACTION:\s*(\w+)\(([^)]*)\)\]/i);
-        if (actionMatch) {
-          const functionName = actionMatch[1];
-          let args: any = {};
-          
-          const argsStr = actionMatch[2].trim();
-          if (argsStr) {
-            try {
-              const parsed = JSON.parse(argsStr);
-              if (Array.isArray(parsed)) {
-                args = { elementTypes: parsed };
-              } else if (typeof parsed === 'string') {
-                if (functionName === 'setView') {
-                  args = { view: parsed };
-                } else if (functionName === 'zoom') {
-                  args = { direction: parsed };
-                }
-              }
-            } catch {
-              const cleanArg = argsStr.replace(/['"`]/g, '').trim();
-              if (cleanArg) {
-                if (functionName === 'setView') {
-                  args = { view: cleanArg };
-                } else if (functionName === 'zoom') {
-                  args = { direction: cleanArg };
-                } else if (cleanArg.startsWith('[') || cleanArg.includes('IFC')) {
-                  const types = cleanArg.match(/IFC\w+/gi) || [];
-                  if (types.length > 0) {
-                    args = { elementTypes: types };
-                  }
-                }
-              }
-            }
-          }
-
-          console.log(`[WebLLM Stream] Parsed action: ${functionName}`, JSON.stringify(args));
-
-          this.addToHistory(userMsg, {
-            role: "assistant",
-            content: `Calling function: ${functionName}`,
-          });
-
-          return {
-            name: functionName,
-            arguments: args,
-          };
-        }
-      }
 
       // Regular text response
       this.addToHistory(userMsg, {
@@ -529,6 +456,142 @@ export class WebLLMEngine {
       decodeSpeed: `${this.lastUsageStats.decodeTokensPerSec.toFixed(1)} tok/s`,
       latency: `${(this.lastUsageStats.e2eLatency * 1000).toFixed(0)}ms`,
     };
+  }
+
+  /**
+   * Parse action from response text - handles multiple formats
+   * Returns null if no action found
+   */
+  private parseActionFromResponse(text: string): { name: string; arguments: any } | null {
+    // Pattern 1: [ACTION: functionName(args)]
+    const actionMatch = text.match(/\[ACTION:\s*(\w+)\s*\(\s*([^)]*)\s*\)\s*\]/i);
+    if (actionMatch) {
+      const functionName = actionMatch[1];
+      const argsStr = actionMatch[2].trim();
+      const args = argsStr ? this.parseActionArguments(functionName, argsStr) : {};
+      
+      return { name: functionName, arguments: args };
+    }
+
+    // Pattern 2: Partial [ACTION: functionName( without closing
+    const partialMatch = text.match(/\[ACTION:\s*(\w+)\s*\(\s*([^)\]]*)/i);
+    if (partialMatch) {
+      const functionName = partialMatch[1];
+      const argsStr = partialMatch[2].trim();
+      const args = argsStr ? this.parseActionArguments(functionName, argsStr) : {};
+      
+      return { name: functionName, arguments: args };
+    }
+
+    // Pattern 3: "Calling function: functionName" (AI learned this from history)
+    const callingMatch = text.match(/Calling\s+function:\s*(\w+)/i);
+    if (callingMatch) {
+      console.log("[WebLLM] Detected 'Calling function:' format, AI may have learned from history");
+      return { name: callingMatch[1], arguments: {} };
+    }
+
+    // Pattern 4: Just function name followed by () like "resetView()"
+    const simpleMatch = text.match(/\b(\w+)\s*\(\s*\)/);
+    if (simpleMatch) {
+      const functionName = simpleMatch[1];
+      // Check if it's a known function (to avoid false positives)
+      const knownFunctions = [
+        'resetView', 'fitToView', 'toggleFirstPersonMode', 'toggleClipper',
+        'removeAllClippingPlanes', 'enableMeasurement', 'disableMeasurement',
+        'clearMeasurements', 'showClusters', 'exitClusterMode', 'toggleClusters',
+        'showFloorPlans', 'showAllElements', 'toggleStoreyVisibility', 'toggleMinimapCamera',
+        'showModelDashboard', 'setView', 'zoom', 'rotateCamera', 'hideElementTypes',
+        'showOnlyElementTypes', 'setElementTransparency', 'addClippingPlane',
+        'colorByStorey', 'colorByType', 'exitColorSplashMode', 'showFloorPlan'
+      ];
+      
+      if (knownFunctions.includes(functionName)) {
+        console.log(`[WebLLM] Detected bare function call: ${functionName}()`);
+        return { name: functionName, arguments: {} };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse action arguments based on function name
+   * Handles all function types with appropriate parameter mapping
+   */
+  private parseActionArguments(functionName: string, argsStr: string): any {
+    const cleanArg = argsStr.replace(/['"`]/g, '').trim();
+    
+    // Try JSON parse first for arrays
+    try {
+      const parsed = JSON.parse(argsStr);
+      if (Array.isArray(parsed)) {
+        return { elementTypes: parsed };
+      }
+      // If it's a plain string in JSON
+      if (typeof parsed === 'string') {
+        return this.mapStringArgToParam(functionName, parsed);
+      }
+      // If it's an object, return as-is
+      if (typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch {
+      // Not valid JSON, handle as plain string
+    }
+
+    // Handle plain string arguments
+    if (cleanArg) {
+      // Check if it looks like an array of IFC types
+      if (cleanArg.startsWith('[') || cleanArg.includes('IFC')) {
+        const types = cleanArg.match(/IFC\w+/gi) || [];
+        if (types.length > 0) {
+          return { elementTypes: types };
+        }
+      }
+      
+      // Map string to appropriate parameter based on function
+      return this.mapStringArgToParam(functionName, cleanArg);
+    }
+
+    return {};
+  }
+
+  /**
+   * Map a string argument to the correct parameter name for a function
+   */
+  private mapStringArgToParam(functionName: string, value: string): any {
+    // Mapping of function names to their parameter names
+    const parameterMappings: Record<string, string> = {
+      // Camera/View
+      'setView': 'view',
+      'zoom': 'direction',
+      'rotateCamera': 'angle',
+      
+      // Clipping
+      'addClippingPlane': 'axis',
+      'toggleClipper': 'enabled',
+      
+      // Measurement
+      'enableMeasurement': 'mode',
+      
+      // Floor plans
+      'showFloorPlan': 'storeyName',
+    };
+
+    const paramName = parameterMappings[functionName];
+    if (paramName) {
+      // Handle special cases
+      if (paramName === 'angle') {
+        return { [paramName]: parseFloat(value) || 90 };
+      }
+      if (paramName === 'enabled') {
+        return { [paramName]: value.toLowerCase() === 'true' };
+      }
+      return { [paramName]: value };
+    }
+
+    // Default: return as generic value
+    return { value };
   }
 
   /**

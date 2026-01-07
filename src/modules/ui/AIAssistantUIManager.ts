@@ -288,8 +288,20 @@ export class AIAssistantUIManager {
       // Check if this was an action (response already handled)
       isAction = !!response.actionExecuted;
       
-      // If we used streaming, finalize it
-      if (streamingId) {
+      // If an action was executed, clean up any streaming and show action message
+      if (isAction) {
+        // Remove any partial streaming message that might have shown [ACTION...
+        if (streamingId) {
+          this.chat.removeStreamingMessage(streamingId);
+          streamingId = null;
+        }
+        // Remove thinking indicator if still showing
+        this.chat.removeThinkingIndicator(thinkingId);
+        
+        // Show professional action message
+        this.chat.addActionMessage(response.actionExecuted!, response.text);
+      } else if (streamingId) {
+        // If we used streaming, finalize it
         this.chat.finalizeStreamingMessage(streamingId);
       } else {
         // No streaming - remove thinking indicator and show message normally

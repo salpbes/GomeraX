@@ -542,6 +542,50 @@ export class AIStyleManager {
         font-weight: 700;
       }
 
+      /* Action message styling */
+      .action-message {
+        background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(40, 167, 69, 0.05) 100%) !important;
+        border-left: 3px solid #28a745 !important;
+        padding: 8px 10px !important;
+      }
+
+      .action-badge {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #28a745;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 700;
+      }
+
+      .action-content {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .action-icon {
+        width: 20px;
+        height: 20px;
+        background: rgba(40, 167, 69, 0.2);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #28a745;
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+
+      .action-text {
+        font-size: 13px;
+        line-height: 1.3;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
       .ai-thinking {
         background: rgba(255, 255, 255, 0.02) !important;
         padding: 12px !important;
