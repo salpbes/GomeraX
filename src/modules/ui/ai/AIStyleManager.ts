@@ -586,6 +586,78 @@ export class AIStyleManager {
         color: rgba(255, 255, 255, 0.9);
       }
 
+      /* Confidence badges */
+      .confidence-badge {
+        font-size: 8px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        margin-left: 6px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .confidence-high {
+        background: rgba(40, 167, 69, 0.3);
+        color: #69db7c;
+      }
+
+      .confidence-medium {
+        background: rgba(255, 193, 7, 0.3);
+        color: #ffc107;
+      }
+
+      .confidence-low {
+        background: rgba(220, 53, 69, 0.3);
+        color: #ff6b6b;
+      }
+
+      /* Batch actions message styling */
+      .batch-message {
+        background: linear-gradient(135deg, rgba(0, 123, 255, 0.15) 0%, rgba(0, 123, 255, 0.05) 100%) !important;
+        border-left: 3px solid #007bff !important;
+        padding: 8px 10px !important;
+      }
+
+      .batch-message .action-badge {
+        color: #007bff;
+      }
+
+      .batch-actions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 6px;
+      }
+
+      .batch-action-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        padding: 4px 6px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+      }
+
+      .batch-number {
+        font-weight: 700;
+        color: #007bff;
+        font-size: 10px;
+        min-width: 32px;
+        text-align: center;
+        background: rgba(0, 123, 255, 0.2);
+        padding: 2px 6px;
+        border-radius: 3px;
+      }
+
+      .batch-result {
+        flex: 1;
+        color: rgba(255, 255, 255, 0.85);
+        line-height: 1.3;
+      }
+
       .ai-thinking {
         background: rgba(255, 255, 255, 0.02) !important;
         padding: 12px !important;

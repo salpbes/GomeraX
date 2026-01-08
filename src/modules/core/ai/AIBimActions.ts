@@ -61,6 +61,269 @@ export class AIBimActions {
     return totalCount;
   }
 
+  /**
+   * Select all elements on a specific storey/level
+   */
+  public async selectElementsByStorey(storeyName: string): Promise<number> {
+    const highlighter = this.components.get(OBF.Highlighter);
+    if (!highlighter) return 0;
+
+    highlighter.clear('select');
+    
+    let totalCount = 0;
+    const selection: Record<string, Set<number>> = {};
+
+    // Get all storeys
+    for (const [modelId, model] of this.fragments.list) {
+      try {
+        // Get building storeys
+        const storeys = await model.getItemsOfCategories([/BUILDINGSTOREY/]);
+        const categoryKey = Object.keys(storeys).find(key => key.includes('BUILDINGSTOREY'));
+        
+        if (!categoryKey || !storeys[categoryKey]) continue;
+        
+        const storeyIds = storeys[categoryKey];
+        const storeyData = await model.getItemsData(storeyIds, {
+          attributesDefault: false,
+          attributes: ['Name', 'LongName']
+        });
+        
+        // Find the matching storey
+        for (const attrs of storeyData) {
+          const nameAttr = attrs.Name as any;
+          const longNameAttr = attrs.LongName as any;
+          const name = nameAttr?.value || longNameAttr?.value || '';
+          
+          // Case-insensitive partial match
+          if (name.toLowerCase().includes(storeyName.toLowerCase())) {
+            const storeyId = attrs.id as unknown as number;
+            
+            // Get all elements contained in this storey
+            const relations = await model.getItemsOfCategories([/RELCONTAINEDINSPATIALSTRUCTURE/]);
+            const relKey = Object.keys(relations).find(key => key.includes('RELCONTAINEDINSPATIALSTRUCTURE'));
+            
+            if (relKey && relations[relKey]) {
+              const relIds = relations[relKey];
+              const relData = await model.getItemsData(relIds, {
+                attributesDefault: false,
+                attributes: ['RelatingStructure', 'RelatedElements']
+              });
+              
+              for (const rel of relData) {
+                const relatingStructure = rel.RelatingStructure as any;
+                if (relatingStructure?.value === storeyId) {
+                  const relatedElements = rel.RelatedElements as any;
+                  if (relatedElements && Array.isArray(relatedElements)) {
+                    if (!selection[modelId]) {
+                      selection[modelId] = new Set();
+                    }
+                    
+                    relatedElements.forEach((elem: any) => {
+                      const elemId = elem.value;
+                      if (typeof elemId === 'number') {
+                        selection[modelId].add(elemId);
+                        totalCount++;
+                      }
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Could not get storey elements for model ${modelId}`, e);
+      }
+    }
+    
+    if (totalCount > 0) {
+      highlighter.highlightByID('select', selection);
+    }
+    
+    return totalCount;
+  }
+
+  /**
+   * Select elements by both storey and type (combined filter)
+   * Uses spatial structure tree to find elements in storey
+   */
+  public async selectElementsByStoreyAndType(storeyName: string, elementTypes: string[]): Promise<number> {
+    const highlighter = this.components.get(OBF.Highlighter);
+    if (!highlighter) return 0;
+
+    highlighter.clear('select');
+    
+    let totalCount = 0;
+    const selection: Record<string, Set<number>> = {};
+
+    console.log(`🔍 Selecting ${elementTypes.join(', ')} on storey "${storeyName}"`);
+
+    for (const [modelId, model] of this.fragments.list) {
+      try {
+        // Get the spatial structure
+        const spatialStructure = await (model as any).getSpatialStructure();
+        if (!spatialStructure) {
+          console.warn('⚠️ No spatial structure found');
+          continue;
+        }
+        
+        // Find the storey node in the spatial structure
+        const storeyResult = await this.findStoreyNode(model, spatialStructure, storeyName);
+        if (!storeyResult) {
+          console.warn(`⚠️ Could not find storey matching "${storeyName}"`);
+          continue;
+        }
+        
+        const { node: storeyNode, localId: storeyLocalId, name: matchedStoreyName } = storeyResult;
+        console.log(`✅ Matched storey: "${matchedStoreyName}" with ID ${storeyLocalId}`);
+        
+        // Get all elements of the requested types
+        const allTypeIds: number[] = [];
+        for (const type of elementTypes) {
+          const regex = new RegExp(type, 'i');
+          const items = await model.getItemsOfCategories([regex]);
+          
+          for (const [_key, ids] of Object.entries(items)) {
+            if (ids && Array.isArray(ids)) {
+              allTypeIds.push(...ids);
+            }
+          }
+        }
+        
+        console.log(`📊 Found ${allTypeIds.length} total elements of type ${elementTypes.join(', ')}`);
+        
+        if (allTypeIds.length === 0) continue;
+        
+        // Query ContainedInStructure for these elements
+        const itemsData = await model.getItemsData(allTypeIds, {
+          attributesDefault: false,
+          attributes: [],
+          relations: {
+            ContainedInStructure: { attributes: false, relations: false },
+          },
+        });
+        
+        if (!selection[modelId]) {
+          selection[modelId] = new Set();
+        }
+        
+        // Check each element for containment in storey
+        for (let i = 0; i < itemsData.length; i++) {
+          const data = itemsData[i];
+          const localId = allTypeIds[i];
+          
+          if (data.ContainedInStructure && Array.isArray(data.ContainedInStructure)) {
+            const isInStorey = data.ContainedInStructure.some((rel: any) => {
+              const relLocalId = rel._localId?.value || rel.localId;
+              return relLocalId === storeyLocalId;
+            });
+            
+            if (isInStorey) {
+              selection[modelId].add(localId);
+              totalCount++;
+            }
+          }
+        }
+        
+        if (totalCount === 0) {
+          // Fallback: try collecting from spatial tree children
+          const typeSet = new Set(allTypeIds);
+          const elementsInStorey = this.collectElementsFromStoreyNode(storeyNode, typeSet);
+          
+          for (const elemId of elementsInStorey) {
+            selection[modelId].add(elemId);
+            totalCount++;
+          }
+        }
+        
+        console.log(`✨ Selected ${totalCount} ${elementTypes.join(', ')} on "${matchedStoreyName}"`);
+        
+      } catch (e) {
+        console.warn(`Could not get storey elements for model ${modelId}`, e);
+      }
+    }
+    
+    if (totalCount > 0) {
+      highlighter.highlightByID('select', selection);
+    }
+    
+    return totalCount;
+  }
+  
+  /**
+   * Find storey node in spatial structure by name
+   * Returns { node, localId, name } if found
+   */
+  private async findStoreyNode(model: any, node: any, storeyName: string, depth: number = 0, parentCategory: string = ''): Promise<{ node: any; localId: number; name: string } | null> {
+    if (!node) return null;
+    
+    const category = node.category || node._category?.value || '';
+    const localId = node.localId || node._localId?.value;
+    
+    // Check if this node is a storey:
+    // 1. Has category IFCBUILDINGSTOREY and localId
+    // 2. OR parent has category IFCBUILDINGSTOREY and this node has localId (actual storey data)
+    const isStoreyNode = (category.includes('BUILDINGSTOREY') && localId) || 
+                         (parentCategory.includes('BUILDINGSTOREY') && localId && !category);
+    
+    if (isStoreyNode) {
+      // Get name from itemsData
+      let name = node.name || node.Name?.value || '';
+      
+      try {
+        const [itemData] = await model.getItemsData([localId], {
+          attributesDefault: false,
+          attributes: ['Name', 'LongName'],
+        });
+        if (itemData) {
+          name = itemData.Name?.value || itemData.LongName?.value || name;
+        }
+      } catch (e) {}
+      
+      if (name.toLowerCase().includes(storeyName.toLowerCase())) {
+        return { node, localId, name };
+      }
+    }
+    
+    if (node.children && Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = await this.findStoreyNode(model, child, storeyName, depth + 1, category);
+        if (found) return found;
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Collect element IDs from storey node's children that match type filter
+   */
+  private collectElementsFromStoreyNode(storeyNode: any, typeIds: Set<number>): number[] {
+    const result: number[] = [];
+    
+    if (!storeyNode.children) return result;
+    
+    for (const categoryGroup of storeyNode.children) {
+      const groupCategory = categoryGroup.category || categoryGroup._category?.value || '';
+      
+      // Skip spatial structure categories
+      if (['IFCPROJECT', 'IFCSITE', 'IFCBUILDING', 'IFCBUILDINGSTOREY', 'IFCSPACE'].includes(groupCategory)) {
+        continue;
+      }
+      
+      if (categoryGroup.children && Array.isArray(categoryGroup.children)) {
+        for (const elem of categoryGroup.children) {
+          const elemId = elem.localId || elem._localId?.value;
+          if (typeof elemId === 'number' && typeIds.has(elemId)) {
+            result.push(elemId);
+          }
+        }
+      }
+    }
+    
+    return result;
+  }
+
   public async setVisibilityByType(ifcType: string, visible: boolean): Promise<number> {
     const hider = this.components.get(OBC.Hider);
     if (!hider) return 0;
@@ -314,6 +577,94 @@ export class AIBimActions {
   public async hideAll() {
     const hider = this.components.get(OBC.Hider);
     if (hider) hider.set(false);
+  }
+
+  /**
+   * Hide specific element types
+   */
+  public async hideElementTypes(elementTypes: string[]): Promise<number> {
+    const hider = this.components.get(OBC.Hider);
+    if (!hider) return 0;
+
+    let totalCount = 0;
+    for (const type of elementTypes) {
+      const count = await this.hideByType(type);
+      totalCount += count;
+    }
+    return totalCount;
+  }
+
+  /**
+   * Show only specific element types (hide all others)
+   */
+  public async showOnlyElementTypes(elementTypes: string[]): Promise<number> {
+    const hider = this.components.get(OBC.Hider);
+    if (!hider) return 0;
+
+    // First, hide everything
+    hider.set(false);
+
+    // Then show only the requested types
+    const showData: Record<string, Set<number>> = {};
+    let totalCount = 0;
+
+    for (const type of elementTypes) {
+      const idsByModel = await this.getIdsByType(type);
+      for (const [modelId, ids] of idsByModel) {
+        if (!showData[modelId]) {
+          showData[modelId] = new Set();
+        }
+        ids.forEach(id => showData[modelId].add(id));
+        totalCount += ids.size;
+      }
+    }
+
+    if (totalCount > 0) {
+      hider.set(true, showData);
+    }
+
+    return totalCount;
+  }
+
+  /**
+   * Show all elements of specific types
+   */
+  public async showAllElements() {
+    const hider = this.components.get(OBC.Hider);
+    if (hider) hider.set(true);
+  }
+
+  /**
+   * Set transparency for element types
+   */
+  public async setElementTransparency(elementTypes: string[], opacity: number): Promise<number> {
+    // Clamp opacity between 0 and 1
+    const clampedOpacity = Math.max(0, Math.min(1, opacity));
+    
+    // Get all fragments for the types
+    let totalCount = 0;
+    for (const type of elementTypes) {
+      const idsByModel = await this.getIdsByType(type);
+      
+      const fragments = this.components.get(OBC.FragmentsManager);
+      for (const [modelId, ids] of idsByModel) {
+        const model = fragments.list.get(modelId);
+        if (model) {
+          // Set opacity for each fragment
+          for (const id of ids) {
+            const fragment = model.getFragmentByID(id);
+            if (fragment && fragment.mesh.material) {
+              const material = fragment.mesh.material as any;
+              material.transparent = clampedOpacity < 1;
+              material.opacity = clampedOpacity;
+              totalCount++;
+            }
+          }
+        }
+      }
+    }
+    
+    return totalCount;
   }
 
   // ============================================================================

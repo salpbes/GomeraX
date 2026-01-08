@@ -167,9 +167,9 @@ export class AIChatManager {
   }
 
   /**
-   * Add an action confirmation message with icon
+   * Add an action confirmation message with icon and optional confidence
    */
-  public addActionMessage(actionName: string, description: string): void {
+  public addActionMessage(actionName: string, description: string, confidence?: number): void {
     const msg = document.createElement('div');
     msg.className = 'ai-message action-message';
     
@@ -220,9 +220,48 @@ export class AIChatManager {
     
     const icon = actionIcons[actionName] || 'fa-check-circle';
     
-    msg.innerHTML = '<div class="action-badge"><i class="fas fa-robot"></i> Action Executed</div>' +
+    // Build confidence badge HTML if confidence provided
+    let confidenceBadge = '';
+    if (confidence !== undefined) {
+      const confidenceClass = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
+      const confidenceIcon = confidence >= 80 ? 'fa-check-circle' : confidence >= 50 ? 'fa-info-circle' : 'fa-exclamation-triangle';
+      confidenceBadge = '<span class="confidence-badge confidence-' + confidenceClass + '">' +
+        '<i class="fas ' + confidenceIcon + '"></i> ' + confidence + '%</span>';
+    }
+    
+    msg.innerHTML = '<div class="action-badge"><i class="fas fa-robot"></i> Action Executed' + confidenceBadge + '</div>' +
       '<div class="action-content"><div class="action-icon"><i class="fas ' + icon + '"></i></div>' +
       '<div class="action-text">' + description + '</div></div>';
+    
+    this.dom.responseArea.appendChild(msg);
+    this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
+  }
+
+  /**
+   * Add batch actions message with progress
+   */
+  public addBatchActionsMessage(actions: Array<{ name: string; result: string }>, confidence?: number): void {
+    const msg = document.createElement('div');
+    msg.className = 'ai-message batch-message';
+    
+    // Build confidence badge
+    let confidenceBadge = '';
+    if (confidence !== undefined) {
+      const confidenceClass = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
+      const confidenceIcon = confidence >= 80 ? 'fa-check-circle' : confidence >= 50 ? 'fa-info-circle' : 'fa-exclamation-triangle';
+      confidenceBadge = '<span class="confidence-badge confidence-' + confidenceClass + '">' +
+        '<i class="fas ' + confidenceIcon + '"></i> ' + confidence + '%</span>';
+    }
+    
+    // Build actions list
+    const actionsList = actions.map((action, i) => 
+      '<div class="batch-action-item">' +
+      '<span class="batch-number">' + (i + 1) + '/' + actions.length + '</span>' +
+      '<span class="batch-result">' + action.result + '</span></div>'
+    ).join('');
+    
+    msg.innerHTML = '<div class="action-badge"><i class="fas fa-tasks"></i> Batch Actions Completed' + confidenceBadge + '</div>' +
+      '<div class="batch-actions-list">' + actionsList + '</div>';
     
     this.dom.responseArea.appendChild(msg);
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;

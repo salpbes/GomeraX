@@ -285,11 +285,24 @@ export class AIAssistantUIManager {
         }
       } : undefined);
       
-      // Check if this was an action (response already handled)
-      isAction = !!response.actionExecuted;
+      // Check if this was an action or batch (response already handled)
+      isAction = !!response.actionExecuted || !!response.batchActions;
       
-      // If an action was executed, clean up any streaming and show action message
-      if (isAction) {
+      // If batch actions were executed, clean up and show batch message
+      if (response.batchActions && response.batchActions.length > 0) {
+        // Remove any partial streaming message
+        if (streamingId) {
+          this.chat.removeStreamingMessage(streamingId);
+          streamingId = null;
+        }
+        // Remove thinking indicator
+        this.chat.removeThinkingIndicator(thinkingId);
+        
+        // Show batch actions message with confidence
+        this.chat.addBatchActionsMessage(response.batchActions, response.confidence);
+      }
+      // If single action was executed, clean up any streaming and show action message
+      else if (response.actionExecuted) {
         // Remove any partial streaming message that might have shown [ACTION...
         if (streamingId) {
           this.chat.removeStreamingMessage(streamingId);
@@ -298,8 +311,8 @@ export class AIAssistantUIManager {
         // Remove thinking indicator if still showing
         this.chat.removeThinkingIndicator(thinkingId);
         
-        // Show professional action message
-        this.chat.addActionMessage(response.actionExecuted!, response.text);
+        // Show professional action message with confidence
+        this.chat.addActionMessage(response.actionExecuted, response.text, response.confidence);
       } else if (streamingId) {
         // If we used streaming, finalize it
         this.chat.finalizeStreamingMessage(streamingId);

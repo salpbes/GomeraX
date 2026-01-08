@@ -114,7 +114,14 @@ export class AIAssistantModule {
   public async processCommand(
     command: string, 
     onStreamToken?: (token: string) => void
-  ): Promise<{ text: string, isAI: boolean, contextInfo?: string[], actionExecuted?: string }> {
+  ): Promise<{ 
+    text: string, 
+    isAI: boolean, 
+    contextInfo?: string[], 
+    actionExecuted?: string,
+    batchActions?: Array<{ name: string; result: string }>,
+    confidence?: number
+  }> {
     const startTime = Date.now();
     
     // Resolve contextual references (e.g., "hide them", "zoom to it")
@@ -125,7 +132,7 @@ export class AIAssistantModule {
     // PRIORITY 1: WebLLM with Function Calling - AI decides which action to execute
     if (this.useWebLLM && this.webLLM.isLoaded()) {
       try {
-        const bimContext = this.getBIMContext();
+        const bimContext = await this.getBIMContext();
         
         // Use streaming for immediate feedback
         let streamedContent = '';
@@ -166,8 +173,48 @@ export class AIAssistantModule {
           true
         );
         
-        // Check if AI returned a function call
-        if (typeof response === 'object' && 'name' in response) {
+        // Check if AI returned batch actions with confidence
+        if (typeof response === 'object' && 'actions' in response && 'confidence' in response) {
+          const batchResponse = response as { actions: BIMFunctionCall[]; confidence: number };
+          console.log(`🤖 AI decided to execute ${batchResponse.actions.length} action(s) with ${batchResponse.confidence}% confidence`);
+          
+          const batchResults: Array<{ name: string; result: string }> = [];
+          
+          // Execute each action in sequence
+          for (let i = 0; i < batchResponse.actions.length; i++) {
+            const action = batchResponse.actions[i];
+            console.log(`  [${i + 1}/${batchResponse.actions.length}] Executing: ${action.name}`);
+            
+            const result = await this.executeBIMFunction(action);
+            batchResults.push({
+              name: action.name,
+              result: result.message
+            });
+          }
+          
+          // Generate summary response
+          const summaryText = batchResults.length === 1 
+            ? batchResults[0].result
+            : `Completed ${batchResults.length} actions:\n` + 
+              batchResults.map((r, i) => `${i + 1}. ${r.result}`).join('\n');
+          
+          this.context.addEntry(command, summaryText, { 
+            isAI: true, 
+            executionTime: Date.now() - startTime,
+            action: batchResults.map(r => r.name).join(', ')
+          });
+          
+          return { 
+            text: summaryText, 
+            isAI: true,
+            contextInfo: resolved.usedContext ? resolved.contextInfo : undefined,
+            actionExecuted: batchResults.length === 1 ? batchResults[0].name : undefined,
+            batchActions: batchResults.length > 1 ? batchResults : undefined,
+            confidence: batchResponse.confidence
+          };
+        }
+        // Check if AI returned a single function call (backwards compatibility)
+        else if (typeof response === 'object' && 'name' in response) {
           // AI decided to call a function - execute it
           const functionCall = response as BIMFunctionCall;
           console.log(`🤖 AI decided to call: ${functionCall.name}`, functionCall.arguments);
@@ -378,6 +425,48 @@ export class AIAssistantModule {
             count: totalCount
           };
         }
+
+        case 'selectElementsByStorey': {
+          const storeyName = args.storeyName as string;
+          if (!storeyName) {
+            return { message: "Please specify which storey/level to select elements from." };
+          }
+          
+          const count = await this.actions.selectElementsByStorey(storeyName);
+          
+          if (count === 0) {
+            return { message: `I couldn't find any elements on storey "${storeyName}".`, count: 0 };
+          }
+          
+          this.context.setLastSelection([`Storey: ${storeyName}`], count, new Map());
+          return { 
+            message: `I've selected ${count} element${count !== 1 ? 's' : ''} from storey "${storeyName}".`,
+            count
+          };
+        }
+
+        case 'selectElementsByStoreyAndType': {
+          const storeyName = args.storeyName as string;
+          const types = args.elementTypes as string[];
+          
+          if (!storeyName || !types || types.length === 0) {
+            return { message: "Please specify both storey name and element types." };
+          }
+          
+          const count = await this.actions.selectElementsByStoreyAndType(storeyName, types);
+          
+          if (count === 0) {
+            const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+            return { message: `I couldn't find any ${typesStr} on storey "${storeyName}".`, count: 0 };
+          }
+          
+          const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+          this.context.setLastSelection([`Storey: ${storeyName}`, ...types], count, new Map());
+          return { 
+            message: `I've selected ${count} ${typesStr} element${count !== 1 ? 's' : ''} from storey "${storeyName}".`,
+            count
+          };
+        }
         
         case 'hideElements': {
           const types = args.elementTypes as string[];
@@ -520,14 +609,50 @@ export class AIAssistantModule {
         // ============================================================================
         // NEW FUNCTIONS: Visibility
         // ============================================================================
-        case 'showAll': {
-          await this.actions.showAll();
+        case 'showAll':
+        case 'showAllElements': {
+          await this.actions.showAllElements();
           return { message: "I've shown all elements in the model." };
         }
 
         case 'hideAll': {
           await this.actions.hideAll();
           return { message: "I've hidden all elements. Use 'show all' to see them again." };
+        }
+
+        case 'hideElementTypes': {
+          const types = args.elementTypes as string[];
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to hide." };
+          }
+          const count = await this.actions.hideElementTypes(types);
+          const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+          return { message: `Hidden ${count} ${typesStr} element${count !== 1 ? 's' : ''}.`, count };
+        }
+
+        case 'showOnlyElementTypes': {
+          const types = args.elementTypes as string[];
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to show." };
+          }
+          const count = await this.actions.showOnlyElementTypes(types);
+          const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+          return { message: `Showing only ${count} ${typesStr} element${count !== 1 ? 's' : ''}. All others are hidden.`, count };
+        }
+
+        case 'setElementTransparency': {
+          const types = args.elementTypes as string[];
+          const opacity = args.opacity as number;
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to make transparent." };
+          }
+          if (opacity === undefined || opacity < 0 || opacity > 1) {
+            return { message: "Please specify opacity between 0 (invisible) and 1 (opaque)." };
+          }
+          const count = await this.actions.setElementTransparency(types, opacity);
+          const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+          const percent = Math.round(opacity * 100);
+          return { message: `Set transparency to ${percent}% for ${count} ${typesStr} element${count !== 1 ? 's' : ''}.`, count };
         }
 
         // ============================================================================
@@ -685,14 +810,23 @@ export class AIAssistantModule {
   /**
    * Get BIM context for AI prompts
    */
-  private getBIMContext() {
+  private async getBIMContext() {
     const lastSelection = this.context.getLastSelection();
     const lastAction = this.context.getLastAction();
+    
+    // Get storey information with elevations
+    let storeys: Array<{ name: string; elevation: number }> | undefined;
+    try {
+      storeys = await this.actions.getStoreys();
+    } catch (e) {
+      console.warn('Could not fetch storey data for BIM context:', e);
+    }
     
     return {
       selectedCount: lastSelection?.count || 0,
       elementTypes: lastSelection?.elementTypes || [],
       lastAction: lastAction?.action || undefined,
+      storeys,
     };
   }
 

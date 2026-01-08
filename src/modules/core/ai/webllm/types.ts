@@ -16,6 +16,7 @@ export interface BIMContext {
   elementTypes?: string[];
   selectedCount?: number;
   lastAction?: string;
+  storeys?: Array<{ name: string; elevation: number }>;
 }
 
 /**

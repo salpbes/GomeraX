@@ -190,19 +190,27 @@ export class WebLLMEngine {
       // Log for debugging
       console.log("[WebLLM] Response:", textContent.substring(0, 200));
 
-      // Parse function calls from response
+      // Parse function calls from response (supports batch commands)
       if (enableFunctionCalling) {
-        const parsedAction = this.parseActionFromResponse(textContent);
-        if (parsedAction) {
-          console.log(`[WebLLM] Parsed action: ${parsedAction.name}`, JSON.stringify(parsedAction.arguments));
-
-          // Store the proper format in history to maintain consistency
+        const parsed = this.parseActionsFromResponse(textContent);
+        if (parsed && parsed.actions.length > 0) {
+          console.log(`[WebLLM] Parsed ${parsed.actions.length} action(s) with ${parsed.confidence}% confidence`);
+          
+          // Store the proper format in history
+          const actionStrings = parsed.actions.map(a => 
+            `[ACTION: ${a.name}(${JSON.stringify(a.arguments)})]`
+          ).join('\n');
+          
           this.addToHistory(userMsg, {
             role: "assistant",
-            content: `[ACTION: ${parsedAction.name}(${JSON.stringify(parsedAction.arguments)})]`,
+            content: `${actionStrings}\n[CONFIDENCE: ${parsed.confidence}]`,
           });
 
-          return parsedAction;
+          // Return batch result with confidence
+          return {
+            actions: parsed.actions,
+            confidence: parsed.confidence
+          };
         }
       }
 
@@ -284,19 +292,27 @@ export class WebLLMEngine {
       // Debug: log the cleaned response to see what we're trying to parse
       console.log(`[WebLLM Stream] Full response: "${cleanedResponse}"`);
       
-      // Parse function calls from response
+      // Parse function calls from response (supports batch commands)
       if (enableFunctionCalling) {
-        const parsedAction = this.parseActionFromResponse(cleanedResponse);
-        if (parsedAction) {
-          console.log(`[WebLLM Stream] Parsed action: ${parsedAction.name}`, JSON.stringify(parsedAction.arguments));
+        const parsed = this.parseActionsFromResponse(cleanedResponse);
+        if (parsed && parsed.actions.length > 0) {
+          console.log(`[WebLLM Stream] Parsed ${parsed.actions.length} action(s) with ${parsed.confidence}% confidence`);
 
-          // Store the proper format in history to maintain consistency
+          // Store the proper format in history
+          const actionStrings = parsed.actions.map(a => 
+            `[ACTION: ${a.name}(${JSON.stringify(a.arguments)})]`
+          ).join('\n');
+          
           this.addToHistory(userMsg, {
             role: "assistant",
-            content: `[ACTION: ${parsedAction.name}(${JSON.stringify(parsedAction.arguments)})]`,
+            content: `${actionStrings}\n[CONFIDENCE: ${parsed.confidence}]`,
           });
 
-          return parsedAction;
+          // Return batch result with confidence
+          return {
+            actions: parsed.actions,
+            confidence: parsed.confidence
+          };
         }
       }
       
@@ -459,6 +475,49 @@ export class WebLLMEngine {
   }
 
   /**
+   * Parse multiple actions and confidence from response text
+   * Returns array of actions with confidence score
+   */
+  private parseActionsFromResponse(text: string): { 
+    actions: Array<{ name: string; arguments: any }>;
+    confidence: number;
+  } | null {
+    const actions: Array<{ name: string; arguments: any }> = [];
+    
+    // Extract confidence score if present
+    const confidenceMatch = text.match(/\[CONFIDENCE:\s*(\d+)\]/i);
+    const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 75; // Default 75%
+    
+    // Find all [ACTION: ...] patterns (supports multi-line batch commands)
+    const actionPattern = /\[ACTION:\s*(\w+)\s*\(([^)]*)\)\s*\]/gi;
+    let match;
+    
+    while ((match = actionPattern.exec(text)) !== null) {
+      const functionName = match[1];
+      const argsStr = match[2].trim();
+      const args = argsStr ? this.parseActionArguments(functionName, argsStr) : {};
+      
+      actions.push({ name: functionName, arguments: args });
+    }
+    
+    // If we found actions, return them with confidence
+    if (actions.length > 0) {
+      return { actions, confidence };
+    }
+    
+    // Fallback: try single action parsing (backwards compatibility)
+    const singleAction = this.parseActionFromResponse(text);
+    if (singleAction) {
+      return { 
+        actions: [singleAction],
+        confidence
+      };
+    }
+    
+    return null;
+  }
+
+  /**
    * Parse action from response text - handles multiple formats
    * Returns null if no action found
    */
@@ -519,6 +578,23 @@ export class WebLLMEngine {
    * Handles all function types with appropriate parameter mapping
    */
   private parseActionArguments(functionName: string, argsStr: string): any {
+    // Special handling for functions with multiple arguments
+    if (functionName === 'selectElementsByStoreyAndType') {
+      // Parse: "Storey Name", ["IFCCOLUMN", "IFCBEAM"]
+      const parts = this.splitArguments(argsStr);
+      if (parts.length === 2) {
+        const storeyName = parts[0].replace(/['"`]/g, '').trim();
+        try {
+          const elementTypes = JSON.parse(parts[1]);
+          return { storeyName, elementTypes };
+        } catch {
+          // Fallback: manual array parsing
+          const types = parts[1].match(/IFC\w+/gi) || [];
+          return { storeyName, elementTypes: types };
+        }
+      }
+    }
+    
     const cleanArg = argsStr.replace(/['"`]/g, '').trim();
     
     // Try JSON parse first for arrays
@@ -554,6 +630,52 @@ export class WebLLMEngine {
     }
 
     return {};
+  }
+
+  /**
+   * Split function arguments by comma, respecting nested brackets
+   */
+  private splitArguments(argsStr: string): string[] {
+    const args: string[] = [];
+    let current = '';
+    let depth = 0;
+    let inString = false;
+    let stringChar = '';
+
+    for (let i = 0; i < argsStr.length; i++) {
+      const char = argsStr[i];
+      
+      // Track string boundaries
+      if ((char === '"' || char === "'" || char === '`') && (i === 0 || argsStr[i - 1] !== '\\')) {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+      }
+      
+      // Track bracket depth (only when not in string)
+      if (!inString) {
+        if (char === '[' || char === '{') depth++;
+        if (char === ']' || char === '}') depth--;
+        
+        // Split on comma only at depth 0 and outside strings
+        if (char === ',' && depth === 0) {
+          args.push(current.trim());
+          current = '';
+          continue;
+        }
+      }
+      
+      current += char;
+    }
+    
+    if (current.trim()) {
+      args.push(current.trim());
+    }
+    
+    return args;
   }
 
   /**
