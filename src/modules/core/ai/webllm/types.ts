@@ -17,6 +17,7 @@ export interface BIMContext {
   selectedCount?: number;
   lastAction?: string;
   storeys?: Array<{ name: string; elevation: number }>;
+  webContent?: string; // Fetched web page content for Q&A
 }
 
 /**

@@ -972,4 +972,655 @@ export class AIBimActions {
       return null;
     }
   }
+
+  // Store full web content for progressive loading
+  private webPageCache: {
+    url: string;
+    title: string;
+    fullContent: string;
+    currentChunk: number;
+    chunkSize: number;
+  } | null = null;
+
+  /**
+   * Fetch content from a web page with progressive loading
+   * Uses multiple CORS proxies with fallback
+   */
+  public async fetchWebPage(url: string, loadMore: boolean = false): Promise<{ 
+    success: boolean; 
+    content: string; 
+    title: string; 
+    url: string;
+    hasMore: boolean;
+    totalChars: number;
+    loadedChars: number;
+  }> {
+    const CHUNK_SIZE = 1000;
+    
+    // If loadMore and we have cached content, return next chunk
+    if (loadMore && this.webPageCache) {
+      const { fullContent, currentChunk, chunkSize, title, url: cachedUrl } = this.webPageCache;
+      const start = currentChunk * chunkSize;
+      const end = Math.min(start + chunkSize, fullContent.length);
+      const chunk = fullContent.substring(start, end);
+      
+      this.webPageCache.currentChunk++;
+      const hasMore = end < fullContent.length;
+      
+      console.log(`📄 Loading more: chunk ${currentChunk + 1} (${start}-${end} of ${fullContent.length})`);
+      
+      return {
+        success: true,
+        content: chunk,
+        title,
+        url: cachedUrl,
+        hasMore,
+        totalChars: fullContent.length,
+        loadedChars: end
+      };
+    }
+    
+    console.log(`🌐 Fetching web page: ${url}`);
+    
+    try {
+      // Validate URL
+      let normalizedUrl = url.trim();
+      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+        normalizedUrl = 'https://' + normalizedUrl;
+      }
+      
+      // List of CORS proxies to try (in order)
+      const corsProxies = [
+        (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        (url: string) => `https://proxy.cors.sh/${url}`,
+      ];
+      
+      let htmlContent: string | null = null;
+      let lastError: Error | null = null;
+      
+      // Try each proxy until one works
+      for (const proxyFn of corsProxies) {
+        try {
+          const proxyUrl = proxyFn(normalizedUrl);
+          console.log(`  Trying proxy: ${proxyUrl.substring(0, 50)}...`);
+          
+          const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+          });
+          
+          if (response.ok) {
+            htmlContent = await response.text();
+            console.log(`  ✅ Proxy succeeded`);
+            break;
+          }
+        } catch (e) {
+          lastError = e as Error;
+          console.log(`  ❌ Proxy failed: ${(e as Error).message}`);
+        }
+      }
+      
+      if (!htmlContent) {
+        throw lastError || new Error('All proxies failed');
+      }
+      
+      // Parse HTML and extract text
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+      
+      // Get title
+      const title = doc.querySelector('title')?.textContent?.trim() || 'Untitled';
+      
+      // Remove script, style, nav, footer, header elements
+      const removeSelectors = ['script', 'style', 'nav', 'footer', 'header', 'aside', 'noscript', 'iframe'];
+      removeSelectors.forEach(selector => {
+        doc.querySelectorAll(selector).forEach(el => el.remove());
+      });
+      
+      // Get main content (try article, main, or body)
+      let mainContent = doc.querySelector('article') || doc.querySelector('main') || doc.body;
+      
+      // Extract text content
+      let fullContent = mainContent?.textContent || '';
+      
+      // Clean up whitespace
+      fullContent = fullContent
+        .replace(/\s+/g, ' ')  // Multiple spaces to single
+        .replace(/\n\s*\n/g, '\n')  // Multiple newlines to single
+        .trim();
+      
+      // Cache full content for progressive loading
+      this.webPageCache = {
+        url: normalizedUrl,
+        title,
+        fullContent,
+        currentChunk: 1, // We're returning chunk 0 now
+        chunkSize: CHUNK_SIZE
+      };
+      
+      // Return first chunk only
+      const firstChunk = fullContent.substring(0, CHUNK_SIZE);
+      const hasMore = fullContent.length > CHUNK_SIZE;
+      
+      console.log(`✅ Fetched "${title}" (${fullContent.length} chars, showing first ${CHUNK_SIZE})`);
+      
+      return {
+        success: true,
+        content: firstChunk,
+        title,
+        url: normalizedUrl,
+        hasMore,
+        totalChars: fullContent.length,
+        loadedChars: Math.min(CHUNK_SIZE, fullContent.length)
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch web page:', error);
+      return {
+        success: false,
+        content: `Failed to fetch the page: ${error instanceof Error ? error.message : 'Unknown error'}. The website may be blocking requests.`,
+        title: 'Error',
+        url,
+        hasMore: false,
+        totalChars: 0,
+        loadedChars: 0
+      };
+    }
+  }
+  
+  /**
+   * Get more content from the cached web page
+   * @param chunkCount Number of 1k chunks to load (default 1)
+   */
+  public getMoreWebContent(chunkCount: number = 1): { content: string; hasMore: boolean; loadedTotal: number } | null {
+    if (!this.webPageCache) return null;
+    
+    const { fullContent, currentChunk, chunkSize } = this.webPageCache;
+    const start = currentChunk * chunkSize;
+    
+    if (start >= fullContent.length) {
+      return { content: '', hasMore: false, loadedTotal: fullContent.length };
+    }
+    
+    // Load multiple chunks based on count
+    const bytesToLoad = chunkCount * chunkSize;
+    const end = Math.min(start + bytesToLoad, fullContent.length);
+    const chunk = fullContent.substring(start, end);
+    
+    // Update chunk counter
+    this.webPageCache.currentChunk += chunkCount;
+    
+    return {
+      content: chunk,
+      hasMore: end < fullContent.length,
+      loadedTotal: end
+    };
+  }
+  
+  /**
+   * Get all loaded web content so far (for AI context)
+   */
+  public getLoadedWebContent(): string | null {
+    if (!this.webPageCache) return null;
+    
+    const { fullContent, currentChunk, chunkSize } = this.webPageCache;
+    const loadedEnd = currentChunk * chunkSize;
+    return fullContent.substring(0, Math.min(loadedEnd, fullContent.length));
+  }
+
+  /**
+   * Search a web page for specific terms and return only relevant snippets
+   * More efficient than loading the entire page when looking for specific info
+   */
+  public async searchWebPage(url: string, searchTerms: string): Promise<{
+    success: boolean;
+    snippets: string[];
+    title: string;
+    url: string;
+    matchCount: number;
+  }> {
+    console.log(`🔍 Searching "${searchTerms}" on ${url}`);
+    
+    try {
+      // First fetch the full page
+      const fetchResult = await this.fetchWebPage(url);
+      
+      if (!fetchResult.success) {
+        return {
+          success: false,
+          snippets: [fetchResult.content],
+          title: fetchResult.title,
+          url: fetchResult.url,
+          matchCount: 0
+        };
+      }
+      
+      // Get full content from cache
+      const fullContent = this.webPageCache?.fullContent || fetchResult.content;
+      
+      // Split search terms into individual words for flexible matching
+      const terms = searchTerms.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+      
+      // Find sentences/paragraphs containing the search terms
+      // Split content into sentences
+      const sentences = fullContent.split(/(?<=[.!?])\s+/);
+      
+      const relevantSnippets: { text: string; score: number }[] = [];
+      const CONTEXT_CHARS = 150; // Characters before/after match
+      
+      for (let i = 0; i < sentences.length; i++) {
+        const sentence = sentences[i];
+        const lowerSentence = sentence.toLowerCase();
+        
+        // Count how many search terms appear in this sentence
+        let matchScore = 0;
+        for (const term of terms) {
+          if (lowerSentence.includes(term)) {
+            matchScore++;
+          }
+        }
+        
+        if (matchScore > 0) {
+          // Include surrounding sentences for context
+          const startIdx = Math.max(0, i - 1);
+          const endIdx = Math.min(sentences.length - 1, i + 1);
+          const contextSnippet = sentences.slice(startIdx, endIdx + 1).join(' ').trim();
+          
+          // Only add if not too similar to existing snippets
+          const isDuplicate = relevantSnippets.some(s => 
+            s.text.includes(sentence.substring(0, 50)) || 
+            sentence.includes(s.text.substring(0, 50))
+          );
+          
+          if (!isDuplicate && contextSnippet.length > 20) {
+            relevantSnippets.push({ text: contextSnippet, score: matchScore });
+          }
+        }
+      }
+      
+      // Sort by relevance score and take top results
+      relevantSnippets.sort((a, b) => b.score - a.score);
+      const topSnippets = relevantSnippets.slice(0, 5).map(s => s.text);
+      
+      // If no matches found, try a broader search with character positions
+      if (topSnippets.length === 0) {
+        const lowerContent = fullContent.toLowerCase();
+        for (const term of terms) {
+          let pos = lowerContent.indexOf(term);
+          while (pos !== -1 && topSnippets.length < 5) {
+            const start = Math.max(0, pos - CONTEXT_CHARS);
+            const end = Math.min(fullContent.length, pos + term.length + CONTEXT_CHARS);
+            const snippet = (start > 0 ? '...' : '') + 
+                           fullContent.substring(start, end).trim() + 
+                           (end < fullContent.length ? '...' : '');
+            
+            // Check for duplicates
+            if (!topSnippets.some(s => s.includes(snippet.substring(10, 50)))) {
+              topSnippets.push(snippet);
+            }
+            
+            pos = lowerContent.indexOf(term, pos + 1);
+          }
+        }
+      }
+      
+      console.log(`✅ Found ${topSnippets.length} relevant snippets for "${searchTerms}"`);
+      
+      return {
+        success: true,
+        snippets: topSnippets.length > 0 ? topSnippets : ['No relevant content found for the search terms.'],
+        title: fetchResult.title,
+        url: fetchResult.url,
+        matchCount: topSnippets.length
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to search web page:', error);
+      return {
+        success: false,
+        snippets: [`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        title: 'Error',
+        url,
+        matchCount: 0
+      };
+    }
+  }
+
+  // Cache for page sections (headers + content)
+  private pageSectionsCache: {
+    url: string;
+    title: string;
+    sections: Array<{ level: number; heading: string; content: string }>;
+  } | null = null;
+
+  /**
+   * Get all section headers (H1-H6) from a webpage
+   * Returns a list of headers for AI to choose from
+   */
+  public async getPageSections(url: string): Promise<{
+    success: boolean;
+    title: string;
+    url: string;
+    headers: Array<{ level: number; heading: string; index: number }>;
+  }> {
+    console.log(`📑 Getting page sections: ${url}`);
+    
+    try {
+      // Validate URL
+      let normalizedUrl = url.trim();
+      if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+        normalizedUrl = 'https://' + normalizedUrl;
+      }
+      
+      // List of CORS proxies to try
+      const corsProxies = [
+        (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        (url: string) => `https://proxy.cors.sh/${url}`,
+      ];
+      
+      let htmlContent: string | null = null;
+      
+      for (const proxyFn of corsProxies) {
+        try {
+          const proxyUrl = proxyFn(normalizedUrl);
+          const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+          });
+          
+          if (response.ok) {
+            htmlContent = await response.text();
+            break;
+          }
+        } catch (e) {
+          console.log(`  ❌ Proxy failed: ${(e as Error).message}`);
+        }
+      }
+      
+      if (!htmlContent) {
+        throw new Error('All proxies failed');
+      }
+      
+      // Parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlContent, 'text/html');
+      const title = doc.querySelector('title')?.textContent?.trim() || 'Untitled';
+      
+      // Remove non-content elements (including Wikipedia edit links)
+      ['script', 'style', 'nav', 'footer', 'aside', 'noscript', 'iframe', '.mw-editsection', '.edit-page', '.navbox', '.infobox', '.toc', '.references', '.reflist', '.sidebar', '.metadata'].forEach(sel => {
+        doc.querySelectorAll(sel).forEach(el => el.remove());
+      });
+      
+      // Get main content area (Wikipedia uses #mw-content-text or #bodyContent)
+      const mainContent = doc.querySelector('#mw-content-text .mw-parser-output') ||
+                          doc.querySelector('#mw-content-text') || 
+                          doc.querySelector('article') || 
+                          doc.querySelector('main') || 
+                          doc.querySelector('#bodyContent') ||
+                          doc.body;
+      
+      // Extract all headers with their content
+      const sections: Array<{ level: number; heading: string; content: string }> = [];
+      const headers: Array<{ level: number; heading: string; index: number }> = [];
+      
+      // Get all direct children to process in order
+      const children = Array.from(mainContent?.children || []);
+      
+      let currentHeading = '';
+      let currentLevel = 0;
+      let currentContent = '';
+      const MAX_CHARS = 2000;
+      
+      for (const child of children) {
+        const tagName = child.tagName.toLowerCase();
+        
+        // Check if this is a heading (direct or wrapped in mw-heading)
+        let headingEl: Element | null = null;
+        if (tagName.match(/^h[1-6]$/)) {
+          headingEl = child;
+        } else if (child.classList.contains('mw-heading')) {
+          headingEl = child.querySelector('h1, h2, h3, h4, h5, h6');
+        }
+        
+        if (headingEl) {
+          // Save previous section if exists
+          if (currentHeading && currentContent.length > 0) {
+            const cleanContent = currentContent
+              .replace(/\[\d+\]/g, '')
+              .replace(/\[edit\]/gi, '')
+              .replace(/\[citation needed\]/gi, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            
+            if (cleanContent.length > 20) {
+              sections.push({
+                level: currentLevel,
+                heading: currentHeading,
+                content: cleanContent
+              });
+              headers.push({
+                level: currentLevel,
+                heading: currentHeading,
+                index: sections.length - 1
+              });
+            }
+          }
+          
+          // Start new section
+          currentLevel = parseInt(headingEl.tagName.charAt(1));
+          currentHeading = headingEl.textContent?.trim() || '';
+          currentHeading = currentHeading.replace(/\[edit\]/gi, '').replace(/\[.*?\]/g, '').trim();
+          currentContent = '';
+        } else if (currentHeading) {
+          // Accumulate content for current section
+          if (!child.classList.contains('navbox') && 
+              !child.classList.contains('infobox') &&
+              !child.classList.contains('references') &&
+              !child.classList.contains('reflist') &&
+              currentContent.length < MAX_CHARS) {
+            const text = child.textContent?.trim() || '';
+            if (text.length > 10) {
+              currentContent += text + ' ';
+            }
+          }
+        }
+      }
+      
+      // Don't forget the last section
+      if (currentHeading && currentContent.length > 0) {
+        const cleanContent = currentContent
+          .replace(/\[\d+\]/g, '')
+          .replace(/\[edit\]/gi, '')
+          .replace(/\[citation needed\]/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (cleanContent.length > 20) {
+          sections.push({
+            level: currentLevel,
+            heading: currentHeading,
+            content: cleanContent
+          });
+          headers.push({
+            level: currentLevel,
+            heading: currentHeading,
+            index: sections.length - 1
+          });
+        }
+      }
+      
+      console.log(`📑 Extracted ${sections.length} sections with content`);
+      
+      // Cache the sections for later retrieval
+      this.pageSectionsCache = {
+        url: normalizedUrl,
+        title,
+        sections
+      };
+      
+      console.log(`✅ Found ${headers.length} sections in "${title}"`);
+      
+      return {
+        success: true,
+        title,
+        url: normalizedUrl,
+        headers
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to get page sections:', error);
+      return {
+        success: false,
+        title: 'Error',
+        url,
+        headers: []
+      };
+    }
+  }
+
+  /**
+   * Get content from specific sections by their indices
+   * Called after AI decides which sections are relevant
+   */
+  public getSectionContent(sectionIndices: number[]): {
+    success: boolean;
+    sections: Array<{ heading: string; content: string }>;
+  } {
+    if (!this.pageSectionsCache) {
+      return { success: false, sections: [] };
+    }
+    
+    const result: Array<{ heading: string; content: string }> = [];
+    
+    for (const idx of sectionIndices) {
+      if (idx >= 0 && idx < this.pageSectionsCache.sections.length) {
+        const section = this.pageSectionsCache.sections[idx];
+        result.push({
+          heading: section.heading,
+          content: section.content
+        });
+      }
+    }
+    
+    console.log(`📄 Retrieved ${result.length} section(s)`);
+    
+    return {
+      success: true,
+      sections: result
+    };
+  }
+
+  /**
+   * Smart search: Automatically finds and fetches relevant sections from a webpage
+   * Single function that combines getPageSections + getSectionContent + smart matching
+   */
+  public async smartSearch(url: string, topic: string): Promise<{
+    success: boolean;
+    title: string;
+    url: string;
+    matchedSections: Array<{ heading: string; content: string; relevance: number }>;
+    allHeaders: string[];
+  }> {
+    console.log(`🧠 Smart searching "${topic}" on ${url}`);
+    
+    try {
+      // First get all sections
+      const sectionsResult = await this.getPageSections(url);
+      
+      if (!sectionsResult.success || !this.pageSectionsCache) {
+        return {
+          success: false,
+          title: 'Error',
+          url,
+          matchedSections: [],
+          allHeaders: []
+        };
+      }
+      
+      const { sections } = this.pageSectionsCache;
+      const allHeaders = sections.map(s => s.heading);
+      
+      // Split topic into search terms
+      const searchTerms = topic.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+      
+      // Score each section by relevance
+      const scoredSections: Array<{ 
+        heading: string; 
+        content: string; 
+        relevance: number;
+        index: number;
+      }> = [];
+      
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+        const headingLower = section.heading.toLowerCase();
+        const contentLower = section.content.toLowerCase();
+        
+        let relevance = 0;
+        
+        for (const term of searchTerms) {
+          // Heading match is worth more
+          if (headingLower.includes(term)) {
+            relevance += 10;
+          }
+          // Content match
+          if (contentLower.includes(term)) {
+            relevance += 3;
+            // Bonus for multiple occurrences
+            const occurrences = (contentLower.match(new RegExp(term, 'g')) || []).length;
+            relevance += Math.min(occurrences - 1, 5);
+          }
+        }
+        
+        // Also check for exact phrase match
+        if (headingLower.includes(topic.toLowerCase())) {
+          relevance += 20;
+        }
+        if (contentLower.includes(topic.toLowerCase())) {
+          relevance += 10;
+        }
+        
+        if (relevance > 0) {
+          scoredSections.push({
+            heading: section.heading,
+            content: section.content,
+            relevance,
+            index: i
+          });
+        }
+      }
+      
+      // Sort by relevance and take top 3
+      scoredSections.sort((a, b) => b.relevance - a.relevance);
+      const topSections = scoredSections.slice(0, 3);
+      
+      console.log(`✅ Found ${topSections.length} relevant section(s) for "${topic}"`);
+      
+      return {
+        success: true,
+        title: sectionsResult.title,
+        url: sectionsResult.url,
+        matchedSections: topSections.map(s => ({
+          heading: s.heading,
+          content: s.content,
+          relevance: s.relevance
+        })),
+        allHeaders
+      };
+      
+    } catch (error) {
+      console.error('❌ Smart search failed:', error);
+      return {
+        success: false,
+        title: 'Error',
+        url,
+        matchedSections: [],
+        allHeaders: []
+      };
+    }
+  }
 }

@@ -373,6 +373,102 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
       properties: {},
     },
   },
+  
+  // ============================================================================
+  // WEB CONTENT
+  // ============================================================================
+  {
+    name: "fetchWebPage",
+    description: "Fetch content from a web page URL. Loads first 1000 characters. Use when user provides a URL or asks to read/fetch a website.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the web page to fetch",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "loadMoreWebContent",
+    description: "Load more content from the previously fetched web page. Use when user asks to 'load more', 'fetch more', 'continue reading', or when you need more context to answer a question about the web page. Specify count for how many 1k chunks to load.",
+    parameters: {
+      type: "object",
+      properties: {
+        count: {
+          type: "number",
+          description: "Number of 1k character chunks to load (1-10). Use higher values when searching for specific content or user wants more data. Default is 1.",
+        },
+      },
+    },
+  },
+  {
+    name: "searchWebPage",
+    description: "Search a web page for specific terms and return only the relevant snippets. More efficient than loading entire pages when looking for specific information. Use when user asks to 'find X on page', 'search for Y', 'what does page say about Z', or asks a specific question about content on a URL.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the web page to search",
+        },
+        searchTerms: {
+          type: "string",
+          description: "The keywords or phrase to search for in the page content",
+        },
+      },
+      required: ["url", "searchTerms"],
+    },
+  },
+  {
+    name: "getPageSections",
+    description: "Get all section headers (H1-H6) from a webpage. Returns a list of section titles for browsing. Use this first when user wants to explore a page's structure or find specific topics. After getting headers, use getSectionContent to fetch specific sections.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the web page to get sections from",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "getSectionContent",
+    description: "Get the full content of specific sections from a previously fetched page. Use after getPageSections to retrieve content from relevant sections. Pass the section indices (numbers) returned by getPageSections.",
+    parameters: {
+      type: "object",
+      properties: {
+        sectionIndices: {
+          type: "array",
+          items: { type: "number" },
+          description: "Array of section index numbers to fetch content from (from getPageSections)",
+        },
+      },
+      required: ["sectionIndices"],
+    },
+  },
+  {
+    name: "smartSearch",
+    description: "Smart search: Automatically finds and fetches the most relevant sections from a webpage based on a topic. Use this when user asks about a specific topic on a webpage. This is the PREFERRED function for web research - it finds matching section headers and returns their content for you to summarize.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "The URL of the web page to search",
+        },
+        topic: {
+          type: "string",
+          description: "The topic or keywords to search for (e.g., 'company history', 'features', 'pricing')",
+        },
+      },
+      required: ["url", "topic"],
+    },
+  },
 ];
 
 /**

@@ -7,7 +7,7 @@ import type { BIMContext } from "./types";
 const FUNCTION_CALLING_PROMPT = `You are AiDA, a BIM assistant.
 
 FOR ACTIONS: Respond with [ACTION: func(args)] and [CONFIDENCE: N]
-FOR CHAT: Respond naturally without [ACTION] or [CONFIDENCE] tags
+FOR CHAT: Respond naturally without [ACTION]
 
 FUNCTIONS:
 Selection: selectElements(["TYPE"]), selectElementsByStorey("name"), selectElementsByStoreyAndType("name", ["TYPE"]), clearSelection()
@@ -17,6 +17,7 @@ Clipping: addClippingPlane("x|y|z"), removeAllClippingPlanes(), toggleClipper(bo
 Measurement: enableMeasurement("distance|area|angle"), disableMeasurement(), clearMeasurements()
 Visualization: showClusters(), exitClusterMode(), colorByStorey(), colorByType(), exitColorSplashMode(), toggleMinimapCamera(), showModelDashboard()
 FloorPlan: showFloorPlans(), showFloorPlan("name")
+Web: smartSearch("url", "topic") - BEST for topic research, fetchWebPage("url") - load page, loadMoreWebContent(count) - load more from cached page
 
 IFC TYPES: IFCWALL, IFCDOOR, IFCWINDOW, IFCSLAB, IFCCOLUMN, IFCBEAM, IFCSTAIR, IFCROOF, IFCFURNITURE, IFCPIPE, IFCDUCT
 
@@ -27,17 +28,25 @@ ACTION EXAMPLES:
 "show only walls" → [ACTION: showOnlyElementTypes(["IFCWALL"])] [CONFIDENCE: 95]
 "top view" → [ACTION: setView("top")] [CONFIDENCE: 95]
 "floor section" → [ACTION: addClippingPlane("y")] [CONFIDENCE: 95]
+"search for history on wiki/Revit" → [ACTION: smartSearch("https://en.wikipedia.org/wiki/Revit", "history")] [CONFIDENCE: 95]
+"find pricing info on autodesk.com" → [ACTION: smartSearch("https://autodesk.com", "pricing")] [CONFIDENCE: 95]
+"read https://example.com" → [ACTION: fetchWebPage("https://example.com")] [CONFIDENCE: 95]
+"fetch more" / "load more" / "continue" → [ACTION: loadMoreWebContent(5)] [CONFIDENCE: 95]
 
 CHAT EXAMPLES (NO action tags):
 "Hello" → "Hello! I'm AiDA, your BIM assistant. How can I help you today?"
-"What can you do?" → "I can help you select elements, change views, create sections, and visualize your BIM model."
+"What can you do?" → "I can help you select elements, change views, create sections, visualize your BIM model, and fetch information from web pages."
 "Thanks" → "You're welcome! Let me know if you need anything else."
+"What is BIM?" → "BIM (Building Information Modeling) is a digital representation of physical and functional characteristics of a facility."
+"What is the current version of Revit?" → "The latest version is Revit 2025. It includes features like..."
 
 RULES:
 - Only use [ACTION:] and [CONFIDENCE:] when user requests a BIM action
-- For greetings and questions, respond conversationally
+- For greetings and knowledge questions, respond conversationally from your training
 - Use storey names from context for floor selection
-- Multiple actions on separate lines`;
+- For web topic research: use smartSearch("url", "topic") - it finds relevant sections automatically
+- After smartSearch returns content, summarize the information for the user
+- Only use fetchWebPage() when user explicitly asks to "fetch" or "read" a full page`;
 
 /**
  * Compact conversational prompt
@@ -66,7 +75,14 @@ function buildContextSection(bimContext: BIMContext): string {
     parts.push(`Storeys: ${storeyInfo}`);
   }
 
-  return parts.length > 0 ? `\n[Model: ${parts.join(' | ')}]` : '';
+  let contextStr = parts.length > 0 ? `\n[Model: ${parts.join(' | ')}]` : '';
+  
+  // Add web content if available (for Q&A about fetched pages)
+  if (bimContext.webContent) {
+    contextStr += bimContext.webContent;
+  }
+  
+  return contextStr;
 }
 
 /**

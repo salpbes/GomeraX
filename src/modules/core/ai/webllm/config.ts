@@ -13,12 +13,14 @@ export const MODEL_ID = "Qwen3-8B-q4f16_1-MLC";
  * (each pair = 1 user message + 1 assistant message)
  * Lower = faster prefill, Higher = more context memory
  */
-export const MAX_HISTORY_PAIRS = 5;
+export const MAX_HISTORY_PAIRS = 3;
 
 /**
  * Context window size for the model
+ * Lower = faster prefill, Higher = more context
+ * 8192 is a good balance for responsiveness
  */
-export const CONTEXT_WINDOW_SIZE = 32000;
+export const CONTEXT_WINDOW_SIZE = 8192;
 
 /**
  * Maximum tokens for generation

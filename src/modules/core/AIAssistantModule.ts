@@ -15,6 +15,7 @@ export class AIAssistantModule {
   private conversational: ConversationalEngine;
   private webLLM: WebLLMEngine;
   private useWebLLM: boolean = false;
+  private lastFetchedContent: string = ''; // Stores last fetched web content for follow-up questions
 
   constructor(private viewer: IFCViewer) {
     const components = viewer.worldManager.getComponents();
@@ -783,6 +784,187 @@ export class AIAssistantModule {
           }
           return { message: "Couldn't take screenshot. Please try again." };
         }
+
+        // ============================================================================
+        // Web Fetching
+        // ============================================================================
+        case 'fetchWebPage': {
+          const url = args.url as string || args.value as string;
+          
+          if (!url) {
+            return { message: "Please provide a URL to fetch." };
+          }
+          
+          const result = await this.actions.fetchWebPage(url);
+          
+          if (!result.success) {
+            return { message: `I couldn't fetch that page: ${result.content}` };
+          }
+          
+          // Store content for follow-up questions (only first chunk initially)
+          this.lastFetchedContent = `\n\n[Web: ${result.title}]\n${result.content}`;
+          
+          // Compact UI response
+          const charInfo = result.hasMore 
+            ? `${Math.round(result.loadedChars/1000)}k of ${Math.round(result.totalChars/1000)}k chars` 
+            : `${result.totalChars} chars`;
+          
+          return { 
+            message: `📄 **${result.title}**\n_${charInfo} loaded_ · Ask me anything!`
+          };
+        }
+        
+        case 'loadMoreWebContent': {
+          // AI can specify how many 1k chunks to load (default 1, max 10)
+          const count = Math.min(Math.max(1, Number(args.count) || 1), 10);
+          const moreContent = this.actions.getMoreWebContent(count);
+          
+          if (!moreContent) {
+            return { message: "No web page loaded. Please fetch a page first." };
+          }
+          
+          if (!moreContent.content) {
+            return { message: "All content has been loaded already." };
+          }
+          
+          // Append to cached content
+          this.lastFetchedContent = (this.lastFetchedContent || '') + moreContent.content;
+          
+          const loadedK = Math.round(moreContent.loadedTotal / 1000);
+          const status = moreContent.hasMore ? 'More available' : 'Fully loaded';
+          
+          return { 
+            message: `📄 Loaded ${loadedK}k chars. ${status}.`
+          };
+        }
+        
+        case 'searchWebPage': {
+          const url = args.url as string;
+          const searchTerms = args.searchTerms as string || args.terms as string || args.query as string;
+          
+          if (!url) {
+            return { message: "Please provide a URL to search." };
+          }
+          
+          if (!searchTerms) {
+            return { message: "Please specify what to search for on the page." };
+          }
+          
+          const result = await this.actions.searchWebPage(url, searchTerms);
+          
+          if (!result.success) {
+            return { message: `I couldn't search that page: ${result.snippets[0]}` };
+          }
+          
+          // Store snippets for context
+          const snippetText = result.snippets.join('\n\n---\n\n');
+          this.lastFetchedContent = `\n\n[Search "${searchTerms}" on ${result.title}]\n${snippetText}`;
+          
+          // Format response with relevant snippets
+          const snippetDisplay = result.snippets.length > 0 
+            ? result.snippets.map((s, i) => `**Snippet ${i + 1}:**\n${s.substring(0, 300)}${s.length > 300 ? '...' : ''}`).join('\n\n')
+            : 'No matches found.';
+          
+          return { 
+            message: `🔍 **${result.title}**\n_Found ${result.matchCount} relevant section(s) for "${searchTerms}"_\n\n${snippetDisplay}`
+          };
+        }
+        
+        case 'getPageSections': {
+          const url = args.url as string;
+          
+          if (!url) {
+            return { message: "Please provide a URL to get sections from." };
+          }
+          
+          const result = await this.actions.getPageSections(url);
+          
+          if (!result.success || result.headers.length === 0) {
+            return { message: `I couldn't find sections on that page. Try using fetchWebPage instead.` };
+          }
+          
+          // Format headers as a numbered list for AI to choose from
+          const headerList = result.headers
+            .map((h, i) => `${h.index}. ${'  '.repeat(h.level - 1)}${h.heading}`)
+            .join('\n');
+          
+          // Store headers in context for follow-up
+          this.lastFetchedContent = `\n\n[Page Sections: ${result.title}]\n${headerList}`;
+          
+          return { 
+            message: `📑 **${result.title}**\n_Found ${result.headers.length} sections. Ask me about any section:_\n\n${headerList}`
+          };
+        }
+        
+        case 'getSectionContent': {
+          const indices = args.sectionIndices as number[] || args.indices as number[] || [];
+          
+          if (!indices || indices.length === 0) {
+            return { message: "Please specify which section numbers to retrieve." };
+          }
+          
+          const result = this.actions.getSectionContent(indices);
+          
+          if (!result.success || result.sections.length === 0) {
+            return { message: "No sections found. Please use getPageSections first to browse available sections." };
+          }
+          
+          // Format section content
+          const sectionDisplay = result.sections
+            .map(s => `**${s.heading}**\n${s.content.substring(0, 500)}${s.content.length > 500 ? '...' : ''}`)
+            .join('\n\n---\n\n');
+          
+          // Store for context
+          this.lastFetchedContent = result.sections.map(s => `[${s.heading}]\n${s.content}`).join('\n\n');
+          
+          return { 
+            message: `📄 **Section Content**\n\n${sectionDisplay}`
+          };
+        }
+        
+        case 'smartSearch': {
+          const url = args.url as string;
+          const topic = args.topic as string || args.query as string || args.searchTerms as string;
+          
+          if (!url) {
+            return { message: "Please provide a URL to search." };
+          }
+          
+          if (!topic) {
+            return { message: "Please specify what topic to search for." };
+          }
+          
+          const result = await this.actions.smartSearch(url, topic);
+          
+          if (!result.success || result.matchedSections.length === 0) {
+            // No matching sections found
+            return { 
+              message: `❌ I searched **${result.title}** but couldn't find sections about "${topic}".\n\n📋 Available sections:\n${result.allHeaders.slice(0, 8).map(h => `• ${h}`).join('\n')}${result.allHeaders.length > 8 ? '\n• ...' : ''}`
+            };
+          }
+          
+          // Format the matched sections for display and AI context
+          const sectionsForContext = result.matchedSections
+            .map(s => `## ${s.heading}\n${s.content}`)
+            .join('\n\n');
+          
+          // Create a nice preview with content snippets
+          const sectionPreviews = result.matchedSections.map(s => {
+            const preview = s.content.substring(0, 300).trim();
+            const ellipsis = s.content.length > 300 ? '...' : '';
+            return `### 📌 ${s.heading}\n${preview}${ellipsis}`;
+          }).join('\n\n');
+          
+          // Store FULL content for AI context (for summarization)
+          this.lastFetchedContent = `\n\n[Research: "${topic}" from ${result.title}]\n\n${sectionsForContext}`;
+          
+          // Count total chars for display
+          const totalChars = result.matchedSections.reduce((sum, s) => sum + s.content.length, 0);
+          
+          return { 
+            message: `🔍 **${result.title}**\n\n_Found ${result.matchedSections.length} relevant section(s) about "${topic}" (${Math.round(totalChars/1000)}k chars):_\n\n${sectionPreviews}\n\n---\n💡 **Say "summarize" for a detailed summary of this information.**`
+          };
+        }
         
         default:
           return { message: `Unknown function: ${name}` };
@@ -827,6 +1009,7 @@ export class AIAssistantModule {
       elementTypes: lastSelection?.elementTypes || [],
       lastAction: lastAction?.action || undefined,
       storeys,
+      webContent: this.lastFetchedContent || undefined,
     };
   }
 

@@ -20,6 +20,28 @@ import { getBIMFunctionsAsTools } from "./functions";
 import { buildSystemPrompt } from "./prompts";
 
 /**
+ * Check if Web Workers are supported
+ */
+function isWorkerSupported(): boolean {
+  return typeof Worker !== 'undefined';
+}
+
+/**
+ * Yield to the main thread to prevent UI freezing
+ * Uses requestAnimationFrame for better frame timing
+ */
+function yieldToMain(): Promise<void> {
+  return new Promise(resolve => {
+    // Use requestAnimationFrame for smooth visual updates
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+/**
  * Strip Qwen3 thinking blocks from response
  * The model outputs <think>...</think> tags with reasoning that should not be shown to users
  */
@@ -38,7 +60,7 @@ function stripThinkingBlock(response: string): string {
  *
  * Features:
  * - 100% local processing (no data sent to cloud)
- * - Runs on WebGPU
+ * - Runs on WebGPU in a Web Worker (non-blocking UI)
  * - OpenAI-compatible API
  * - Advanced thinking process (visible in responses)
  * - Function calling for BIM actions
@@ -48,6 +70,7 @@ export class WebLLMEngine {
   private engine: webllm.MLCEngineInterface | null = null;
   private isInitializing = false;
   private isReady = false;
+  private useWorker = false; // Whether running in Web Worker mode
   private conversationHistory: ConversationMessage[] = [];
   
   // Track usage stats from last request
@@ -63,6 +86,7 @@ export class WebLLMEngine {
 
   /**
    * Initialize the WebLLM engine with progress tracking
+   * Uses Web Worker to prevent UI freezing during inference
    */
   async initialize(
     progressCallback?: (progress: InitProgress) => void
@@ -82,28 +106,53 @@ export class WebLLMEngine {
     try {
       console.log(`Initializing WebLLM with ${MODEL_ID}...`);
 
-      this.engine = await webllm.CreateMLCEngine(
-        MODEL_ID,
-        {
-          initProgressCallback: (report: webllm.InitProgressReport) => {
-            const progress = report.progress || 0;
-            const text = report.text || "Loading...";
+      // Try to use Web Worker for non-blocking inference
+      if (isWorkerSupported()) {
+        try {
+          console.log("🔧 Using Web Worker for non-blocking AI inference...");
+          const worker = new Worker(
+            new URL('./webllm.worker.ts', import.meta.url),
+            { type: 'module' }
+          );
+          
+          this.engine = await webllm.CreateWebWorkerMLCEngine(
+            worker,
+            MODEL_ID,
+            {
+              initProgressCallback: (report: webllm.InitProgressReport) => {
+                const progress = report.progress || 0;
+                const text = report.text || "Loading...";
 
-            console.log(`WebLLM: ${text} (${Math.round(progress * 100)}%)`);
+                console.log(`WebLLM: ${text} (${Math.round(progress * 100)}%)`);
 
-            if (progressCallback) {
-              progressCallback({
-                text,
-                progress: Math.round(progress * 100),
-              });
+                if (progressCallback) {
+                  progressCallback({
+                    text,
+                    progress: Math.round(progress * 100),
+                  });
+                }
+              },
+              logLevel: LOG_LEVEL,
+            },
+            {
+              context_window_size: CONTEXT_WINDOW_SIZE,
+              // Use smaller prefill chunks for better UI responsiveness
+              // This breaks up the GPU work into smaller pieces
+              prefill_chunk_size: 256,
             }
-          },
-          logLevel: LOG_LEVEL,
-        },
-        {
-          context_window_size: CONTEXT_WINDOW_SIZE,
+          );
+          this.useWorker = true;
+          console.log("✅ Web Worker AI initialized successfully!");
+        } catch (workerError) {
+          console.warn("⚠️ Web Worker initialization failed, falling back to main thread:", workerError);
+          // Fall back to main thread
+          this.engine = await this.initializeMainThread(progressCallback);
         }
-      );
+      } else {
+        // Fall back to main thread if Web Workers not supported
+        console.log("⚠️ Web Workers not supported, using main thread...");
+        this.engine = await this.initializeMainThread(progressCallback);
+      }
 
       this.isReady = true;
       console.log("WebLLM initialized successfully!");
@@ -114,6 +163,38 @@ export class WebLLMEngine {
     } finally {
       this.isInitializing = false;
     }
+  }
+  
+  /**
+   * Initialize on main thread (fallback)
+   */
+  private async initializeMainThread(
+    progressCallback?: (progress: InitProgress) => void
+  ): Promise<webllm.MLCEngineInterface> {
+    return await webllm.CreateMLCEngine(
+      MODEL_ID,
+      {
+        initProgressCallback: (report: webllm.InitProgressReport) => {
+          const progress = report.progress || 0;
+          const text = report.text || "Loading...";
+
+          console.log(`WebLLM: ${text} (${Math.round(progress * 100)}%)`);
+
+          if (progressCallback) {
+            progressCallback({
+              text,
+              progress: Math.round(progress * 100),
+            });
+          }
+        },
+        logLevel: LOG_LEVEL,
+      },
+      {
+        context_window_size: CONTEXT_WINDOW_SIZE,
+        // Use smaller prefill chunks for better UI responsiveness
+        prefill_chunk_size: 256,
+      }
+    );
   }
 
   /**
@@ -259,6 +340,10 @@ export class WebLLMEngine {
       const startTime = performance.now();
       let firstTokenTime: number | null = null;
 
+      // Yield before prefill to ensure UI is responsive
+      console.log(`[WebLLM] Starting prefill (${this.useWorker ? 'Worker' : 'MainThread'} mode)...`);
+      await yieldToMain();
+
       // Create the stream - this is where prefill happens and can take time
       const asyncChunkGenerator = (await this.engine!.chat.completions.create({
         messages,
@@ -269,6 +354,8 @@ export class WebLLMEngine {
           enable_thinking: ENABLE_THINKING.chat,
         },
       } as any)) as unknown as AsyncIterable<webllm.ChatCompletionChunk>;
+      
+      console.log(`[WebLLM] Prefill complete, starting token generation...`);
 
       let tokenCount = 0;
       for await (const chunk of asyncChunkGenerator) {
@@ -281,6 +368,11 @@ export class WebLLMEngine {
           tokenCount++;
           fullResponse += token;
           onToken(token);
+          
+          // Yield to the main thread every 3 tokens to prevent UI freezing
+          if (tokenCount % 3 === 0) {
+            await yieldToMain();
+          }
         }
       }
 
@@ -372,6 +464,10 @@ export class WebLLMEngine {
 
       let fullResponse = "";
 
+      // Yield before prefill to ensure UI is responsive
+      console.log(`[WebLLM] Starting prefill (${this.useWorker ? 'Worker' : 'MainThread'} mode)...`);
+      await yieldToMain();
+
       const asyncChunkGenerator = (await this.engine!.chat.completions.create({
         messages,
         temperature: TEMPERATURE,
@@ -382,11 +478,20 @@ export class WebLLMEngine {
         },
       } as any)) as unknown as AsyncIterable<webllm.ChatCompletionChunk>;
 
+      console.log(`[WebLLM] Prefill complete, starting token generation...`);
+
+      let tokenCount = 0;
       for await (const chunk of asyncChunkGenerator) {
         const token = chunk.choices[0]?.delta?.content || "";
         if (token) {
+          tokenCount++;
           fullResponse += token;
           onToken(token);
+          
+          // Yield to main thread every 3 tokens to prevent UI freezing
+          if (tokenCount % 3 === 0) {
+            await yieldToMain();
+          }
         }
       }
 
@@ -428,6 +533,39 @@ export class WebLLMEngine {
   clearHistory(): void {
     this.conversationHistory = [];
     console.log("Conversation history cleared");
+  }
+
+  /**
+   * Generate a summary for web content (one-shot, no conversation history impact)
+   */
+  async generateSummary(content: string): Promise<string> {
+    if (!this.engine || !this.isReady) {
+      throw new Error("WebLLM not initialized");
+    }
+
+    const messages: webllm.ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: "You are a helpful assistant that summarizes web content concisely. Format your response as 3-5 bullet points. Be brief and focus on key information. Do not include any action tags."
+      },
+      {
+        role: "user",
+        content: content
+      }
+    ];
+
+    const response = await this.engine.chat.completions.create({
+      messages,
+      max_tokens: 300,
+      temperature: 0.3,
+    });
+
+    let summary = response.choices[0]?.message?.content || "Unable to generate summary.";
+    
+    // Strip thinking blocks if present
+    summary = stripThinkingBlock(summary);
+    
+    return summary;
   }
 
   /**
@@ -591,6 +729,66 @@ export class WebLLMEngine {
           // Fallback: manual array parsing
           const types = parts[1].match(/IFC\w+/gi) || [];
           return { storeyName, elementTypes: types };
+        }
+      }
+    }
+    
+    // Special handling for searchWebPage: "url", "searchTerms"
+    if (functionName === 'searchWebPage') {
+      const parts = this.splitArguments(argsStr);
+      if (parts.length >= 2) {
+        const url = parts[0].replace(/['"`]/g, '').trim();
+        const searchTerms = parts[1].replace(/['"`]/g, '').trim();
+        return { url, searchTerms };
+      } else if (parts.length === 1) {
+        // Only URL provided, no search terms
+        return { url: parts[0].replace(/['"`]/g, '').trim() };
+      }
+    }
+    
+    // Special handling for getPageSections: "url"
+    if (functionName === 'getPageSections') {
+      const url = argsStr.replace(/['"`]/g, '').trim();
+      return { url };
+    }
+    
+    // Special handling for fetchWebPage: "url"
+    if (functionName === 'fetchWebPage') {
+      const url = argsStr.replace(/['"`]/g, '').trim();
+      return { url };
+    }
+    
+    // Special handling for loadMoreWebContent: count
+    if (functionName === 'loadMoreWebContent') {
+      const count = parseInt(argsStr.replace(/['"`]/g, '').trim()) || 5;
+      return { count };
+    }
+    
+    // Special handling for smartSearch: "url", "topic"
+    if (functionName === 'smartSearch') {
+      const parts = this.splitArguments(argsStr);
+      if (parts.length >= 2) {
+        const url = parts[0].replace(/['"`]/g, '').trim();
+        const topic = parts[1].replace(/['"`]/g, '').trim();
+        return { url, topic };
+      } else if (parts.length === 1) {
+        return { url: parts[0].replace(/['"`]/g, '').trim() };
+      }
+    }
+    
+    // Special handling for getSectionContent: [1, 2, 3]
+    if (functionName === 'getSectionContent') {
+      try {
+        // Try parsing as JSON array
+        const parsed = JSON.parse(argsStr);
+        if (Array.isArray(parsed)) {
+          return { sectionIndices: parsed.map(n => parseInt(n)) };
+        }
+      } catch {
+        // Try extracting numbers manually
+        const numbers = argsStr.match(/\d+/g)?.map(n => parseInt(n)) || [];
+        if (numbers.length > 0) {
+          return { sectionIndices: numbers };
         }
       }
     }
