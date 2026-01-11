@@ -9,8 +9,8 @@ export class AIStyleManager {
         position: fixed;
         bottom: 80px;
         right: 20px;
-        width: 420px;
-        min-width: 300px;
+        width: 480px;
+        min-width: 380px;
         max-width: 800px;
         background: rgba(25, 25, 25, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -697,35 +697,108 @@ export class AIStyleManager {
       .ai-input-wrapper {
         display: flex;
         gap: 8px;
+        align-items: flex-end;
+      }
+
+      .ai-input-container {
+        flex: 1;
+        position: relative;
+        display: flex;
+        flex-direction: column;
       }
       
-      .ai-input-wrapper input {
-        flex: 1;
+      .ai-input-wrapper textarea {
+        width: 100%;
+        min-height: 40px;
+        max-height: 120px;
         background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        padding: 8px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 10px 14px;
+        padding-right: 70px;
         color: white;
         font-size: 13px;
+        font-family: inherit;
+        line-height: 1.4;
+        resize: none;
+        overflow-y: auto;
+        box-sizing: border-box;
+        transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      }
+
+      .ai-input-wrapper textarea::placeholder {
+        color: rgba(255, 255, 255, 0.35);
       }
       
-      .ai-input-wrapper input:focus {
+      .ai-input-wrapper textarea:focus {
         outline: none;
-        border-color: rgba(0, 120, 215, 0.5);
+        border-color: rgba(0, 120, 215, 0.6);
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 0 3px rgba(0, 120, 215, 0.15);
+      }
+
+      .ai-input-wrapper textarea::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      .ai-input-wrapper textarea::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .ai-input-wrapper textarea::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+      }
+
+      .ai-input-hint {
+        position: absolute;
+        right: 12px;
+        bottom: 10px;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.25);
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      .ai-input-wrapper textarea:focus + .ai-input-hint {
+        opacity: 0.6;
       }
       
       #ai-send-btn {
-        background: #0078d7;
+        background: linear-gradient(135deg, #0078d7 0%, #0086f0 100%);
         border: none;
-        border-radius: 6px;
+        border-radius: 10px;
         color: white;
-        padding: 0 12px;
+        width: 40px;
+        height: 40px;
         cursor: pointer;
-        transition: background 0.2s;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0, 120, 215, 0.3);
+      }
+
+      #ai-send-btn i {
+        font-size: 14px;
       }
       
       #ai-send-btn:hover {
-        background: #0086f0;
+        background: linear-gradient(135deg, #0086f0 0%, #0098ff 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 120, 215, 0.4);
+      }
+
+      #ai-send-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(0, 120, 215, 0.3);
+      }
+
+      #ai-send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
       }
 
       .ai-footer {
@@ -745,6 +818,79 @@ export class AIStyleManager {
         display: flex;
         align-items: center;
         gap: 6px;
+        cursor: pointer;
+        position: relative;
+        padding: 4px 8px;
+        border-radius: 6px;
+        transition: background 0.2s;
+      }
+
+      .ai-footer-privacy:hover {
+        background: rgba(105, 219, 124, 0.1);
+      }
+
+      .ai-footer-privacy i.fa-shield-alt {
+        color: #69db7c;
+      }
+
+      .ai-footer-privacy span {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 10px;
+      }
+
+      .ai-privacy-toggle {
+        font-size: 8px !important;
+        color: rgba(255, 255, 255, 0.4) !important;
+        transition: transform 0.2s ease;
+        margin-left: 2px;
+      }
+
+      .ai-privacy-disclaimer {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(30, 32, 38, 0.98);
+        border: 1px solid rgba(255, 193, 7, 0.25);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        min-width: 280px;
+        max-width: 350px;
+      }
+
+      .ai-privacy-disclaimer.hidden {
+        display: none;
+      }
+
+      .ai-disclaimer-content {
+        font-size: 10px;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.75);
+      }
+
+      .ai-disclaimer-content p {
+        margin: 0 0 10px 0;
+      }
+
+      .ai-disclaimer-content p:last-child {
+        margin-bottom: 0;
+      }
+
+      .ai-disclaimer-content p i.fa-laptop {
+        color: #69db7c;
+        margin-right: 4px;
+      }
+
+      .ai-disclaimer-content p i.fa-exclamation-triangle {
+        color: #ffc107;
+        margin-right: 4px;
+      }
+
+      .ai-disclaimer-content strong {
+        color: rgba(255, 255, 255, 0.9);
       }
 
       .ai-footer-privacy i {
@@ -964,6 +1110,27 @@ export class AIStyleManager {
         color: rgba(105, 219, 124, 0.6);
         margin-right: 3px;
         font-size: 8px;
+      }
+
+      .ai-confirm-download .confirm-disclaimer {
+        font-size: 9px;
+        color: rgba(255, 193, 7, 0.85);
+        background: rgba(255, 193, 7, 0.08);
+        border: 1px solid rgba(255, 193, 7, 0.2);
+        border-radius: 4px;
+        padding: 6px 8px;
+        margin: 0 0 8px 0;
+        line-height: 1.4;
+      }
+
+      .ai-confirm-download .confirm-disclaimer i {
+        color: rgba(255, 193, 7, 0.7);
+        margin-right: 4px;
+        font-size: 9px;
+      }
+
+      .ai-confirm-download .confirm-disclaimer strong {
+        color: rgba(255, 193, 7, 1);
       }
 
       .ai-confirm-download .confirm-buttons {

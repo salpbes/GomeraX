@@ -54,13 +54,19 @@ export class AIAssistantUIManager {
     historyClose?.addEventListener('click', () => this.toggleHistory(false));
 
     this.dom.input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
         this.handleSend();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' && this.dom.input.value === '') {
         this.navigateHistory(1);
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' && this.dom.input.value === '') {
         this.navigateHistory(-1);
       }
+    });
+
+    // Auto-resize textarea as user types
+    this.dom.input.addEventListener('input', () => {
+      this.autoResizeInput();
     });
   }
 
@@ -112,6 +118,18 @@ export class AIAssistantUIManager {
     } else {
       this.dom.input.value = this.commandHistory[this.historyIndex];
     }
+    this.autoResizeInput();
+  }
+
+  private autoResizeInput(): void {
+    const textarea = this.dom.input;
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    // Set height based on content, with min and max constraints
+    const minHeight = 40;
+    const maxHeight = 120;
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+    textarea.style.height = `${newHeight}px`;
   }
 
   private toggleMinimize(): void {
@@ -247,6 +265,7 @@ export class AIAssistantUIManager {
 
     this.chat.addMessage(command, 'user');
     this.dom.input.value = '';
+    this.autoResizeInput(); // Reset textarea height after clearing
     this.toggleHistory(false);
 
     // Show thinking indicator IMMEDIATELY
@@ -381,7 +400,8 @@ export class AIAssistantUIManager {
       `<div class="confirm-model">${modelInfo.name} • ${modelInfo.size}</div>` +
       `<div class="confirm-note"><i class="fas fa-info-circle"></i> One-time download, cached for future use</div>` +
       `<div class="confirm-local"><i class="fas fa-laptop"></i> Local AI runs on your web browser</div>` +
-      `<div class="confirm-buttons"><button class="confirm-btn confirm-yes"><i class="fas fa-download"></i> Download</button><button class="confirm-btn confirm-no">Cancel</button></div>`;
+      `<div class="confirm-disclaimer"><i class="fas fa-exclamation-triangle"></i> <strong>Disclaimer:</strong> By downloading, you accept responsibility for the AI model's use. AI responses are generated automatically and may contain errors. We provide no warranties and accept no liability for any decisions or actions based on AI outputs.</div>` +
+      `<div class="confirm-buttons"><button class="confirm-btn confirm-yes"><i class="fas fa-download"></i> Accept & Download</button><button class="confirm-btn confirm-no">Cancel</button></div>`;
 
     this.dom.responseArea.appendChild(confirmContainer);
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;

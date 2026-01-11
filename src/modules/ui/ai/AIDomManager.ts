@@ -1,6 +1,6 @@
 export class AIDomManager {
   public container: HTMLDivElement;
-  public input: HTMLInputElement;
+  public input: HTMLTextAreaElement;
   public responseArea: HTMLDivElement;
   public sendBtn: HTMLButtonElement;
   public closeBtn: HTMLButtonElement;
@@ -14,6 +14,8 @@ export class AIDomManager {
   public resizeHandle: HTMLDivElement;
   public footer: HTMLDivElement;
   public statsBar: HTMLDivElement;
+  public privacyBadge: HTMLDivElement;
+  public privacyDisclaimer: HTMLDivElement;
 
   constructor() {
     this.container = document.createElement('div');
@@ -42,14 +44,24 @@ export class AIDomManager {
         </div>
         <div class="ai-response-area" id="ai-response-area"></div>
         <div class="ai-input-wrapper">
-          <input type="text" id="ai-input" placeholder="Ask me anything..." />
-          <button id="ai-send-btn"><i class="fas fa-paper-plane"></i></button>
+          <div class="ai-input-container">
+            <textarea id="ai-input" placeholder="Ask me anything... (Shift+Enter for new line)" rows="1"></textarea>
+            <span class="ai-input-hint">⏎ to send</span>
+          </div>
+          <button id="ai-send-btn" title="Send message"><i class="fas fa-paper-plane"></i></button>
         </div>
       </div>
       <div class="ai-footer">
-        <div class="ai-footer-privacy">
+        <div class="ai-footer-privacy" title="Click for details">
           <i class="fas fa-shield-alt"></i> 
           <span>100% Local AI</span>
+          <i class="fas fa-chevron-down ai-privacy-toggle"></i>
+          <div class="ai-privacy-disclaimer hidden">
+            <div class="ai-disclaimer-content">
+              <p><i class="fas fa-laptop"></i> <strong>Runs entirely in your browser</strong> — no data sent to external servers.</p>
+              <p><i class="fas fa-exclamation-triangle"></i> <strong>Disclaimer:</strong> AI responses are generated automatically and may contain errors or inaccuracies. Users are solely responsible for verifying AI outputs before use. We provide no warranties and accept no liability for any decisions, actions, or consequences arising from the use of this AI feature.</p>
+            </div>
+          </div>
         </div>
         <div class="ai-stats-bar" id="ai-stats-bar">
           <div class="ai-stat" id="ai-stat-tokens" title="Total Tokens Used">
@@ -73,7 +85,7 @@ export class AIDomManager {
       <div class="ai-resize-handle"></div>
     `;
 
-    this.input = this.container.querySelector('#ai-input') as HTMLInputElement;
+    this.input = this.container.querySelector('#ai-input') as HTMLTextAreaElement;
     this.responseArea = this.container.querySelector('#ai-response-area') as HTMLDivElement;
     this.sendBtn = this.container.querySelector('#ai-send-btn') as HTMLButtonElement;
     this.closeBtn = this.container.querySelector('.ai-close-btn') as HTMLButtonElement;
@@ -87,6 +99,24 @@ export class AIDomManager {
     this.resizeHandle = this.container.querySelector('.ai-resize-handle') as HTMLDivElement;
     this.footer = this.container.querySelector('.ai-footer') as HTMLDivElement;
     this.statsBar = this.container.querySelector('#ai-stats-bar') as HTMLDivElement;
+    this.privacyBadge = this.container.querySelector('.ai-footer-privacy') as HTMLDivElement;
+    this.privacyDisclaimer = this.container.querySelector('.ai-privacy-disclaimer') as HTMLDivElement;
+
+    // Setup privacy disclaimer toggle
+    this.setupPrivacyToggle();
+  }
+
+  private setupPrivacyToggle(): void {
+    const toggleIcon = this.privacyBadge.querySelector('.ai-privacy-toggle') as HTMLElement;
+    
+    this.privacyBadge.addEventListener('click', (e) => {
+      // Prevent toggle if clicking inside the disclaimer content
+      if ((e.target as HTMLElement).closest('.ai-disclaimer-content')) return;
+      
+      const isHidden = this.privacyDisclaimer.classList.contains('hidden');
+      this.privacyDisclaimer.classList.toggle('hidden');
+      toggleIcon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    });
   }
 
   public appendToBody(): void {
