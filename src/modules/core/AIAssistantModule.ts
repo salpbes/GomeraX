@@ -804,13 +804,13 @@ export class AIAssistantModule {
           // Store content for follow-up questions (only first chunk initially)
           this.lastFetchedContent = `\n\n[Web: ${result.title}]\n${result.content}`;
           
-          // Compact UI response
+          // Compact UI response with disclaimer
           const charInfo = result.hasMore 
             ? `${Math.round(result.loadedChars/1000)}k of ${Math.round(result.totalChars/1000)}k chars` 
             : `${result.totalChars} chars`;
           
           return { 
-            message: `📄 **${result.title}**\n_${charInfo} loaded_ · Ask me anything!`
+            message: `📄 **${result.title}**\n_${charInfo} loaded_ · Ask me anything!\n\n<div class="web-fetch-disclaimer"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.</div>`
           };
         }
         
@@ -962,7 +962,7 @@ export class AIAssistantModule {
           const totalChars = result.matchedSections.reduce((sum, s) => sum + s.content.length, 0);
           
           return { 
-            message: `🔍 **${result.title}**\n\n_Found ${result.matchedSections.length} relevant section(s) about "${topic}" (${Math.round(totalChars/1000)}k chars):_\n\n${sectionPreviews}\n\n---\n💡 **Say "summarize" for a detailed summary of this information.**`
+            message: `🔍 **${result.title}**\n\n_Found ${result.matchedSections.length} relevant section(s) about "${topic}" (${Math.round(totalChars/1000)}k chars):_\n\n${sectionPreviews}\n\n---\n💡 **Say "summarize" for a detailed summary of this information.**\n\n<div class="web-fetch-disclaimer"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.</div>`
           };
         }
         

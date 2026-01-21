@@ -542,6 +542,32 @@ export class AIStyleManager {
         font-weight: 700;
       }
 
+      /* Web fetch disclaimer */
+      .web-fetch-disclaimer {
+        font-size: 9px;
+        color: rgba(100, 181, 246, 0.85);
+        background: rgba(100, 181, 246, 0.08);
+        border: 1px solid rgba(100, 181, 246, 0.2);
+        border-radius: 4px;
+        padding: 6px 8px;
+        margin-top: 10px;
+        line-height: 1.4;
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .web-fetch-disclaimer i {
+        color: rgba(100, 181, 246, 0.7);
+        margin-top: 1px;
+        font-size: 9px;
+        flex-shrink: 0;
+      }
+
+      .web-fetch-disclaimer strong {
+        color: rgba(100, 181, 246, 1);
+      }
+
       /* Action message styling */
       .action-message {
         background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(40, 167, 69, 0.05) 100%) !important;
