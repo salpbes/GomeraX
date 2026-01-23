@@ -111,7 +111,7 @@ export class ConversationContext {
 
   /**
    * Resolves contextual references in a query
-   * e.g., "them", "those", "it", "these"
+   * e.g., "them", "those", "it", "these", "where are they"
    */
   public resolveContextualReferences(query: string): ResolvedQuery {
     const lowerQuery = query.toLowerCase().trim();
@@ -120,37 +120,59 @@ export class ConversationContext {
     const contextInfo: string[] = [];
 
     // Pronouns that refer to previous selection/action
-    const pronouns = ['them', 'those', 'these', 'it', 'that'];
+    const pronouns = ['them', 'those', 'these', 'it', 'that', 'they'];
     const hasPronoun = pronouns.some(p => lowerQuery.includes(p));
+    
+    // Location-based follow-ups that need element type context
+    const locationQueries = ['where are', 'which floor', 'what floor', 'located', 'distribution'];
+    const isLocationQuery = locationQueries.some(q => lowerQuery.includes(q));
 
-    if (hasPronoun) {
+    if (hasPronoun || isLocationQuery) {
       const lastAction = this.getLastAction();
       const lastSelection = this.getLastSelection();
 
       if (lastSelection && lastSelection.elementTypes.length > 0) {
         // Replace pronouns with actual element types
         const types = lastSelection.elementTypes.join(' and ');
+        const ifcTypes = lastSelection.elementTypes.map(t => 
+          t.startsWith('IFC') ? t : `IFC${t.toUpperCase()}`
+        );
         
-        pronouns.forEach(pronoun => {
-          const regex = new RegExp(`\\b${pronoun}\\b`, 'gi');
-          if (regex.test(resolved)) {
-            resolved = resolved.replace(regex, types);
-            usedContext = true;
-            contextInfo.push(`Referring to ${types} from previous selection`);
-          }
-        });
+        // Handle location queries: "where are they?" -> "getElementDistribution for IFCWINDOW"
+        if (isLocationQuery && (hasPronoun || lowerQuery.match(/^where\s*(are)?\s*(they|the|located)?$/))) {
+          resolved = `element distribution for ${types}`;
+          usedContext = true;
+          contextInfo.push(`Location of ${types} from previous query`);
+        } else {
+          // Standard pronoun replacement
+          pronouns.forEach(pronoun => {
+            const regex = new RegExp(`\\b${pronoun}\\b`, 'gi');
+            if (regex.test(resolved)) {
+              resolved = resolved.replace(regex, types);
+              usedContext = true;
+              contextInfo.push(`Referring to ${types} from previous selection`);
+            }
+          });
+        }
       } else if (lastAction && lastAction.elementTypes.length > 0) {
         // Fallback to last action
         const types = lastAction.elementTypes.join(' and ');
         
-        pronouns.forEach(pronoun => {
-          const regex = new RegExp(`\\b${pronoun}\\b`, 'gi');
-          if (regex.test(resolved)) {
-            resolved = resolved.replace(regex, types);
-            usedContext = true;
-            contextInfo.push(`Referring to ${types} from previous action`);
-          }
-        });
+        // Handle location queries
+        if (isLocationQuery && (hasPronoun || lowerQuery.match(/^where\s*(are)?\s*(they|the|located)?$/))) {
+          resolved = `element distribution for ${types}`;
+          usedContext = true;
+          contextInfo.push(`Location of ${types} from previous action`);
+        } else {
+          pronouns.forEach(pronoun => {
+            const regex = new RegExp(`\\b${pronoun}\\b`, 'gi');
+            if (regex.test(resolved)) {
+              resolved = resolved.replace(regex, types);
+              usedContext = true;
+              contextInfo.push(`Referring to ${types} from previous action`);
+            }
+          });
+        }
       }
     }
 

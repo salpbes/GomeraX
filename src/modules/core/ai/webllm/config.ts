@@ -49,8 +49,8 @@ export const LOG_LEVEL = "INFO" as const;
  * Disabled for faster responses - thinking adds latency
  */
 export const ENABLE_THINKING = {
-  chat: false,
-  stream: false,
+  chat: true,
+  stream: true,
 };
 
 /**

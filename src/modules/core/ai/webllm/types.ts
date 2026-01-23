@@ -9,6 +9,14 @@ export interface BIMFunctionCall {
 }
 
 /**
+ * Batch function call result with multiple actions
+ */
+export interface BIMBatchFunctionCall {
+  actions: BIMFunctionCall[];
+  confidence: number;
+}
+
+/**
  * BIM context for AI to understand current model state
  */
 export interface BIMContext {

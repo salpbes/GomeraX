@@ -1,4 +1,5 @@
 import * as OBC from '@thatopen/components';
+import * as OBF from '@thatopen/components-front';
 import type { IFCViewer } from '../../IFCViewer';
 import { AIBimActions } from './ai/AIBimActions';
 import { AIRuleEngine } from './ai/AIRuleEngine';
@@ -13,15 +14,16 @@ export class AIAssistantModule {
   private intentEngine: AIIntentEngine;
   private context: ConversationContext;
   private conversational: ConversationalEngine;
+  private components: OBC.Components;
   private webLLM: WebLLMEngine;
   private useWebLLM: boolean = false;
   private lastFetchedContent: string = ''; // Stores last fetched web content for follow-up questions
 
   constructor(private viewer: IFCViewer) {
-    const components = viewer.worldManager.getComponents();
+    this.components = viewer.worldManager.getComponents();
     this.actions = new AIBimActions(viewer);
     this.context = new ConversationContext();
-    this.ruleEngine = new AIRuleEngine(this.actions, components);
+    this.ruleEngine = new AIRuleEngine(this.actions, this.components);
     this.intentEngine = new AIIntentEngine(this.actions, this.context);
     this.conversational = new ConversationalEngine(this.context);
     this.webLLM = new WebLLMEngine();
@@ -399,19 +401,45 @@ export class AIAssistantModule {
     try {
       switch (name) {
         case 'selectElements': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "select them")
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to select." };
+          }
           let totalCount = 0;
           const countMap = new Map<string, number>();
+          const allIdsByModel = new Map<string, Set<number>>();
           
           for (const type of types) {
-            const count = await this.actions.selectByType(type);
-            totalCount += count;
-            if (count > 0) countMap.set(type, count);
+            // Get the IDs for this type
+            const idsByModel = await this.actions.getIdsByType(type);
+            let typeCount = 0;
+            
+            for (const [modelId, ids] of idsByModel) {
+              if (!allIdsByModel.has(modelId)) {
+                allIdsByModel.set(modelId, new Set());
+              }
+              ids.forEach(id => allIdsByModel.get(modelId)!.add(id));
+              typeCount += ids.size;
+            }
+            
+            totalCount += typeCount;
+            if (typeCount > 0) countMap.set(type, typeCount);
           }
           
-          // setLastSelection expects Map<string, Set<number>> but we only have counts
-          // Pass an empty map since we don't have the actual element IDs here
-          this.context.setLastSelection(types, totalCount, new Map());
+          // Actually select the elements
+          for (const type of types) {
+            await this.actions.selectByType(type);
+          }
+          
+          // Store the actual IDs in context for property queries
+          this.context.setLastSelection(types, totalCount, allIdsByModel);
           
           if (totalCount === 0) {
             return { message: `I couldn't find any ${types.join(', ')} in the model.`, count: 0 };
@@ -439,6 +467,7 @@ export class AIAssistantModule {
             return { message: `I couldn't find any elements on storey "${storeyName}".`, count: 0 };
           }
           
+          // Note: For storey selection, we don't have easy access to IDs, but it's less common
           this.context.setLastSelection([`Storey: ${storeyName}`], count, new Map());
           return { 
             message: `I've selected ${count} element${count !== 1 ? 's' : ''} from storey "${storeyName}".`,
@@ -470,7 +499,17 @@ export class AIAssistantModule {
         }
         
         case 'hideElements': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "hide them")
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to hide." };
+          }
           let totalCount = 0;
           
           for (const type of types) {
@@ -502,7 +541,17 @@ export class AIAssistantModule {
         }
         
         case 'isolateElements': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "isolate them")
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to isolate." };
+          }
           let totalCount = 0;
           
           for (const type of types) {
@@ -514,11 +563,24 @@ export class AIAssistantModule {
             return { message: `I couldn't find any ${types.join(', ')} to isolate.`, count: 0 };
           }
           
+          // Store in context for further follow-up questions
+          this.context.setLastSelection(types, totalCount, new Map());
+          this.context.setLastAction('isolateElements', types, totalCount);
           return { message: `I've isolated ${totalCount} element${totalCount !== 1 ? 's' : ''}.`, count: totalCount };
         }
         
         case 'zoomToElements': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "zoom to them")
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to zoom to." };
+          }
           let totalCount = 0;
           
           for (const type of types) {
@@ -550,11 +612,58 @@ export class AIAssistantModule {
             return { message: `I couldn't find any ${types.join(', ')} in the model.`, count: 0 };
           }
           
+          const totalCount = Array.from(counts.values()).reduce((a, b) => a + b, 0);
           const details = Array.from(counts.entries())
-            .map(([type, count]) => `${count} ${type.replace('IFC', '').toLowerCase()}${count !== 1 ? 's' : ''}`)
+            .map(([type, count]) => `**${count}** ${type.replace('IFC', '').toLowerCase()}${count !== 1 ? 's' : ''}`)
             .join(', ');
           
-          return { message: `I found ${details} in the model.`, count: Array.from(counts.values()).reduce((a, b) => a + b, 0) };
+          // Store in context for follow-up questions like "where are they?"
+          this.context.setLastSelection(types, totalCount, new Map());
+          this.context.setLastAction('count', types, totalCount);
+          
+          return { message: `📊 The model contains ${details}.`, count: totalCount };
+        }
+        
+        case 'getElementDistribution': {
+          let types = args.elementTypes as string[];
+          
+          // If no types provided, use context from previous query
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+              console.log(`📍 Using context types for distribution:`, types);
+            } else {
+              return { message: "Please specify which element types to analyze, or ask about specific elements first (e.g., 'how many windows?')." };
+            }
+          }
+          
+          const result = await this.actions.getElementDistribution(types);
+          
+          if (!result.success || result.distribution.length === 0) {
+            const typeNames = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+            return { message: `I couldn't find the storey distribution for ${typeNames}. They might not be assigned to storeys.` };
+          }
+          
+          const typeNames = types.map(t => t.replace('IFC', '').toLowerCase()).join('/');
+          
+          // Format distribution as a list
+          const distList = result.distribution.map(d => {
+            const typeCounts = Object.entries(d.counts)
+              .map(([t, c]) => `${c} ${t.replace('IFC', '').toLowerCase()}${c !== 1 ? 's' : ''}`)
+              .join(', ');
+            return `- **${d.storeyName}**: ${typeCounts}`;
+          }).join('\n');
+          
+          // Generate summary
+          const topStorey = result.distribution[0];
+          const summary = result.distribution.length === 1 
+            ? `All ${result.totalElements} ${typeNames} are on ${topStorey.storeyName}.`
+            : `Most ${typeNames} (${topStorey.total}) are on **${topStorey.storeyName}**. They're distributed across ${result.distribution.length} floors.`;
+          
+          return { 
+            message: `📍 **${typeNames.charAt(0).toUpperCase() + typeNames.slice(1)} Distribution by Floor**\n\n${distList}\n\n---\n\n💡 **Summary:** ${summary}`
+          };
         }
         
         case 'resetView': {
@@ -622,7 +731,14 @@ export class AIAssistantModule {
         }
 
         case 'hideElementTypes': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "hide them")
+          if (!types || types.length === 0) {
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
           if (!types || types.length === 0) {
             return { message: "Please specify which element types to hide." };
           }
@@ -632,12 +748,22 @@ export class AIAssistantModule {
         }
 
         case 'showOnlyElementTypes': {
-          const types = args.elementTypes as string[];
+          let types = args.elementTypes as string[];
+          // Use context if no types provided (for follow-up like "isolate them")
           if (!types || types.length === 0) {
-            return { message: "Please specify which element types to show." };
+            const lastSelection = this.context.getLastSelection();
+            if (lastSelection && lastSelection.elementTypes.length > 0) {
+              types = lastSelection.elementTypes;
+            }
+          }
+          if (!types || types.length === 0) {
+            return { message: "Please specify which element types to isolate/show." };
           }
           const count = await this.actions.showOnlyElementTypes(types);
           const typesStr = types.map(t => t.replace('IFC', '').toLowerCase()).join(', ');
+          // Store in context for further follow-up questions
+          this.context.setLastSelection(types, count, new Map());
+          this.context.setLastAction('showOnlyElementTypes', types, count);
           return { message: `Showing only ${count} ${typesStr} element${count !== 1 ? 's' : ''}. All others are hidden.`, count };
         }
 
@@ -810,7 +936,7 @@ export class AIAssistantModule {
             : `${result.totalChars} chars`;
           
           return { 
-            message: `📄 **${result.title}**\n_${charInfo} loaded_ · Ask me anything!\n\n<div class="web-fetch-disclaimer"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.</div>`
+            message: `📄 **${result.title}**\n_${charInfo} loaded_ · Ask me anything!\n\n---\nℹ️ **Note:** Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.`
           };
         }
         
@@ -962,7 +1088,211 @@ export class AIAssistantModule {
           const totalChars = result.matchedSections.reduce((sum, s) => sum + s.content.length, 0);
           
           return { 
-            message: `🔍 **${result.title}**\n\n_Found ${result.matchedSections.length} relevant section(s) about "${topic}" (${Math.round(totalChars/1000)}k chars):_\n\n${sectionPreviews}\n\n---\n💡 **Say "summarize" for a detailed summary of this information.**\n\n<div class="web-fetch-disclaimer"><i class="fas fa-info-circle"></i> <strong>Note:</strong> Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.</div>`
+            message: `🔍 **${result.title}**\n\n_Found ${result.matchedSections.length} relevant section(s) about "${topic}" (${Math.round(totalChars/1000)}k chars):_\n\n${sectionPreviews}\n\n---\n💡 **Say "summarize" for a detailed summary of this information.**\n\nℹ️ **Note:** Web content is fetched from third-party sources. We are not responsible for the accuracy or reliability of external content.`
+          };
+        }
+
+        // ============================================================================
+        // PROPERTY QUERIES
+        // ============================================================================
+        case 'queryPropertyValues': {
+          const propertyName = args.propertyName as string;
+          const elementTypes = args.elementTypes as string[] | undefined;
+          const storeyName = args.storeyName as string | undefined;
+          
+          if (!propertyName) {
+            return { message: "Please specify which property to query." };
+          }
+          
+          const result = await this.actions.queryPropertyValues(propertyName, elementTypes, storeyName);
+          
+          if (!result.success) {
+            return { message: `I couldn't query the property "${propertyName}".` };
+          }
+          
+          if (result.values.length === 0) {
+            const typeInfo = elementTypes ? ` in ${elementTypes.map(t => t.replace('IFC', '')).join(', ')}` : '';
+            return { message: `No values found for property "${propertyName}"${typeInfo}. The property might not exist or have a different name.` };
+          }
+          
+          // Format the values as a nice list using standard markdown
+          const valueList = result.values.slice(0, 10).map(v => 
+            `- **${v.value}** (${v.count} element${v.count !== 1 ? 's' : ''})`
+          ).join('\n');
+          
+          const moreInfo = result.values.length > 10 ? `\n_...and ${result.values.length - 10} more types_` : '';
+          const typeInfo = elementTypes ? ` for ${elementTypes.map(t => t.replace('IFC', '')).join(', ')}` : '';
+          const storeyInfo = storeyName ? ` on ${storeyName}` : '';
+          
+          // Generate AI analysis of the results
+          const elementTypeName = elementTypes ? elementTypes.map(t => t.replace('IFC', '').toLowerCase()).join('/') : 'element';
+          const analysis = this.generatePropertyAnalysis(propertyName, result.values, elementTypeName, result.totalElements);
+          
+          return { 
+            message: `📊 **${propertyName}**${typeInfo}${storeyInfo}\n\n${valueList}${moreInfo}\n\n---\n\n${analysis}`
+          };
+        }
+        
+        case 'aggregateProperty': {
+          const propertyName = args.propertyName as string;
+          const aggregation = args.aggregation as 'sum' | 'average' | 'min' | 'max' | 'count';
+          const elementTypes = args.elementTypes as string[] | undefined;
+          const storeyName = args.storeyName as string | undefined;
+          
+          if (!propertyName) {
+            return { message: "Please specify which property to aggregate." };
+          }
+          
+          if (!aggregation) {
+            return { message: "Please specify the aggregation type (sum, average, min, max, or count)." };
+          }
+          
+          const result = await this.actions.aggregateProperty(propertyName, aggregation, elementTypes, storeyName);
+          
+          if (!result.success) {
+            return { message: `I couldn't calculate the ${aggregation} of "${propertyName}".` };
+          }
+          
+          if (result.elementsWithProperty === 0) {
+            return { message: `No numeric values found for "${propertyName}". This property may not exist or may not contain numbers.` };
+          }
+          
+          // Format the result with proper aggregation label
+          const aggregationLabels: Record<string, string> = {
+            sum: 'Total',
+            average: 'Average',
+            min: 'Minimum',
+            max: 'Maximum',
+            count: 'Count'
+          };
+          
+          const label = aggregationLabels[aggregation] || aggregation;
+          const unit = result.unit || '';
+          const typeInfo = elementTypes ? ` for ${elementTypes.map(t => t.replace('IFC', '')).join(', ')}` : '';
+          const storeyInfo = storeyName ? ` on ${storeyName}` : '';
+          
+          return { 
+            message: `📐 **${label} ${propertyName}**${typeInfo}${storeyInfo}\n\n**${result.result.toLocaleString()}${unit ? ' ' + unit : ''}**\n\n_Based on ${result.elementsWithProperty} elements with this property_`
+          };
+        }
+        
+        case 'findElementsByProperty': {
+          const propertyName = args.propertyName as string;
+          const operator = args.operator as 'equals' | 'contains' | 'greaterThan' | 'lessThan' | 'notEquals';
+          const value = args.value as string;
+          const elementTypes = args.elementTypes as string[] | undefined;
+          
+          if (!propertyName || !operator || value === undefined) {
+            return { message: "Please specify the property name, comparison operator, and value to search for." };
+          }
+          
+          const result = await this.actions.findElementsByProperty(propertyName, operator, value, elementTypes);
+          
+          if (!result.success) {
+            return { message: `I couldn't search for elements with that criteria.` };
+          }
+          
+          if (result.count === 0) {
+            const typeInfo = elementTypes ? ` among ${elementTypes.map(t => t.replace('IFC', '')).join(', ')}` : '';
+            return { message: `No elements found where ${propertyName} ${operator} "${value}"${typeInfo}.` };
+          }
+          
+          // Highlight the matching elements
+          const highlighter = this.components.get(OBF.Highlighter);
+          if (highlighter) {
+            highlighter.clear('select');
+            const selection: Record<string, Set<number>> = {};
+            for (const [modelId, ids] of result.matchingElements) {
+              selection[modelId] = ids;
+            }
+            highlighter.highlightByID('select', selection);
+          }
+          
+          // Store selection in context for follow-up
+          this.context.setLastSelection(
+            elementTypes || ['filtered'],
+            result.count,
+            result.matchingElements
+          );
+          
+          const operatorLabels: Record<string, string> = {
+            equals: '=',
+            notEquals: '≠',
+            contains: 'contains',
+            greaterThan: '>',
+            lessThan: '<'
+          };
+          
+          return { 
+            message: `🔎 **Found ${result.count} element${result.count !== 1 ? 's' : ''}**\n\nCriteria: ${propertyName} ${operatorLabels[operator]} "${value}"\n\n_I've selected these elements in the view._`
+          };
+        }
+        
+        case 'getSelectedProperties': {
+          // Get the last selection from context
+          const lastSelection = this.context.getLastSelection();
+          
+          if (!lastSelection || lastSelection.count === 0) {
+            return { message: "No elements are currently selected. Please select some elements first." };
+          }
+          
+          const result = await this.actions.getSelectedElementProperties(lastSelection.ids);
+          
+          if (!result.success || result.elements.length === 0) {
+            return { message: "I couldn't retrieve properties for the selected elements." };
+          }
+          
+          // If only one element, show detailed properties
+          if (result.elements.length === 1) {
+            const elem = result.elements[0];
+            const propList = Object.entries(elem.properties)
+              .filter(([key]) => !key.startsWith('_') && !key.includes('.'))
+              .slice(0, 20)
+              .map(([key, value]) => `- **${key}:** ${value}`)
+              .join('\n');
+            
+            return { 
+              message: `📋 **${elem.name}** (${elem.type})\n\n${propList}${Object.keys(elem.properties).length > 20 ? '\n_...and more properties_' : ''}`
+            };
+          }
+          
+          // For multiple elements, show property summary
+          const topProperties = Object.entries(result.propertyStats)
+            .filter(([key]) => !key.startsWith('_') && !key.includes('.'))
+            .slice(0, 15)
+            .map(([key, stats]) => {
+              const uniqueCount = stats.values.length;
+              const sampleStr = stats.values.slice(0, 3).join(', ');
+              return `- **${key}:** ${uniqueCount} unique value${uniqueCount !== 1 ? 's' : ''} (${sampleStr}${stats.values.length > 3 ? '...' : ''})`;
+            })
+            .join('\n');
+          
+          return { 
+            message: `📋 **Properties of ${result.elements.length} Selected Elements**\n\n${topProperties}\n\n_${result.commonProperties.length} properties are common to all selected elements_`
+          };
+        }
+        
+        case 'listAvailableProperties': {
+          const elementTypes = args.elementTypes as string[] | undefined;
+          
+          console.log(`📝 listAvailableProperties called with types:`, elementTypes);
+          
+          const result = await this.actions.listAvailableProperties(elementTypes);
+          
+          if (!result.success || result.properties.length === 0) {
+            return { message: "I couldn't find any properties in the model." };
+          }
+          
+          const typeInfo = elementTypes ? ` for ${elementTypes.map(t => t.replace('IFC', '')).join(', ')}` : '';
+          
+          // Group into categories for better readability
+          const propList = result.properties.slice(0, 25).map(p => {
+            const samples = p.sampleValues.slice(0, 2).join(', ');
+            return `- **${p.name}** (${p.occurrences}x) - _e.g. ${samples}_`;
+          }).join('\n');
+          
+          return { 
+            message: `📝 **Available Properties${typeInfo}**\n\n${propList}${result.properties.length > 25 ? `\n\n_...and ${result.properties.length - 25} more properties_` : ''}\n\n_Sampled ${result.totalSampled} elements_`
           };
         }
         
@@ -1224,5 +1554,116 @@ export class AIAssistantModule {
       console.error('[Hybrid] Error executing detected action:', error);
       return null;
     }
+  }
+
+  /**
+   * Generate AI analysis for property query results
+   */
+  private generatePropertyAnalysis(
+    propertyName: string,
+    values: Array<{ value: string | number | boolean; count: number }>,
+    elementType: string,
+    totalElements: number
+  ): string {
+    const propLower = propertyName.toLowerCase();
+    const uniqueCount = values.length;
+    const topValue = values[0];
+    const topPercentage = Math.round((topValue.count / totalElements) * 100);
+    
+    // Build analysis based on property type
+    let analysis = '';
+    
+    if (propLower === 'material' || propLower.includes('material')) {
+      // Material-specific analysis
+      if (uniqueCount === 1) {
+        analysis = `All ${totalElements} ${elementType}s use the same material: **${topValue.value}**. This indicates a consistent material specification across the model.`;
+      } else {
+        const exteriorWalls = values.filter(v => 
+          String(v.value).toLowerCase().includes('exterior') || 
+          String(v.value).toLowerCase().includes('external')
+        );
+        const interiorWalls = values.filter(v => 
+          String(v.value).toLowerCase().includes('interior') || 
+          String(v.value).toLowerCase().includes('internal') ||
+          String(v.value).toLowerCase().includes('partition')
+        );
+        
+        if (exteriorWalls.length > 0 && interiorWalls.length > 0) {
+          const extCount = exteriorWalls.reduce((sum, v) => sum + v.count, 0);
+          const intCount = interiorWalls.reduce((sum, v) => sum + v.count, 0);
+          analysis = `The model has **${extCount} exterior ${elementType}${extCount !== 1 ? 's' : ''}** and **${intCount} interior ${elementType}${intCount !== 1 ? 's' : ''}**. `;
+          analysis += `The most common type is "${topValue.value}" (${topPercentage}% of all ${elementType}s).`;
+        } else {
+          analysis = `There are **${uniqueCount} different ${elementType} types** in the model. `;
+          analysis += `The most common is "${topValue.value}" with ${topValue.count} elements (${topPercentage}%).`;
+        }
+        
+        // Add insulation/stud info if detected
+        const insulatedWalls = values.filter(v => 
+          String(v.value).toLowerCase().includes('insul')
+        );
+        if (insulatedWalls.length > 0) {
+          const insulCount = insulatedWalls.reduce((sum, v) => sum + v.count, 0);
+          analysis += ` ${insulCount} ${elementType}${insulCount !== 1 ? 's are' : ' is'} insulated.`;
+        }
+      }
+    } else if (propLower === 'firerating' || propLower.includes('fire')) {
+      // Fire rating analysis
+      const ratedElements = values.filter(v => {
+        const val = String(v.value).toLowerCase();
+        return val !== 'none' && val !== 'n/a' && val !== '0' && val !== '';
+      });
+      
+      if (ratedElements.length === 0) {
+        analysis = `No ${elementType}s have fire ratings specified in this model.`;
+      } else {
+        const ratedCount = ratedElements.reduce((sum, v) => sum + v.count, 0);
+        analysis = `**${ratedCount} of ${totalElements} ${elementType}s** have fire ratings. `;
+        if (ratedElements.length > 1) {
+          analysis += `Ratings range from ${ratedElements[ratedElements.length - 1].value} to ${ratedElements[0].value}.`;
+        } else {
+          analysis += `All rated elements have a **${ratedElements[0].value}** rating.`;
+        }
+      }
+    } else if (propLower === 'loadbearing' || propLower.includes('load')) {
+      // Load bearing analysis
+      const loadBearing = values.find(v => String(v.value).toLowerCase() === 'true');
+      const nonLoadBearing = values.find(v => String(v.value).toLowerCase() === 'false');
+      
+      if (loadBearing && nonLoadBearing) {
+        analysis = `**${loadBearing.count} ${elementType}${loadBearing.count !== 1 ? 's are' : ' is'} load-bearing** and ${nonLoadBearing.count} ${nonLoadBearing.count !== 1 ? 'are' : 'is'} non-load-bearing. `;
+        const lbPercent = Math.round((loadBearing.count / totalElements) * 100);
+        analysis += `${lbPercent}% of ${elementType}s carry structural loads.`;
+      } else if (loadBearing) {
+        analysis = `All ${totalElements} ${elementType}s are **load-bearing structural elements**.`;
+      } else {
+        analysis = `All ${totalElements} ${elementType}s are **non-load-bearing** (partitions/infill).`;
+      }
+    } else if (propLower === 'isexternal' || propLower.includes('external')) {
+      // External/Internal analysis
+      const external = values.find(v => String(v.value).toLowerCase() === 'true');
+      const internal = values.find(v => String(v.value).toLowerCase() === 'false');
+      
+      if (external && internal) {
+        analysis = `**${external.count} external** and **${internal.count} internal** ${elementType}s. `;
+        const extPercent = Math.round((external.count / totalElements) * 100);
+        analysis += `${extPercent}% are part of the building envelope.`;
+      } else if (external) {
+        analysis = `All ${totalElements} ${elementType}s are **external** (part of building envelope).`;
+      } else {
+        analysis = `All ${totalElements} ${elementType}s are **internal**.`;
+      }
+    } else {
+      // Generic analysis
+      if (uniqueCount === 1) {
+        analysis = `All ${totalElements} ${elementType}s have the same ${propertyName}: **${topValue.value}**.`;
+      } else if (uniqueCount <= 3) {
+        analysis = `There are **${uniqueCount} different values** for ${propertyName}. The most common is "${topValue.value}" (${topPercentage}%).`;
+      } else {
+        analysis = `The model has **${uniqueCount} unique ${propertyName} values** across ${totalElements} ${elementType}s. "${topValue.value}" is most common (${topPercentage}%).`;
+      }
+    }
+    
+    return `💡 **Analysis:** ${analysis}`;
   }
 }

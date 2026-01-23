@@ -1,6 +1,7 @@
 import * as webllm from "@mlc-ai/web-llm";
 import type {
   BIMFunctionCall,
+  BIMBatchFunctionCall,
   BIMContext,
   InitProgress,
   ModelInfo,
@@ -136,9 +137,6 @@ export class WebLLMEngine {
             },
             {
               context_window_size: CONTEXT_WINDOW_SIZE,
-              // Use smaller prefill chunks for better UI responsiveness
-              // This breaks up the GPU work into smaller pieces
-              prefill_chunk_size: 256,
             }
           );
           this.useWorker = true;
@@ -191,8 +189,6 @@ export class WebLLMEngine {
       },
       {
         context_window_size: CONTEXT_WINDOW_SIZE,
-        // Use smaller prefill chunks for better UI responsiveness
-        prefill_chunk_size: 256,
       }
     );
   }
@@ -219,7 +215,7 @@ export class WebLLMEngine {
     userMessage: string,
     bimContext?: BIMContext,
     enableFunctionCalling: boolean = false
-  ): Promise<string | BIMFunctionCall> {
+  ): Promise<string | BIMFunctionCall | BIMBatchFunctionCall> {
     if (!this.isLoaded()) {
       throw new Error("WebLLM not initialized. Call initialize() first.");
     }
@@ -288,10 +284,11 @@ export class WebLLMEngine {
           });
 
           // Return batch result with confidence
-          return {
+          const batchResult: BIMBatchFunctionCall = {
             actions: parsed.actions,
             confidence: parsed.confidence
           };
+          return batchResult;
         }
       }
 
@@ -317,7 +314,7 @@ export class WebLLMEngine {
     onToken: (token: string) => void,
     bimContext?: BIMContext,
     enableFunctionCalling: boolean = false
-  ): Promise<string | BIMFunctionCall> {
+  ): Promise<string | BIMFunctionCall | BIMBatchFunctionCall> {
     if (!this.isLoaded()) {
       throw new Error("WebLLM not initialized. Call initialize() first.");
     }
@@ -401,10 +398,11 @@ export class WebLLMEngine {
           });
 
           // Return batch result with confidence
-          return {
+          const batchResult: BIMBatchFunctionCall = {
             actions: parsed.actions,
             confidence: parsed.confidence
           };
+          return batchResult;
         }
       }
       
@@ -752,9 +750,15 @@ export class WebLLMEngine {
       return { url };
     }
     
-    // Special handling for fetchWebPage: "url"
+    // Special handling for fetchWebPage: "url" or {url: "..."}
     if (functionName === 'fetchWebPage') {
-      const url = argsStr.replace(/['"`]/g, '').trim();
+      // Handle object notation like {url: "https://..."}
+      const urlMatch = argsStr.match(/url\s*[:=]\s*["']?([^"'\s}]+)["']?/i);
+      if (urlMatch) {
+        return { url: urlMatch[1].trim() };
+      }
+      // Handle plain string: "https://..."
+      const url = argsStr.replace(/['"`{}]/g, '').trim();
       return { url };
     }
     
@@ -764,8 +768,15 @@ export class WebLLMEngine {
       return { count };
     }
     
-    // Special handling for smartSearch: "url", "topic"
+    // Special handling for smartSearch: "url", "topic" or {url: "...", topic: "..."}
     if (functionName === 'smartSearch') {
+      // Handle object notation like {url: "...", topic: "..."}
+      const urlMatch = argsStr.match(/url\s*[:=]\s*["']?([^"'\s,}]+)["']?/i);
+      const topicMatch = argsStr.match(/topic\s*[:=]\s*["']?([^"'}]+)["']?/i);
+      if (urlMatch && topicMatch) {
+        return { url: urlMatch[1].trim(), topic: topicMatch[1].trim() };
+      }
+      // Handle positional arguments: "url", "topic"
       const parts = this.splitArguments(argsStr);
       if (parts.length >= 2) {
         const url = parts[0].replace(/['"`]/g, '').trim();
@@ -774,6 +785,107 @@ export class WebLLMEngine {
       } else if (parts.length === 1) {
         return { url: parts[0].replace(/['"`]/g, '').trim() };
       }
+    }
+    
+    // Special handling for queryPropertyValues: "propName", ["TYPE"]?, "storey"?
+    if (functionName === 'queryPropertyValues') {
+      const parts = this.splitArguments(argsStr);
+      const result: any = {};
+      
+      if (parts.length >= 1) {
+        result.propertyName = parts[0].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 2) {
+        try {
+          result.elementTypes = JSON.parse(parts[1]);
+        } catch {
+          const types = parts[1].match(/IFC\w+/gi);
+          if (types) result.elementTypes = types;
+        }
+      }
+      if (parts.length >= 3) {
+        result.storeyName = parts[2].replace(/['"`]/g, '').trim();
+      }
+      return result;
+    }
+    
+    // Special handling for aggregateProperty: "propName", "aggregation", ["TYPE"]?, "storey"?
+    if (functionName === 'aggregateProperty') {
+      const parts = this.splitArguments(argsStr);
+      const result: any = {};
+      
+      if (parts.length >= 1) {
+        result.propertyName = parts[0].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 2) {
+        result.aggregation = parts[1].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 3) {
+        try {
+          result.elementTypes = JSON.parse(parts[2]);
+        } catch {
+          const types = parts[2].match(/IFC\w+/gi);
+          if (types) result.elementTypes = types;
+          else result.storeyName = parts[2].replace(/['"`]/g, '').trim();
+        }
+      }
+      if (parts.length >= 4) {
+        result.storeyName = parts[3].replace(/['"`]/g, '').trim();
+      }
+      return result;
+    }
+    
+    // Special handling for findElementsByProperty: "propName", "operator", "value", ["TYPE"]?
+    if (functionName === 'findElementsByProperty') {
+      const parts = this.splitArguments(argsStr);
+      const result: any = {};
+      
+      if (parts.length >= 1) {
+        result.propertyName = parts[0].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 2) {
+        result.operator = parts[1].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 3) {
+        result.value = parts[2].replace(/['"`]/g, '').trim();
+      }
+      if (parts.length >= 4) {
+        try {
+          result.elementTypes = JSON.parse(parts[3]);
+        } catch {
+          const types = parts[3].match(/IFC\w+/gi);
+          if (types) result.elementTypes = types;
+        }
+      }
+      return result;
+    }
+    
+    // Special handling for listAvailableProperties: ["TYPE"]
+    if (functionName === 'listAvailableProperties') {
+      try {
+        const elementTypes = JSON.parse(argsStr);
+        if (Array.isArray(elementTypes)) {
+          return { elementTypes };
+        }
+      } catch {
+        const types = argsStr.match(/IFC\w+/gi);
+        if (types) return { elementTypes: types };
+      }
+      return {};
+    }
+    
+    // Special handling for getElementDistribution: ["TYPE"]
+    if (functionName === 'getElementDistribution') {
+      try {
+        const elementTypes = JSON.parse(argsStr);
+        if (Array.isArray(elementTypes)) {
+          return { elementTypes };
+        }
+      } catch {
+        const types = argsStr.match(/IFC\w+/gi);
+        if (types) return { elementTypes: types };
+      }
+      return {};
     }
     
     // Special handling for getSectionContent: [1, 2, 3]

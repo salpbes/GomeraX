@@ -19,7 +19,7 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
   {
     name: "selectElements",
     description:
-      "Select elements in the BIM model by type (e.g., walls, doors, windows, slabs, columns)",
+      "Select elements in the BIM model by type (e.g., walls, doors, windows, slabs, columns). Can also be used with 'them' to select previously counted/mentioned elements from context.",
     parameters: {
       type: "object",
       properties: {
@@ -27,22 +27,22 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "List of IFC element types to select (e.g., ['IFCWALL', 'IFCDOOR'])",
+            "List of IFC element types to select (e.g., ['IFCWALL', 'IFCDOOR']). Optional if referring to context (e.g., 'select them')",
         },
       },
-      required: ["elementTypes"],
+      required: [],
     },
   },
   {
     name: "hideElements",
-    description: "Hide elements in the BIM model by type",
+    description: "Hide elements in the BIM model by type. Can also be used with 'them' to hide previously mentioned elements from context.",
     parameters: {
       type: "object",
       properties: {
         elementTypes: {
           type: "array",
           items: { type: "string" },
-          description: "List of IFC element types to hide",
+          description: "List of IFC element types to hide. Optional if referring to context (e.g., 'hide them')",
         },
       },
       required: ["elementTypes"],
@@ -81,17 +81,17 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
   },
   {
     name: "isolateElements",
-    description: "Isolate specific elements (hide everything else)",
+    description: "Isolate specific elements (hide everything else). Can also be used with 'them' to isolate previously counted/mentioned elements from context.",
     parameters: {
       type: "object",
       properties: {
         elementTypes: {
           type: "array",
           items: { type: "string" },
-          description: "List of IFC element types to isolate",
+          description: "List of IFC element types to isolate. Optional if referring to context (e.g., 'isolate them')",
         },
       },
-      required: ["elementTypes"],
+      required: [],
     },
   },
   {
@@ -336,6 +336,21 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
       properties: {},
     },
   },
+  {
+    name: "getElementDistribution",
+    description: "Get distribution of elements by storey/floor. Shows how many elements of each type are on each floor. Use when user asks 'where are the windows', 'which floor has the most doors', 'where are they located', 'distribution by floor', 'elements per storey'.",
+    parameters: {
+      type: "object",
+      properties: {
+        elementTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "IFC element types to analyze distribution for (e.g., ['IFCWINDOW'])",
+        },
+      },
+      required: ["elementTypes"],
+    },
+  },
 
   // ============================================================================
   // FLOOR PLANS & STOREYS
@@ -469,6 +484,111 @@ export const BIM_FUNCTIONS: BIMFunctionDefinition[] = [
       required: ["url", "topic"],
     },
   },
+
+  // ============================================================================
+  // PROPERTY QUERIES
+  // ============================================================================
+  {
+    name: "queryPropertyValues",
+    description: "Query what values a specific property has across elements. Use when user asks 'what materials are the walls?', 'what are the fire ratings?', 'list all door types', 'what heights do columns have?'. Returns unique values with counts.",
+    parameters: {
+      type: "object",
+      properties: {
+        propertyName: {
+          type: "string",
+          description: "The name of the property to query (e.g., 'Material', 'FireRating', 'Height', 'LoadBearing', 'ObjectType')",
+        },
+        elementTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: Filter to specific IFC element types (e.g., ['IFCWALL', 'IFCDOOR'])",
+        },
+        storeyName: {
+          type: "string",
+          description: "Optional: Filter to a specific storey/floor (e.g., 'Level 1', 'Ground Floor')",
+        },
+      },
+      required: ["propertyName"],
+    },
+  },
+  {
+    name: "aggregateProperty",
+    description: "Calculate aggregate statistics for a numeric property. Use when user asks 'total area of slabs', 'average height of walls', 'maximum width', 'sum of volumes', 'count elements with property'.",
+    parameters: {
+      type: "object",
+      properties: {
+        propertyName: {
+          type: "string",
+          description: "The name of the numeric property to aggregate (e.g., 'Area', 'Volume', 'Height', 'Width', 'Length')",
+        },
+        aggregation: {
+          type: "string",
+          enum: ["sum", "average", "min", "max", "count"],
+          description: "Type of aggregation: sum, average, min, max, or count",
+        },
+        elementTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: Filter to specific IFC element types",
+        },
+        storeyName: {
+          type: "string",
+          description: "Optional: Filter to a specific storey/floor",
+        },
+      },
+      required: ["propertyName", "aggregation"],
+    },
+  },
+  {
+    name: "findElementsByProperty",
+    description: "Find and select elements that match a property criteria. Use when user asks 'find fire rated doors', 'select walls made of concrete', 'show load bearing columns', 'find elements taller than 3m'.",
+    parameters: {
+      type: "object",
+      properties: {
+        propertyName: {
+          type: "string",
+          description: "The name of the property to filter by",
+        },
+        operator: {
+          type: "string",
+          enum: ["equals", "contains", "greaterThan", "lessThan", "notEquals"],
+          description: "Comparison operator: equals, contains (for text), greaterThan, lessThan (for numbers), notEquals",
+        },
+        value: {
+          type: "string",
+          description: "The value to compare against (use string even for numbers)",
+        },
+        elementTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: Filter to specific IFC element types first",
+        },
+      },
+      required: ["propertyName", "operator", "value"],
+    },
+  },
+  {
+    name: "getSelectedProperties",
+    description: "Get detailed properties of currently selected elements. Use when user asks 'what are the properties of selected elements?', 'show me details of selection', 'what material is this?', 'properties of selected'.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "listAvailableProperties",
+    description: "List all available property names in the model. Use when user asks 'what properties exist?', 'list available properties', 'what data is in the model?', 'show property names'.",
+    parameters: {
+      type: "object",
+      properties: {
+        elementTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: Filter to specific IFC element types to see their properties",
+        },
+      },
+    },
+  },
 ];
 
 /**
@@ -484,6 +604,16 @@ export const IFC_TYPE_REFERENCE = {
   spaces: ["IFCSPACE", "IFCZONE"],
   coverings: ["IFCCOVERING", "IFCCEILING"],
   other: ["IFCBUILDINGELEMENTPROXY", "IFCPLATE", "IFCMEMBER", "IFCCURTAINWALL"],
+};
+
+/**
+ * Common IFC property names for AI reference
+ */
+export const COMMON_PROPERTIES = {
+  geometric: ["Height", "Width", "Length", "Area", "Volume", "Perimeter", "Thickness"],
+  identity: ["Name", "Description", "ObjectType", "Tag", "GlobalId"],
+  classification: ["Material", "FireRating", "LoadBearing", "IsExternal", "ThermalTransmittance"],
+  location: ["Level", "Storey", "Elevation", "Reference"],
 };
 
 /**

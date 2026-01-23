@@ -21,8 +21,8 @@ export class AIChatManager {
     // This ensures "1. item\n\n2. item" becomes "1. item\n2. item"
     html = html.replace(/^(\d+\.\s+.*)$\n\n(?=\d+\.\s+)/gm, '$1\n');
     
-    // Same for bullet lists
-    html = html.replace(/^([\-\*]\s+.*)$\n\n(?=[\-\*]\s+)/gm, '$1\n');
+    // Same for bullet lists (including • character)
+    html = html.replace(/^([\-\*•]\s+.*)$\n\n(?=[\-\*•]\s+)/gm, '$1\n');
 
     // Horizontal rules (---, ***,___)
     html = html.replace(/^[\-\*\_]{3,}$/gm, '<hr class="md-hr">');
@@ -45,8 +45,8 @@ export class AIChatManager {
     // Wrap consecutive <li class="md-numbered"> in <ol>
     html = html.replace(/((?:<li class="md-numbered">.*<\/li>\n?)+)/g, '<ol class="md-ol">$1</ol>');
 
-    // Bullet lists (- item or * item)
-    html = html.replace(/^[\-\*]\s+(.*)$/gm, '<li class="md-bullet">$1</li>');
+    // Bullet lists (- item, * item, or • item)
+    html = html.replace(/^[\-\*•]\s+(.*)$/gm, '<li class="md-bullet">$1</li>');
     // Wrap consecutive <li class="md-bullet"> in <ul>
     html = html.replace(/((?:<li class="md-bullet">.*<\/li>\n?)+)/g, '<ul class="md-ul">$1</ul>');
 
@@ -231,7 +231,7 @@ export class AIChatManager {
     
     msg.innerHTML = '<div class="action-badge"><i class="fas fa-robot"></i> Action Executed' + confidenceBadge + '</div>' +
       '<div class="action-content"><div class="action-icon"><i class="fas ' + icon + '"></i></div>' +
-      '<div class="action-text">' + description + '</div></div>';
+      '<div class="action-text message-content">' + this.renderMarkdown(description) + '</div></div>';
     
     this.dom.responseArea.appendChild(msg);
     this.dom.responseArea.scrollTop = this.dom.responseArea.scrollHeight;
@@ -253,11 +253,11 @@ export class AIChatManager {
         '<i class="fas ' + confidenceIcon + '"></i> ' + confidence + '%</span>';
     }
     
-    // Build actions list
+    // Build actions list with markdown rendering
     const actionsList = actions.map((action, i) => 
       '<div class="batch-action-item">' +
       '<span class="batch-number">' + (i + 1) + '/' + actions.length + '</span>' +
-      '<span class="batch-result">' + action.result + '</span></div>'
+      '<span class="batch-result message-content">' + this.renderMarkdown(action.result) + '</span></div>'
     ).join('');
     
     msg.innerHTML = '<div class="action-badge"><i class="fas fa-tasks"></i> Batch Actions Completed' + confidenceBadge + '</div>' +

@@ -588,7 +588,7 @@ export class AIBimActions {
 
     let totalCount = 0;
     for (const type of elementTypes) {
-      const count = await this.hideByType(type);
+      const count = await this.setVisibilityByType(type, false);
       totalCount += count;
     }
     return totalCount;
@@ -641,25 +641,31 @@ export class AIBimActions {
     // Clamp opacity between 0 and 1
     const clampedOpacity = Math.max(0, Math.min(1, opacity));
     
-    // Get all fragments for the types
+    // Get all elements of the specified types
     let totalCount = 0;
+    const transparencyData: Record<string, Set<number>> = {};
+    
     for (const type of elementTypes) {
       const idsByModel = await this.getIdsByType(type);
       
-      const fragments = this.components.get(OBC.FragmentsManager);
       for (const [modelId, ids] of idsByModel) {
-        const model = fragments.list.get(modelId);
-        if (model) {
-          // Set opacity for each fragment
-          for (const id of ids) {
-            const fragment = model.getFragmentByID(id);
-            if (fragment && fragment.mesh.material) {
-              const material = fragment.mesh.material as any;
-              material.transparent = clampedOpacity < 1;
-              material.opacity = clampedOpacity;
-              totalCount++;
-            }
-          }
+        if (!transparencyData[modelId]) {
+          transparencyData[modelId] = new Set();
+        }
+        ids.forEach(id => transparencyData[modelId].add(id));
+        totalCount += ids.size;
+      }
+    }
+    
+    // Note: Full transparency control requires custom shader/material handling
+    // For now, if opacity is 0, hide the elements; otherwise show them
+    if (totalCount > 0) {
+      const hider = this.components.get(OBC.Hider);
+      if (hider) {
+        if (clampedOpacity === 0) {
+          hider.set(false, transparencyData);
+        } else {
+          hider.set(true, transparencyData);
         }
       }
     }
@@ -670,6 +676,130 @@ export class AIBimActions {
   // ============================================================================
   // NEW FUNCTIONS: Measurement
   // ============================================================================
+
+  /**
+   * Get element distribution by storey
+   * Returns how many elements of each type are on each floor
+   */
+  public async getElementDistribution(
+    elementTypes: string[]
+  ): Promise<{
+    success: boolean;
+    distribution: Array<{
+      storeyName: string;
+      counts: Record<string, number>;
+      total: number;
+    }>;
+    totalElements: number;
+    storeys: string[];
+  }> {
+    console.log(`📊 Getting element distribution for types:`, elementTypes);
+
+    try {
+      // Get all storeys
+      const storeyMap = new Map<string, { name: string; localId: number; counts: Record<string, number> }>();
+      
+      // First, get storey information
+      for (const [modelId, model] of this.fragments.list) {
+        try {
+          const storeyRegex = /^IFCBUILDINGSTOREY$/i;
+          const storeyItems = await (model as any).getItemsOfCategories([storeyRegex]);
+          
+          for (const category in storeyItems) {
+            const storeyIds = storeyItems[category];
+            for (const storeyId of storeyIds) {
+              const storeyData = await (model as any).getItemsData([storeyId], {
+                attributesDefault: true,
+                relations: {},
+              });
+              
+              if (storeyData && storeyData[0]) {
+                const name = storeyData[0].Name?.value || `Storey ${storeyId}`;
+                storeyMap.set(`${modelId}-${storeyId}`, {
+                  name,
+                  localId: storeyId,
+                  counts: {}
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(`Error getting storeys for model ${modelId}`, e);
+        }
+      }
+
+      // Now count elements by storey for each type
+      let totalElements = 0;
+      
+      for (const type of elementTypes) {
+        const idsByModel = await this.getIdsByType(type);
+        
+        for (const [modelId, ids] of idsByModel) {
+          const model = this.fragments.list.get(modelId);
+          if (!model) continue;
+          
+          const idArray = Array.from(ids);
+          totalElements += idArray.length;
+          
+          try {
+            const itemsData = await (model as any).getItemsData(idArray, {
+              attributesDefault: false,
+              attributes: [],
+              relations: {
+                ContainedInStructure: { attributes: true, relations: false },
+              },
+            });
+            
+            for (let i = 0; i < itemsData.length; i++) {
+              const data = itemsData[i];
+              if (data?.ContainedInStructure && Array.isArray(data.ContainedInStructure)) {
+                for (const rel of data.ContainedInStructure) {
+                  const storeyLocalId = rel._localId?.value || rel.localId;
+                  const storeyKey = `${modelId}-${storeyLocalId}`;
+                  
+                  if (storeyMap.has(storeyKey)) {
+                    const storey = storeyMap.get(storeyKey)!;
+                    storey.counts[type] = (storey.counts[type] || 0) + 1;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`Error getting containment for type ${type}`, e);
+          }
+        }
+      }
+
+      // Convert to output format
+      const distribution = Array.from(storeyMap.values())
+        .filter(s => Object.keys(s.counts).length > 0)
+        .map(s => ({
+          storeyName: s.name,
+          counts: s.counts,
+          total: Object.values(s.counts).reduce((sum, c) => sum + c, 0)
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      const storeys = distribution.map(d => d.storeyName);
+
+      console.log(`✅ Found elements on ${distribution.length} storeys`);
+
+      return {
+        success: true,
+        distribution,
+        totalElements,
+        storeys
+      };
+    } catch (error) {
+      console.error('❌ Error getting element distribution:', error);
+      return {
+        success: false,
+        distribution: [],
+        totalElements: 0,
+        storeys: []
+      };
+    }
+  }
 
   /**
    * Enable measurement mode
@@ -1622,5 +1752,928 @@ export class AIBimActions {
         allHeaders: []
       };
     }
+  }
+
+  // ============================================================================
+  // CONTEXTUAL PROPERTY QUERIES
+  // ============================================================================
+
+  /**
+   * Get properties for a set of elements
+   * Returns a flat object with all properties for each element
+   */
+  public async getPropertiesForElements(
+    idsByModel: Map<string, Set<number>>
+  ): Promise<Array<{ expressID: number; modelId: string; properties: Record<string, any> }>> {
+    const results: Array<{ expressID: number; modelId: string; properties: Record<string, any> }> = [];
+    const BATCH_SIZE = 50;
+
+    for (const [modelId, ids] of idsByModel) {
+      const model = this.fragments.list.get(modelId);
+      if (!model || typeof (model as any).getItemsData !== 'function') continue;
+
+      const idArray = Array.from(ids);
+      
+      for (let i = 0; i < idArray.length; i += BATCH_SIZE) {
+        const batchIds = idArray.slice(i, i + BATCH_SIZE);
+        
+        try {
+          const ifcDataArray = await (model as any).getItemsData(batchIds, {
+            attributesDefault: true,
+            relations: {
+              IsDefinedBy: { attributes: true, relations: true },
+              HasAssociations: { attributes: true, relations: true },
+            },
+          });
+
+          for (let j = 0; j < ifcDataArray.length; j++) {
+            const ifcData = ifcDataArray[j];
+            if (!ifcData) continue;
+
+            const properties: Record<string, any> = {};
+            
+            // Extract direct attributes
+            for (const [key, value] of Object.entries(ifcData)) {
+              if (key.startsWith('_') || key === 'IsDefinedBy' || key === 'HasAssociations') continue;
+              if (Array.isArray(value)) continue;
+              if (typeof value === 'object' && value !== null) {
+                const attr = value as any;
+                if ('value' in attr && attr.value !== undefined && attr.value !== null) {
+                  properties[key] = attr.value;
+                }
+              } else if (value !== undefined && value !== null) {
+                properties[key] = value;
+              }
+            }
+
+            // Extract property sets from IsDefinedBy
+            if (ifcData.IsDefinedBy && Array.isArray(ifcData.IsDefinedBy)) {
+              for (const pset of ifcData.IsDefinedBy) {
+                const psetName = pset.Name?.value || 'Unknown';
+                if (pset.HasProperties && Array.isArray(pset.HasProperties)) {
+                  for (const prop of pset.HasProperties) {
+                    const propName = prop.Name?.value;
+                    const propValue = prop.NominalValue?.value;
+                    if (propName && propValue !== undefined && propValue !== null) {
+                      // Store with both short name and full path
+                      properties[propName] = propValue;
+                      properties[`${psetName}.${propName}`] = propValue;
+                    }
+                  }
+                }
+                // Also handle quantity sets
+                if (pset.Quantities && Array.isArray(pset.Quantities)) {
+                  for (const qty of pset.Quantities) {
+                    const qtyName = qty.Name?.value;
+                    // Quantities can have different value types
+                    const qtyValue = qty.AreaValue?.value ?? qty.LengthValue?.value ?? 
+                                     qty.VolumeValue?.value ?? qty.WeightValue?.value ?? 
+                                     qty.CountValue?.value ?? qty.TimeValue?.value;
+                    if (qtyName && qtyValue !== undefined && qtyValue !== null) {
+                      properties[qtyName] = qtyValue;
+                      properties[`${psetName}.${qtyName}`] = qtyValue;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Extract materials from HasAssociations
+            if (ifcData.HasAssociations && Array.isArray(ifcData.HasAssociations)) {
+              for (const assoc of ifcData.HasAssociations) {
+                // Check for material associations
+                if (assoc.RelatingMaterial) {
+                  const material = assoc.RelatingMaterial;
+                  
+                  // Single material
+                  if (material.Name?.value) {
+                    properties['Material'] = material.Name.value;
+                  }
+                  
+                  // Material layer set
+                  if (material.MaterialLayers && Array.isArray(material.MaterialLayers)) {
+                    const layerNames = material.MaterialLayers
+                      .map((layer: any) => layer.Material?.Name?.value)
+                      .filter(Boolean);
+                    if (layerNames.length > 0) {
+                      properties['Material'] = layerNames.join(', ');
+                      properties['MaterialLayers'] = layerNames;
+                    }
+                  }
+                  
+                  // Material constituent set
+                  if (material.MaterialConstituents && Array.isArray(material.MaterialConstituents)) {
+                    const constituentNames = material.MaterialConstituents
+                      .map((c: any) => c.Material?.Name?.value)
+                      .filter(Boolean);
+                    if (constituentNames.length > 0) {
+                      properties['Material'] = constituentNames.join(', ');
+                      properties['MaterialConstituents'] = constituentNames;
+                    }
+                  }
+
+                  // Material profile set
+                  if (material.MaterialProfiles && Array.isArray(material.MaterialProfiles)) {
+                    const profileNames = material.MaterialProfiles
+                      .map((p: any) => p.Material?.Name?.value)
+                      .filter(Boolean);
+                    if (profileNames.length > 0) {
+                      properties['Material'] = profileNames.join(', ');
+                      properties['MaterialProfiles'] = profileNames;
+                    }
+                  }
+                }
+                
+                // Check for classification associations
+                if (assoc.RelatingClassification) {
+                  const classification = assoc.RelatingClassification;
+                  if (classification.Name?.value) {
+                    properties['Classification'] = classification.Name.value;
+                  }
+                  if (classification.ItemReference?.value) {
+                    properties['ClassificationCode'] = classification.ItemReference.value;
+                  }
+                }
+              }
+            }
+
+            results.push({
+              expressID: batchIds[j],
+              modelId,
+              properties
+            });
+          }
+        } catch (error) {
+          console.warn(`Error fetching properties for batch:`, error);
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Query property values from elements
+   * Returns unique values with counts
+   */
+  public async queryPropertyValues(
+    propertyName: string,
+    elementTypes?: string[],
+    storeyName?: string
+  ): Promise<{
+    success: boolean;
+    propertyName: string;
+    values: Array<{ value: string | number | boolean; count: number }>;
+    totalElements: number;
+    elementsWithProperty: number;
+    uniqueValues: number;
+  }> {
+    console.log(`🔍 Querying property "${propertyName}" for types: ${elementTypes?.join(', ') || 'all'}`);
+
+    try {
+      // Get element IDs based on filters
+      let idsByModel: Map<string, Set<number>>;
+      
+      if (elementTypes && elementTypes.length > 0) {
+        idsByModel = new Map();
+        for (const type of elementTypes) {
+          const typeIds = await this.getIdsByType(type);
+          for (const [modelId, ids] of typeIds) {
+            if (!idsByModel.has(modelId)) {
+              idsByModel.set(modelId, new Set());
+            }
+            ids.forEach(id => idsByModel.get(modelId)!.add(id));
+          }
+        }
+      } else {
+        // Get all elements
+        idsByModel = await this.getAllElementIds();
+      }
+
+      // If storey filter is specified, further filter by storey
+      if (storeyName) {
+        idsByModel = await this.filterIdsByStorey(idsByModel, storeyName);
+      }
+
+      // Get properties for all matching elements
+      const elements = await this.getPropertiesForElements(idsByModel);
+      
+      // Debug: Log first element's properties
+      if (elements.length > 0) {
+        console.log(`📋 Sample element properties:`, Object.keys(elements[0].properties));
+        console.log(`📋 Sample values:`, elements[0].properties);
+      }
+      
+      // Aggregate property values
+      const valueCounts = new Map<string, number>();
+      let elementsWithProperty = 0;
+      const propertyNameLower = propertyName.toLowerCase();
+      
+      // Define fallback properties for common queries
+      const fallbackProperties: Record<string, string[]> = {
+        'material': ['ObjectType', 'Classification Description', 'Constituents', 'Finish'],
+        'type': ['ObjectType', 'Name', 'Reference'],
+        'classification': ['Classification Description', 'Classification Code'],
+        'classificationcode': ['Classification Code'],
+        'classificationdescription': ['Classification Description'],
+      };
+      
+      // Check if this is a placeholder value (value equals property name or is generic)
+      const isPlaceholderValue = (key: string, value: any): boolean => {
+        if (value === undefined || value === null) return true;
+        const valueStr = String(value).toLowerCase().trim();
+        const keyLower = key.toLowerCase();
+        const keyLastPart = keyLower.split('.').pop() || keyLower;
+        // Common placeholder patterns
+        if (valueStr === keyLower) return true;
+        if (valueStr === keyLastPart) return true;
+        if (valueStr === '' || valueStr === 'n/a' || valueStr === 'none' || valueStr === 'undefined') return true;
+        return false;
+      };
+
+      for (const element of elements) {
+        let foundValue: any = undefined;
+        let foundKey: string | undefined = undefined;
+        
+        // Use flexible property matching
+        foundValue = this.findPropertyValue(element.properties, propertyName);
+        
+        // Find the key that matched (for placeholder detection)
+        if (foundValue !== undefined) {
+          for (const [key, value] of Object.entries(element.properties)) {
+            if (value === foundValue) {
+              foundKey = key;
+              break;
+            }
+          }
+        }
+        
+        // Check if it's a placeholder value
+        if (foundKey && isPlaceholderValue(foundKey, foundValue)) {
+          foundValue = undefined;
+        }
+        
+        // If not found or placeholder, try fallback properties
+        if (foundValue === undefined && fallbackProperties[propertyNameLower]) {
+          for (const fallbackProp of fallbackProperties[propertyNameLower]) {
+            const value = element.properties[fallbackProp];
+            if (value && !isPlaceholderValue(fallbackProp, value)) {
+              // For ObjectType, extract the meaningful part (wall type name)
+              if (fallbackProp === 'ObjectType' || fallbackProp === 'Name') {
+                // Format: "Basic Wall:Interior - Partition (92mm Stud):128360"
+                // Extract: "Interior - Partition (92mm Stud)"
+                const parts = String(value).split(':');
+                if (parts.length >= 2) {
+                  foundValue = parts.slice(1, -1).join(':').trim() || parts[1].trim();
+                } else {
+                  foundValue = value;
+                }
+              } else {
+                foundValue = value;
+              }
+              break;
+            }
+          }
+        }
+
+        if (foundValue !== undefined && foundValue !== null) {
+          elementsWithProperty++;
+          const valueStr = String(foundValue);
+          valueCounts.set(valueStr, (valueCounts.get(valueStr) || 0) + 1);
+        }
+      }
+
+      // Convert to array and sort by count
+      const values = Array.from(valueCounts.entries())
+        .map(([value, count]) => ({
+          value: this.parsePropertyValue(value),
+          count
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      console.log(`✅ Found ${values.length} unique values for "${propertyName}"`);
+
+      return {
+        success: true,
+        propertyName,
+        values,
+        totalElements: elements.length,
+        elementsWithProperty,
+        uniqueValues: values.length
+      };
+    } catch (error) {
+      console.error('❌ Error querying property values:', error);
+      return {
+        success: false,
+        propertyName,
+        values: [],
+        totalElements: 0,
+        elementsWithProperty: 0,
+        uniqueValues: 0
+      };
+    }
+  }
+
+  /**
+   * Aggregate a numeric property (sum, average, min, max, count)
+   */
+  public async aggregateProperty(
+    propertyName: string,
+    aggregation: 'sum' | 'average' | 'min' | 'max' | 'count',
+    elementTypes?: string[],
+    storeyName?: string
+  ): Promise<{
+    success: boolean;
+    propertyName: string;
+    aggregation: string;
+    result: number;
+    unit?: string;
+    elementCount: number;
+    elementsWithProperty: number;
+  }> {
+    console.log(`📊 Aggregating "${propertyName}" with ${aggregation}`);
+
+    try {
+      // Get element IDs based on filters
+      let idsByModel: Map<string, Set<number>>;
+      
+      if (elementTypes && elementTypes.length > 0) {
+        idsByModel = new Map();
+        for (const type of elementTypes) {
+          const typeIds = await this.getIdsByType(type);
+          for (const [modelId, ids] of typeIds) {
+            if (!idsByModel.has(modelId)) {
+              idsByModel.set(modelId, new Set());
+            }
+            ids.forEach(id => idsByModel.get(modelId)!.add(id));
+          }
+        }
+      } else {
+        idsByModel = await this.getAllElementIds();
+      }
+
+      if (storeyName) {
+        idsByModel = await this.filterIdsByStorey(idsByModel, storeyName);
+      }
+
+      const elements = await this.getPropertiesForElements(idsByModel);
+      const propertyNameLower = propertyName.toLowerCase();
+      const numericValues: number[] = [];
+
+      for (const element of elements) {
+        for (const [key, value] of Object.entries(element.properties)) {
+          if (key.toLowerCase() === propertyNameLower || 
+              key.toLowerCase().includes(propertyNameLower)) {
+            const numValue = parseFloat(String(value));
+            if (!isNaN(numValue)) {
+              numericValues.push(numValue);
+              break;
+            }
+          }
+        }
+      }
+
+      let result: number;
+      switch (aggregation) {
+        case 'sum':
+          result = numericValues.reduce((a, b) => a + b, 0);
+          break;
+        case 'average':
+          result = numericValues.length > 0 
+            ? numericValues.reduce((a, b) => a + b, 0) / numericValues.length 
+            : 0;
+          break;
+        case 'min':
+          result = numericValues.length > 0 ? Math.min(...numericValues) : 0;
+          break;
+        case 'max':
+          result = numericValues.length > 0 ? Math.max(...numericValues) : 0;
+          break;
+        case 'count':
+          result = numericValues.length;
+          break;
+        default:
+          result = 0;
+      }
+
+      // Detect unit from property name
+      const unit = this.detectUnit(propertyName);
+
+      console.log(`✅ ${aggregation} of "${propertyName}": ${result}${unit ? ' ' + unit : ''}`);
+
+      return {
+        success: true,
+        propertyName,
+        aggregation,
+        result: Math.round(result * 100) / 100,
+        unit,
+        elementCount: elements.length,
+        elementsWithProperty: numericValues.length
+      };
+    } catch (error) {
+      console.error('❌ Error aggregating property:', error);
+      return {
+        success: false,
+        propertyName,
+        aggregation,
+        result: 0,
+        elementCount: 0,
+        elementsWithProperty: 0
+      };
+    }
+  }
+
+  /**
+   * Find elements by property value
+   * Returns element IDs matching the criteria
+   */
+  public async findElementsByProperty(
+    propertyName: string,
+    operator: 'equals' | 'contains' | 'greaterThan' | 'lessThan' | 'notEquals',
+    value: string | number,
+    elementTypes?: string[]
+  ): Promise<{
+    success: boolean;
+    matchingElements: Map<string, Set<number>>;
+    count: number;
+    propertyName: string;
+    criteria: string;
+  }> {
+    console.log(`🔎 Finding elements where "${propertyName}" ${operator} "${value}"`);
+
+    try {
+      let idsByModel: Map<string, Set<number>>;
+      
+      if (elementTypes && elementTypes.length > 0) {
+        idsByModel = new Map();
+        for (const type of elementTypes) {
+          const typeIds = await this.getIdsByType(type);
+          for (const [modelId, ids] of typeIds) {
+            if (!idsByModel.has(modelId)) {
+              idsByModel.set(modelId, new Set());
+            }
+            ids.forEach(id => idsByModel.get(modelId)!.add(id));
+          }
+        }
+      } else {
+        idsByModel = await this.getAllElementIds();
+      }
+
+      const elements = await this.getPropertiesForElements(idsByModel);
+      const matchingElements = new Map<string, Set<number>>();
+
+      for (const element of elements) {
+        let foundValue: any = undefined;
+        
+        // Use flexible property matching
+        foundValue = this.findPropertyValue(element.properties, propertyName);
+
+        if (foundValue === undefined) continue;
+
+        let matches = false;
+        const numericValue = typeof value === 'number' ? value : parseFloat(String(value));
+        const numericPropValue = parseFloat(String(foundValue));
+        const valueStr = String(value).toLowerCase().trim();
+        const propValueStr = String(foundValue).toLowerCase().trim();
+
+        switch (operator) {
+          case 'equals':
+            // Handle booleans specially
+            if (typeof foundValue === 'boolean') {
+              matches = (valueStr === 'true' && foundValue === true) || 
+                       (valueStr === 'false' && foundValue === false);
+            } else {
+              matches = propValueStr === valueStr;
+            }
+            break;
+          case 'notEquals':
+            if (typeof foundValue === 'boolean') {
+              matches = (valueStr === 'true' && foundValue === false) || 
+                       (valueStr === 'false' && foundValue === true);
+            } else {
+              matches = propValueStr !== valueStr;
+            }
+            break;
+          case 'contains':
+            matches = propValueStr.includes(valueStr);
+            break;
+          case 'greaterThan':
+            matches = !isNaN(numericPropValue) && !isNaN(numericValue) && numericPropValue > numericValue;
+            break;
+          case 'lessThan':
+            matches = !isNaN(numericPropValue) && !isNaN(numericValue) && numericPropValue < numericValue;
+            break;
+        }
+
+        if (matches) {
+          if (!matchingElements.has(element.modelId)) {
+            matchingElements.set(element.modelId, new Set());
+          }
+          matchingElements.get(element.modelId)!.add(element.expressID);
+        }
+      }
+
+      let count = 0;
+      matchingElements.forEach(ids => count += ids.size);
+
+      console.log(`✅ Found ${count} elements matching criteria`);
+
+      return {
+        success: true,
+        matchingElements,
+        count,
+        propertyName,
+        criteria: `${propertyName} ${operator} ${value}`
+      };
+    } catch (error) {
+      console.error('❌ Error finding elements by property:', error);
+      return {
+        success: false,
+        matchingElements: new Map(),
+        count: 0,
+        propertyName,
+        criteria: `${propertyName} ${operator} ${value}`
+      };
+    }
+  }
+
+  /**
+   * Get properties for currently selected elements
+   */
+  public async getSelectedElementProperties(
+    selectedIds: Map<string, Set<number>>
+  ): Promise<{
+    success: boolean;
+    elements: Array<{
+      expressID: number;
+      modelId: string;
+      type: string;
+      name: string;
+      properties: Record<string, any>;
+    }>;
+    commonProperties: string[];
+    propertyStats: Record<string, { values: string[]; count: number }>;
+  }> {
+    console.log(`📋 Getting properties for selected elements`);
+
+    try {
+      const elements = await this.getPropertiesForElements(selectedIds);
+      
+      // Build property statistics
+      const propertyStats: Record<string, { values: Set<string>; count: number }> = {};
+      const formattedElements: Array<{
+        expressID: number;
+        modelId: string;
+        type: string;
+        name: string;
+        properties: Record<string, any>;
+      }> = [];
+
+      for (const element of elements) {
+        formattedElements.push({
+          expressID: element.expressID,
+          modelId: element.modelId,
+          type: element.properties.type || element.properties.ObjectType || 'Unknown',
+          name: element.properties.Name || element.properties.name || `Element ${element.expressID}`,
+          properties: element.properties
+        });
+
+        for (const [key, value] of Object.entries(element.properties)) {
+          if (!propertyStats[key]) {
+            propertyStats[key] = { values: new Set(), count: 0 };
+          }
+          propertyStats[key].values.add(String(value));
+          propertyStats[key].count++;
+        }
+      }
+
+      // Find common properties (present in all elements)
+      const commonProperties = Object.entries(propertyStats)
+        .filter(([_, stats]) => stats.count === elements.length)
+        .map(([key]) => key);
+
+      // Convert sets to arrays for output
+      const finalStats: Record<string, { values: string[]; count: number }> = {};
+      for (const [key, stats] of Object.entries(propertyStats)) {
+        finalStats[key] = {
+          values: Array.from(stats.values).slice(0, 10), // Limit to 10 unique values
+          count: stats.count
+        };
+      }
+
+      console.log(`✅ Got properties for ${elements.length} elements`);
+
+      return {
+        success: true,
+        elements: formattedElements,
+        commonProperties,
+        propertyStats: finalStats
+      };
+    } catch (error) {
+      console.error('❌ Error getting selected properties:', error);
+      return {
+        success: false,
+        elements: [],
+        commonProperties: [],
+        propertyStats: {}
+      };
+    }
+  }
+
+  /**
+   * List available properties in the model
+   */
+  public async listAvailableProperties(
+    elementTypes?: string[],
+    sampleSize: number = 100
+  ): Promise<{
+    success: boolean;
+    properties: Array<{ name: string; occurrences: number; sampleValues: string[] }>;
+    totalSampled: number;
+  }> {
+    console.log(`📝 Listing available properties`);
+
+    try {
+      let idsByModel: Map<string, Set<number>>;
+      
+      if (elementTypes && elementTypes.length > 0) {
+        idsByModel = new Map();
+        for (const type of elementTypes) {
+          const typeIds = await this.getIdsByType(type);
+          for (const [modelId, ids] of typeIds) {
+            if (!idsByModel.has(modelId)) {
+              idsByModel.set(modelId, new Set());
+            }
+            // Take a sample
+            let count = 0;
+            for (const id of ids) {
+              if (count >= sampleSize / elementTypes.length) break;
+              idsByModel.get(modelId)!.add(id);
+              count++;
+            }
+          }
+        }
+      } else {
+        // Sample from all elements
+        idsByModel = new Map();
+        let totalCount = 0;
+        for (const [modelId, model] of this.fragments.list) {
+          if (totalCount >= sampleSize) break;
+          try {
+            const categories = await (model as any).getCategories();
+            for (const cat of categories) {
+              if (totalCount >= sampleSize) break;
+              const items = await (model as any).getItemsOfCategories([new RegExp(`^${cat}$`)]);
+              for (const category in items) {
+                const ids = items[category] as number[];
+                if (!ids) continue;
+                if (!idsByModel.has(modelId)) {
+                  idsByModel.set(modelId, new Set());
+                }
+                for (const id of ids) {
+                  if (totalCount >= sampleSize) break;
+                  idsByModel.get(modelId)!.add(id);
+                  totalCount++;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      const elements = await this.getPropertiesForElements(idsByModel);
+      const propertyInfo: Map<string, { count: number; values: Set<string> }> = new Map();
+
+      for (const element of elements) {
+        for (const [key, value] of Object.entries(element.properties)) {
+          // Skip internal properties
+          if (key.startsWith('_') || key === 'type') continue;
+          
+          if (!propertyInfo.has(key)) {
+            propertyInfo.set(key, { count: 0, values: new Set() });
+          }
+          const info = propertyInfo.get(key)!;
+          info.count++;
+          if (info.values.size < 5) {
+            info.values.add(String(value).substring(0, 50));
+          }
+        }
+      }
+
+      const properties = Array.from(propertyInfo.entries())
+        .map(([name, info]) => ({
+          name,
+          occurrences: info.count,
+          sampleValues: Array.from(info.values)
+        }))
+        .sort((a, b) => b.occurrences - a.occurrences);
+
+      console.log(`✅ Found ${properties.length} properties`);
+
+      return {
+        success: true,
+        properties,
+        totalSampled: elements.length
+      };
+    } catch (error) {
+      console.error('❌ Error listing properties:', error);
+      return {
+        success: false,
+        properties: [],
+        totalSampled: 0
+      };
+    }
+  }
+
+  // ============================================================================
+  // HELPER METHODS FOR PROPERTY QUERIES
+  // ============================================================================
+
+  /**
+   * Get all element IDs from all models
+   */
+  private async getAllElementIds(): Promise<Map<string, Set<number>>> {
+    const result = new Map<string, Set<number>>();
+
+    for (const [modelId, model] of this.fragments.list) {
+      try {
+        const categories = await (model as any).getCategories();
+        const spatialCategories = ['IFCPROJECT', 'IFCSITE', 'IFCBUILDING', 'IFCBUILDINGSTOREY', 'IFCSPACE'];
+        const elementCategories = categories.filter((cat: string) => !spatialCategories.includes(cat));
+        
+        if (elementCategories.length === 0) continue;
+
+        const categoryRegexes = elementCategories.map((cat: string) => new RegExp(`^${cat}$`));
+        const itemsByCategory = await (model as any).getItemsOfCategories(categoryRegexes);
+
+        const modelIds = new Set<number>();
+        for (const category in itemsByCategory) {
+          const ids = itemsByCategory[category] as number[];
+          if (ids) {
+            ids.forEach(id => modelIds.add(id));
+          }
+        }
+
+        if (modelIds.size > 0) {
+          result.set(modelId, modelIds);
+        }
+      } catch (e) {
+        console.warn(`Error getting all element IDs for model ${modelId}`, e);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Filter element IDs by storey containment
+   */
+  private async filterIdsByStorey(
+    idsByModel: Map<string, Set<number>>,
+    storeyName: string
+  ): Promise<Map<string, Set<number>>> {
+    const result = new Map<string, Set<number>>();
+
+    for (const [modelId, ids] of idsByModel) {
+      const model = this.fragments.list.get(modelId);
+      if (!model) continue;
+
+      try {
+        // Get storey local ID
+        const storeyItems = await (model as any).getItemsOfCategories([/BUILDINGSTOREY/]);
+        const categoryKey = Object.keys(storeyItems).find(key => key.includes('BUILDINGSTOREY'));
+        if (!categoryKey) continue;
+
+        const storeyIds = storeyItems[categoryKey];
+        const storeyData = await (model as any).getItemsData(storeyIds, {
+          attributesDefault: false,
+          attributes: ['Name', 'LongName']
+        });
+
+        let storeyLocalId: number | null = null;
+        for (let i = 0; i < storeyData.length; i++) {
+          const nameAttr = storeyData[i].Name as any;
+          const longNameAttr = storeyData[i].LongName as any;
+          const name = nameAttr?.value || longNameAttr?.value || '';
+          if (name.toLowerCase().includes(storeyName.toLowerCase())) {
+            storeyLocalId = storeyIds[i];
+            break;
+          }
+        }
+
+        if (!storeyLocalId) continue;
+
+        // Check containment for each element
+        const idArray = Array.from(ids);
+        const itemsData = await (model as any).getItemsData(idArray, {
+          attributesDefault: false,
+          attributes: [],
+          relations: {
+            ContainedInStructure: { attributes: false, relations: false },
+          },
+        });
+
+        const filteredIds = new Set<number>();
+        for (let i = 0; i < itemsData.length; i++) {
+          const data = itemsData[i];
+          if (data.ContainedInStructure && Array.isArray(data.ContainedInStructure)) {
+            const isInStorey = data.ContainedInStructure.some((rel: any) => {
+              const relLocalId = rel._localId?.value || rel.localId;
+              return relLocalId === storeyLocalId;
+            });
+            if (isInStorey) {
+              filteredIds.add(idArray[i]);
+            }
+          }
+        }
+
+        if (filteredIds.size > 0) {
+          result.set(modelId, filteredIds);
+        }
+      } catch (e) {
+        console.warn(`Error filtering by storey for model ${modelId}`, e);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse property value to appropriate type
+   */
+  private parsePropertyValue(value: string): string | number | boolean {
+    // Try boolean
+    if (value.toLowerCase() === 'true') return true;
+    if (value.toLowerCase() === 'false') return false;
+    
+    // Try number
+    const num = parseFloat(value);
+    if (!isNaN(num) && isFinite(num)) return num;
+    
+    return value;
+  }
+
+  /**
+   * Detect unit from property name
+   */
+  private detectUnit(propertyName: string): string | undefined {
+    const lowerName = propertyName.toLowerCase();
+    
+    if (lowerName.includes('area')) return 'm²';
+    if (lowerName.includes('volume')) return 'm³';
+    if (lowerName.includes('length') || lowerName.includes('height') || lowerName.includes('width') || lowerName.includes('depth')) return 'm';
+    if (lowerName.includes('angle')) return '°';
+    if (lowerName.includes('weight') || lowerName.includes('mass')) return 'kg';
+    if (lowerName.includes('temperature')) return '°C';
+    
+    return undefined;
+  }
+
+  /**
+   * Normalize a property name for matching
+   * Removes spaces, underscores, dots and converts to lowercase
+   */
+  private normalizePropertyName(name: string): string {
+    return name.toLowerCase().replace(/[\s_\.]/g, '');
+  }
+
+  /**
+   * Find a property value with flexible name matching
+   * Handles spaces, underscores, case differences, and PSet prefixes
+   */
+  private findPropertyValue(properties: Record<string, any>, searchName: string): any {
+    const normalizedSearch = this.normalizePropertyName(searchName);
+    
+    // Priority 1: Exact match (case-insensitive)
+    for (const [key, value] of Object.entries(properties)) {
+      if (key.toLowerCase() === searchName.toLowerCase()) {
+        return value;
+      }
+    }
+    
+    // Priority 2: Normalized match (ignoring spaces, underscores, etc.)
+    for (const [key, value] of Object.entries(properties)) {
+      if (this.normalizePropertyName(key) === normalizedSearch) {
+        return value;
+      }
+    }
+    
+    // Priority 3: Key ends with the search term (after the last dot)
+    for (const [key, value] of Object.entries(properties)) {
+      const keyParts = key.split('.');
+      const lastPart = keyParts[keyParts.length - 1];
+      if (this.normalizePropertyName(lastPart) === normalizedSearch) {
+        return value;
+      }
+    }
+    
+    // Priority 4: Partial match (search term is contained in key)
+    for (const [key, value] of Object.entries(properties)) {
+      if (this.normalizePropertyName(key).includes(normalizedSearch)) {
+        return value;
+      }
+    }
+    
+    return undefined;
   }
 }
