@@ -64,20 +64,147 @@ npm run dev
 
 1. Open your browser and navigate to `http://localhost:3000`
 
-## 👨‍💻 Testing Guide (Layman's Style)
+## 👨‍💻 Testing Guide (For Non-Developers)
 
-If you are not a developer and just want to test this viewer on your machine, follow these simple steps:
+> **📋 No coding experience required!** This guide will walk you through testing GOMERA X on your own computer in about 5 minutes.
 
-1. **Install Node.js**: Go to [nodejs.org](https://nodejs.org/) and download the **LTS** version (the one on the left). Install it like any other application.
-2. **Download the Code**: Click the green **Code** button at the top of this GitHub page and select **Download ZIP**. Extract the folder to your Desktop or Documents.
-3. **Open your Terminal**:
-    - **Windows**: Press the `Windows` key, type `cmd`, and press Enter.
-    - **Mac**: Press `Command + Space`, type `Terminal`, and press Enter.
-4. **Navigate to the Folder**: Type `cd` (with a space at the end), then drag the folder you extracted into the terminal window. It will automatically fill in the path. Press Enter.
-5. **Install the Viewer**: Type `npm install` and press Enter. Wait a minute for it to download the necessary components.
-6. **Run the Viewer**: Type `npm run dev` and press Enter.
-7. **Open your Browser**: You will see a link in the terminal (usually `http://localhost:3000`). Copy and paste this into **Google Chrome** or **Microsoft Edge**.
-8. **Load a Model**: Click the folder icon at the bottom toolbar, select an IFC file from your computer, and enjoy the performance!
+---
+
+### 📦 Step 1: Install Node.js (One-Time Setup)
+
+Node.js is a free tool that runs the viewer. You only need to install it once.
+
+1. Go to **[nodejs.org](https://nodejs.org/)**
+2. Click the big green button labeled **"LTS"** (on the left side)
+3. Run the downloaded installer and click **Next** through all steps
+4. ✅ Done! You now have Node.js installed
+
+> 💡 **Tip:** To verify installation, open Terminal/Command Prompt and type `node --version`. You should see a version number like `v20.x.x`
+
+---
+
+### 📥 Step 2: Download GOMERA X
+
+1. On this GitHub page, click the green **`< > Code`** button (near the top)
+2. Select **"Download ZIP"** from the dropdown menu
+3. Once downloaded, **extract/unzip** the folder:
+   - **Windows:** Right-click the ZIP → **Extract All...**
+   - **Mac:** Double-click the ZIP file
+4. Move the extracted folder to an easy location (Desktop or Documents)
+
+> ⚠️ **Important:** Remember where you saved this folder — you'll need it in the next step!
+
+---
+
+### 💻 Step 3: Open Terminal (Command Line)
+
+| Operating System | How to Open |
+|-----------------|-------------|
+| **Windows** | Press `Windows key`, type **cmd**, press `Enter` |
+| **Mac** | Press `Command + Space`, type **Terminal**, press `Enter` |
+| **Linux** | Press `Ctrl + Alt + T` |
+
+You should see a black or white window with a blinking cursor — this is your terminal.
+
+---
+
+### 📂 Step 4: Navigate to the Project Folder
+
+In your terminal, type the following (don't press Enter yet):
+
+```bash
+cd 
+```
+
+> 📌 **Note:** Make sure there's a **space** after `cd`
+
+Now, **drag and drop** the extracted folder from your file explorer directly into the terminal window. The path will appear automatically!
+
+Press **Enter**.
+
+**Example of what you might see:**
+```bash
+cd /Users/YourName/Desktop/OBC-IFCViewer-main
+```
+
+---
+
+### 📦 Step 5: Install Dependencies
+
+Type this command and press **Enter**:
+
+```bash
+npm install
+```
+
+⏳ **Wait 1-2 minutes** while it downloads the required components. You'll see text scrolling — this is normal!
+
+> ✅ **Success indicator:** When it's done, you'll see your cursor again without any red "ERROR" messages.
+
+---
+
+### 🚀 Step 6: Start the Viewer
+
+Type this command and press **Enter**:
+
+```bash
+npm run dev
+```
+
+You should see something like this:
+
+```
+  VITE v5.x.x  ready in xxx ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.x.x:3000/
+```
+
+> 🎉 **The viewer is now running!** Keep this terminal window open.
+
+---
+
+### 🌐 Step 7: Open in Your Browser
+
+1. **Copy** the link shown in the terminal (usually `http://localhost:3000`)
+2. **Open Google Chrome** or **Microsoft Edge** (recommended browsers)
+3. **Paste** the link into the address bar and press **Enter**
+
+You should now see the GOMERA X viewer interface!
+
+---
+
+### 📁 Step 8: Load Your IFC Model
+
+1. Look at the **bottom toolbar** of the viewer
+2. Click the **📂 folder icon** (Load button)
+3. Select **"Upload IFC"** or **"Upload Fragments"**
+4. Choose an IFC file from your computer
+5. Wait for the model to load and appear in 3D
+
+🎊 **Congratulations!** You're now viewing your BIM model in GOMERA X!
+
+---
+
+### 🛑 How to Stop the Viewer
+
+When you're done testing:
+1. Go back to your terminal window
+2. Press `Ctrl + C` (on both Windows and Mac)
+3. The server will stop, and you can close the terminal
+
+---
+
+### ❓ Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `npm: command not found` | Node.js wasn't installed correctly. Restart Step 1 |
+| `ENOENT: no such file or directory` | You're not in the right folder. Redo Step 4 |
+| Page won't load in browser | Make sure the terminal still shows the server running |
+| Model loads but looks wrong | Try a different IFC file, or check if it's a valid IFC |
+
+> 💬 **Still stuck?** Open an issue on this GitHub page describing your problem!
 
 ### Building for Production
 
