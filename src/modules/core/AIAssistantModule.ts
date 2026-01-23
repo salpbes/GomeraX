@@ -86,6 +86,20 @@ export class AIAssistantModule {
   }
 
   /**
+   * Check if thinking mode is enabled
+   */
+  public isThinkingEnabled(): boolean {
+    return this.webLLM.isThinkingEnabled();
+  }
+
+  /**
+   * Toggle thinking mode on/off
+   */
+  public setThinkingEnabled(enabled: boolean): void {
+    this.webLLM.setThinkingEnabled(enabled);
+  }
+
+  /**
    * Get WebLLM usage statistics (tokens/sec, latency, GPU info)
    */
   public async getWebLLMStats(): Promise<{

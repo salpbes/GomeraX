@@ -113,6 +113,95 @@ export class AIStyleManager {
         color: #69db7c;
       }
 
+      /* Thinking toggle switch */
+      .ai-thinking-toggle-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.05);
+        margin-right: 4px;
+      }
+
+      .ai-toggle-label {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        transition: all 0.3s ease;
+      }
+
+      .ai-toggle-label:first-child {
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .ai-toggle-label:last-child {
+        color: rgba(255, 193, 7, 0.4);
+      }
+
+      /* When thinking is ON, highlight lightbulb */
+      .ai-thinking-toggle-wrapper.active .ai-toggle-label:last-child {
+        color: #ffc107;
+        text-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
+      }
+
+      /* When thinking is OFF, highlight bolt */
+      .ai-thinking-toggle-wrapper:not(.active) .ai-toggle-label:first-child {
+        color: #74c0fc;
+        text-shadow: 0 0 8px rgba(116, 192, 252, 0.5);
+      }
+
+      .ai-toggle-switch {
+        position: relative;
+        width: 32px;
+        height: 16px;
+        cursor: pointer;
+      }
+
+      .ai-toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .ai-toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.15);
+        transition: all 0.3s ease;
+        border-radius: 16px;
+      }
+
+      .ai-toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 12px;
+        width: 12px;
+        left: 2px;
+        bottom: 2px;
+        background: #74c0fc;
+        transition: all 0.3s ease;
+        border-radius: 50%;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      }
+
+      .ai-toggle-switch input:checked + .ai-toggle-slider {
+        background: rgba(255, 193, 7, 0.25);
+      }
+
+      .ai-toggle-switch input:checked + .ai-toggle-slider:before {
+        transform: translateX(16px);
+        background: #ffc107;
+        box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
+      }
+
+      .ai-toggle-switch:hover .ai-toggle-slider {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
       /* Brain button attention animation */
       .ai-webllm-btn.attention {
         animation: brain-pulse 2s ease-in-out infinite;

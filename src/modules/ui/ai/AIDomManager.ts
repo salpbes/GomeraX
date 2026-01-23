@@ -7,6 +7,8 @@ export class AIDomManager {
   public minimizeBtn: HTMLButtonElement;
   public historyBtn: HTMLButtonElement;
   public webllmBtn: HTMLButtonElement;
+  public thinkingToggle: HTMLDivElement;
+  public thinkingCheckbox: HTMLInputElement;
   public header: HTMLDivElement;
   public headerTitle: HTMLElement;
   public historyPanel: HTMLDivElement;
@@ -28,6 +30,14 @@ export class AIDomManager {
           <span class="ai-model-info"><i class="fas fa-microchip"></i> DistilBERT</span>
         </div>
         <div class="ai-header-actions">
+          <div class="ai-thinking-toggle-wrapper" style="display:none;" title="Thinking Mode">
+            <span class="ai-toggle-label"><i class="fas fa-bolt"></i></span>
+            <label class="ai-toggle-switch">
+              <input type="checkbox" class="ai-thinking-checkbox" checked>
+              <span class="ai-toggle-slider"></span>
+            </label>
+            <span class="ai-toggle-label"><i class="fas fa-lightbulb"></i></span>
+          </div>
           <button class="ai-webllm-btn" title="Enable Advanced AI" style="display:none;"><i class="fas fa-brain"></i></button>
           <button class="ai-history-btn" title="Command History"><i class="fas fa-history"></i></button>
           <button class="ai-minimize-btn" title="Minimize"><i class="fas fa-minus"></i></button>
@@ -91,6 +101,8 @@ export class AIDomManager {
     this.closeBtn = this.container.querySelector('.ai-close-btn') as HTMLButtonElement;
     this.minimizeBtn = this.container.querySelector('.ai-minimize-btn') as HTMLButtonElement;
     this.webllmBtn = this.container.querySelector('.ai-webllm-btn') as HTMLButtonElement;
+    this.thinkingToggle = this.container.querySelector('.ai-thinking-toggle-wrapper') as HTMLDivElement;
+    this.thinkingCheckbox = this.container.querySelector('.ai-thinking-checkbox') as HTMLInputElement;
     this.historyBtn = this.container.querySelector('.ai-history-btn') as HTMLButtonElement;
     this.header = this.container.querySelector('.ai-header') as HTMLDivElement;
     this.headerTitle = this.container.querySelector('.ai-header h3') as HTMLElement;

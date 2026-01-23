@@ -48,6 +48,7 @@ export class AIAssistantUIManager {
     this.dom.minimizeBtn.addEventListener('click', () => this.toggleMinimize());
     this.dom.historyBtn.addEventListener('click', () => this.toggleHistory());
     this.dom.webllmBtn.addEventListener('click', () => this.handleWebLLMToggle());
+    this.dom.thinkingCheckbox.addEventListener('change', () => this.handleThinkingToggle());
     this.dom.sendBtn.addEventListener('click', () => this.handleSend());
     
     const historyClose = this.dom.container.querySelector('.ai-history-close');
@@ -434,6 +435,7 @@ export class AIAssistantUIManager {
       this.chat.addMessage("🎉 Advanced AI ready!", 'ai', true);
       this.dom.updateModelInfo(modelInfo.name, true);
       this.updateWebLLMButton();
+      this.updateThinkingToggle();
       
       // Initialize stats display with GPU info
       this.initializeStatsDisplay();
@@ -444,20 +446,56 @@ export class AIAssistantUIManager {
     }
   }
 
+  /**
+   * Handle thinking mode toggle
+   */
+  private handleThinkingToggle(): void {
+    const newState = this.dom.thinkingCheckbox.checked;
+    this.aiModule.setThinkingEnabled(newState);
+    this.updateThinkingToggle();
+    
+    // Show a subtle notification
+    const modeText = newState ? 'ON (deeper reasoning)' : 'OFF (faster responses)';
+    this.chat.addMessage(`💡 Thinking mode ${modeText}`, 'ai');
+  }
+
+  /**
+   * Update thinking toggle appearance
+   */
+  private updateThinkingToggle(): void {
+    const isEnabled = this.aiModule.isThinkingEnabled();
+    
+    // Sync checkbox state
+    this.dom.thinkingCheckbox.checked = isEnabled;
+    
+    // Update wrapper class for styling
+    if (isEnabled) {
+      this.dom.thinkingToggle.classList.add('active');
+      this.dom.thinkingToggle.title = 'Thinking: ON (deeper reasoning, slower)';
+    } else {
+      this.dom.thinkingToggle.classList.remove('active');
+      this.dom.thinkingToggle.title = 'Thinking: OFF (faster responses)';
+    }
+  }
+
   private updateWebLLMButton(): void {
     const status = this.aiModule.getWebLLMStatus();
     
     if (status.loading) {
       this.dom.webllmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
       this.dom.webllmBtn.style.color = '#74c0fc';
+      this.dom.thinkingToggle.style.display = 'none';
     } else if (status.enabled) {
       this.dom.webllmBtn.innerHTML = '<i class="fas fa-brain"></i>';
       this.dom.webllmBtn.style.color = '#69db7c';
       this.dom.webllmBtn.title = 'Advanced AI On';
+      // Show thinking toggle when WebLLM is active
+      this.dom.thinkingToggle.style.display = 'flex';
     } else if (status.ready) {
       this.dom.webllmBtn.innerHTML = '<i class="fas fa-brain"></i>';
       this.dom.webllmBtn.style.color = 'rgba(255, 255, 255, 0.5)';
       this.dom.webllmBtn.title = 'Advanced AI Off';
+      this.dom.thinkingToggle.style.display = 'none';
     }
   }
 

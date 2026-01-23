@@ -73,6 +73,7 @@ export class WebLLMEngine {
   private isReady = false;
   private useWorker = false; // Whether running in Web Worker mode
   private conversationHistory: ConversationMessage[] = [];
+  private thinkingEnabled: boolean = ENABLE_THINKING.chat; // Runtime thinking toggle
   
   // Track usage stats from last request
   private lastUsageStats: {
@@ -208,6 +209,23 @@ export class WebLLMEngine {
   }
 
   /**
+   * Check if thinking mode is enabled
+   */
+  isThinkingEnabled(): boolean {
+    return this.thinkingEnabled;
+  }
+
+  /**
+   * Enable or disable thinking mode
+   * When enabled, model outputs reasoning in <think> tags (slower but more thoughtful)
+   * When disabled, model responds directly (faster)
+   */
+  setThinkingEnabled(enabled: boolean): void {
+    this.thinkingEnabled = enabled;
+    console.log(`[WebLLM] Thinking mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
    * Generate a conversational response with BIM context
    * Uses structured output parsing instead of native function calling
    */
@@ -240,7 +258,7 @@ export class WebLLMEngine {
         temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS.chat,
         extra_body: {
-          enable_thinking: ENABLE_THINKING.chat,
+          enable_thinking: this.thinkingEnabled,
         },
       } as any);
 
@@ -348,7 +366,7 @@ export class WebLLMEngine {
         max_tokens: MAX_TOKENS.chat,
         stream: true,
         extra_body: {
-          enable_thinking: ENABLE_THINKING.chat,
+          enable_thinking: this.thinkingEnabled,
         },
       } as any)) as unknown as AsyncIterable<webllm.ChatCompletionChunk>;
       
@@ -472,7 +490,7 @@ export class WebLLMEngine {
         max_tokens: MAX_TOKENS.stream,
         stream: true,
         extra_body: {
-          enable_thinking: ENABLE_THINKING.stream,
+          enable_thinking: this.thinkingEnabled,
         },
       } as any)) as unknown as AsyncIterable<webllm.ChatCompletionChunk>;
 
