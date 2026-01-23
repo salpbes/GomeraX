@@ -58,6 +58,24 @@ export function getToolbarStyles(): string {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     
+    .brand-experimental {
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      padding: 2px 5px;
+      border-radius: 4px;
+      margin-left: 4px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 8px rgba(245, 87, 108, 0.4);
+      animation: pulse-experimental 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-experimental {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.02); }
+    }
+    
     .toolbar-group {
       position: relative;
       display: flex;

@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   
-  console.log('🌟 Starting GOMERA IFC Viewer...');
+  console.log('🌟 Starting GOMERA X (Experimental) IFC Viewer...');
 
   // Create the viewer instance
   const viewer = new IFCViewer();

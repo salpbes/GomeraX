@@ -21,7 +21,7 @@ export function createToolbarHTML(): string {
     <div class="toolbar-container">
       <!-- GOMERA Logo/Brand -->
       <div class="toolbar-brand">
-        <span class="brand-text">GOMERA</span>
+        <span class="brand-text">GOMERA</span><span class="brand-experimental">X</span>
       </div>
       
       <!-- Load Model Group (expandable) -->
