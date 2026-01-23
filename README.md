@@ -224,36 +224,113 @@ npm run preview
 
 ```text
 OBC-IFCViewer/
-├── src/
-│   ├── modules/
-│   │   ├── core/                      # Core Application Modules
-│   │   │   ├── IFCLoaderModule.ts     # IFC & Fragments loading logic
-│   │   │   ├── PropertiesPanelModule.ts # IFC tree and properties panel
-│   │   │   ├── PropertyTableModule.ts # Excel-like property table
-│   │   │   └── PerformanceMonitor.ts  # Performance tracking
-│   │   ├── webgl/                     # WebGL Feature Modules (Tools)
-│   │   │   ├── WorldManager.ts        # 3D world setup (scene, camera, renderer)
-│   │   │   ├── ClipperModule.ts       # Advanced sectioning tool
-│   │   │   ├── MeasurementModule.ts   # Measurement tools
-│   │   │   ├── FloorPlanModule.ts     # 2D Floor plan navigation
-│   │   │   └── ...
-│   │   ├── webgpu/                    # WebGPU Feature Modules
-│   │   │   ├── WebGPURendererModule.ts # Main WebGPU entry point
-│   │   │   ├── WebGPULODManager.ts    # Level of Detail system
-│   │   │   ├── WebGPUFog.ts           # Atmospheric fog effects
-│   │   │   ├── WebGPUOutlineManager.ts # Selection highlighting
-│   │   │   └── ...
-│   │   ├── ui/                        # UI Components & Styles
-│   │   │   ├── ToolbarBuilder.ts      # Toolbar structure
-│   │   │   ├── ToolbarHandlers.ts     # Event handlers
-│   │   │   └── UIStyles.ts            # Shared styling
-│   │   └── UIManager.ts               # UI Orchestration
-│   ├── IFCViewer.ts                   # Main viewer orchestration class
-│   ├── main.ts                        # Application entry point
-│   └── styles.css                     # Global styles
 ├── index.html                         # HTML entry point
 ├── package.json                       # Dependencies and scripts
-└── vite.config.ts                     # Vite bundler configuration
+├── tsconfig.json                      # TypeScript configuration
+├── vite.config.ts                     # Vite bundler configuration
+├── public/
+│   └── worker.mjs                     # Web worker for background tasks
+└── src/
+    ├── main.ts                        # Application entry point
+    ├── IFCViewer.ts                   # Main viewer orchestration class
+    ├── styles.css                     # Global styles
+    └── modules/
+        ├── UIManager.ts               # UI Orchestration
+        │
+        ├── core/                      # 🧠 Core Application Modules
+        │   ├── IFCLoaderModule.ts     # IFC & Fragments loading
+        │   ├── PropertiesPanelModule.ts # IFC tree and properties
+        │   ├── PropertyTableModule.ts # Excel-like property table
+        │   ├── PerformanceMonitor.ts  # FPS & memory tracking
+        │   ├── ViewerInitializer.ts   # Viewer setup & config
+        │   ├── AIAssistantModule.ts   # 🤖 AI Assistant integration
+        │   ├── ai/                    # AI Engine Components
+        │   │   ├── WebLLMEngine.ts    # Local LLM (WebLLM/Qwen)
+        │   │   ├── ConversationalEngine.ts # Chat orchestration
+        │   │   ├── ConversationContext.ts  # Context management
+        │   │   ├── AIIntentEngine.ts  # User intent detection
+        │   │   ├── AIBimActions.ts    # BIM-specific actions
+        │   │   ├── AIRuleEngine.ts    # Rule-based responses
+        │   │   ├── actions/           # Action handlers
+        │   │   ├── agent/             # Agent components
+        │   │   └── webllm/            # WebLLM utilities
+        │   └── properties/            # Property Management
+        │       ├── SelectionManager.ts    # Element selection
+        │       ├── PropertyDisplayManager.ts # Property display
+        │       ├── TreeManager.ts     # IFC tree structure
+        │       ├── StoreyDataManager.ts # Storey/level data
+        │       ├── GhostModeManager.ts # Ghost mode rendering
+        │       └── table/             # Table components
+        │
+        ├── webgl/                     # 🎮 WebGL Feature Modules
+        │   ├── index.ts               # Module exports
+        │   ├── WorldManager.ts        # 3D world (scene, camera, renderer)
+        │   ├── ClipperModule.ts       # Advanced sectioning
+        │   ├── ClipStylerModule.ts    # Section styling
+        │   ├── MeasurementModule.ts   # Length/Area/Volume tools
+        │   ├── FloorPlanModule.ts     # 2D floor plan views
+        │   ├── ViewCubeModule.ts      # 3D navigation cube
+        │   ├── MinimapModule.ts       # Minimap overlay
+        │   ├── FirstPersonControlsModule.ts # FPS-style navigation
+        │   ├── ClusterModule.ts       # Element clustering
+        │   ├── ColorSplashModule.ts   # Color highlighting
+        │   ├── SpaceVisibilityModule.ts # IfcSpace toggle
+        │   ├── ModelTransformModule.ts # Model positioning
+        │   └── AdaptiveQualityController.ts # Quality scaling
+        │
+        ├── webgpu/                    # ⚡ WebGPU Feature Modules
+        │   ├── index.ts               # Module exports
+        │   ├── README.md              # WebGPU documentation
+        │   ├── WebGPURendererModule.ts # Main renderer entry
+        │   ├── ViewerWebGPUAPI.ts     # Public WebGPU API
+        │   └── managers/              # WebGPU Sub-managers
+        │       ├── index.ts           # Manager exports
+        │       ├── WebGPULODManager.ts # Level of Detail
+        │       ├── WebGPUFog.ts       # Atmospheric fog
+        │       ├── WebGPUOutlineManager.ts # Selection outlines
+        │       ├── WebGPUElementSelector.ts # GPU picking
+        │       ├── WebGPUColorPicker.ts # Color picking
+        │       ├── WebGPUEdgeManager.ts # Edge rendering
+        │       ├── WebGPUShadowManager.ts # Shadow optimization
+        │       ├── WebGPUAmbientOcclusion.ts # AO effects
+        │       ├── WebGPUMaterialFactory.ts # Material creation
+        │       ├── WebGPUCategoryPalette.ts # Category colors
+        │       ├── WebGPUGeometryUtils.ts # Geometry helpers
+        │       ├── WebGPUOptimizations.ts # Performance utils
+        │       ├── WebGPUProxySceneBuilder.ts # Scene building
+        │       ├── WebGPUStatsManager.ts # Stats tracking
+        │       ├── WebGPUStatsOverlay.ts # Stats UI overlay
+        │       └── WebGPUTypes.ts     # TypeScript types
+        │
+        └── ui/                        # 🎨 UI Components
+            ├── ToolbarBuilder.ts      # Toolbar structure
+            ├── ToolbarHandlers.ts     # Toolbar event handlers
+            ├── UIStyles.ts            # Shared CSS styles
+            ├── LoadingUIManager.ts    # Loading indicators
+            ├── NotificationUIManager.ts # Notifications
+            ├── NotificationHelper.ts  # Notification utils
+            ├── SelectionUIManager.ts  # Selection UI
+            ├── NavigationUIManager.ts # Navigation controls
+            ├── ClipperUIManager.ts    # Clipper controls
+            ├── MeasurementUIManager.ts # Measurement UI
+            ├── FloorPlanUIManager.ts  # Floor plan UI
+            ├── ClusterUIManager.ts    # Cluster visualization
+            ├── WebGPUUIManager.ts     # WebGPU settings UI
+            ├── ModelAlignmentManager.ts # Model alignment panel
+            ├── ModelDashboard.ts      # Model statistics
+            ├── SlicerDashboard.ts     # Data slicer panel
+            ├── AIAssistantUIManager.ts # 🤖 AI chat UI manager
+            ├── ai/                    # AI UI Components
+            │   ├── AIChatManager.ts   # Chat message handling
+            │   ├── AIDomManager.ts    # DOM element creation
+            │   └── AIStyleManager.ts  # AI panel styling
+            └── dashboard/             # Dashboard Components
+                ├── UIManager.ts       # Dashboard UI
+                ├── DataManager.ts     # Data processing
+                ├── ChartManager.ts    # Chart rendering
+                ├── SlicerUIManager.ts # Slicer UI
+                ├── SlicerDataManager.ts # Slicer data
+                └── SlicerChartManager.ts # Slicer charts
 ```
 
 ## 🧩 Module Overview
