@@ -201,6 +201,7 @@ When you're done testing:
 |---------|----------|
 | `npm: command not found` | Node.js wasn't installed correctly. Restart Step 1 |
 | `ENOENT: no such file or directory` | You're not in the right folder. Redo Step 4 |
+| `ERESOLVE unable to resolve dependency tree` | Run `npm install --legacy-peer-deps` instead |
 | Page won't load in browser | Make sure the terminal still shows the server running |
 | Model loads but looks wrong | Try a different IFC file, or check if it's a valid IFC |
 

@@ -19,7 +19,7 @@
     "chart.js": "^4.5.1",
     "stats.js": "^0.17.0",
     "three": "^0.175.0",
-    "web-ifc": "^0.0.72"
+    "web-ifc": "^0.0.74"
   },
   "devDependencies": {
     "@types/three": "^0.180.0",
