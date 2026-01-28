@@ -331,9 +331,16 @@ export class WebGPURendererModule {
       // Get adapter info for logging (if available)
       let gpuInfo = 'WebGPU Ready';
       try {
-        if (adapter.requestAdapterInfo) {
-          const info = await adapter.requestAdapterInfo();
-          gpuInfo = `${info.vendor || 'Unknown'} - ${info.architecture || 'Unknown'}`;
+        // Modern WebGPU uses adapter.info directly (requestAdapterInfo is deprecated)
+        const info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
+        if (info) {
+          // Build comprehensive GPU info from all available properties
+          const parts: string[] = [];
+          if (info.vendor) parts.push(info.vendor);
+          if (info.architecture) parts.push(info.architecture);
+          if (info.device && !parts.includes(info.device)) parts.push(info.device);
+          if (info.description && !parts.some(p => info.description.includes(p))) parts.push(info.description);
+          gpuInfo = parts.length > 0 ? parts.join(' ') : 'WebGPU Ready';
         }
       } catch {
         // Adapter info not available in all browsers
@@ -2460,11 +2467,20 @@ export class WebGPURendererModule {
       if (nav.gpu) {
         const adapter = await nav.gpu.requestAdapter();
         if (adapter) {
-          // Try to get adapter info
-          if (adapter.requestAdapterInfo) {
-            const info = await adapter.requestAdapterInfo();
-            this.gpuInfo = info.description || info.device || info.vendor || 'WebGPU Adapter';
-            console.log('🎮 GPU detected:', this.gpuInfo);
+          // Modern WebGPU uses adapter.info directly (requestAdapterInfo is deprecated)
+          const info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
+          if (info) {
+            // Build comprehensive GPU info from all available properties
+            const parts: string[] = [];
+            if (info.vendor) parts.push(info.vendor);
+            if (info.architecture) parts.push(info.architecture);
+            if (info.device && !parts.includes(info.device)) parts.push(info.device);
+            if (info.description && !parts.some((p: string) => info.description.includes(p))) parts.push(info.description);
+            this.gpuInfo = parts.length > 0 ? parts.join(' ') : 'WebGPU Adapter';
+            console.log('🎮 GPU detected:', this.gpuInfo, info);
+            this.statsManager?.setGPUInfo(this.gpuInfo);
+          } else {
+            this.gpuInfo = 'WebGPU Adapter';
             this.statsManager?.setGPUInfo(this.gpuInfo);
           }
         }
