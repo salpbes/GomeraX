@@ -43,7 +43,7 @@
 </p>
 
 - 🤖 **AI-Powered BIM Assistant**: Natural language interface for model interaction with:
-  - **On-Device LLM**: Privacy-first AI running entirely in-browser via WebLLM Qwen3 (no cloud required)
+  - **On-Device LLM**: Privacy-first AI running entirely in-browser via WebLLM Qwen3
   - **Natural Language Commands**: Select, hide, isolate elements using natural language ("show me all doors")
   - **Smart Context**: Understands pronouns and follow-ups ("hide them", "zoom to those")
   - **Element Queries**: Count and analyze model elements ("how many windows are there?")
