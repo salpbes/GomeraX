@@ -1,4 +1,4 @@
-# GomeraX - Experimental IFC Viewer
+# GomeraX - Experimental IFC Viewer with AI-Powered BIM Assistant
 
 **GOMERA** is an experimental, modular IFC file viewer built with [Open BIM Components (OBC)](https://docs.thatopen.com/).
 
@@ -51,6 +51,12 @@
   - **Storey Navigation**: Jump to floors by name ("go to Level 2")
   - **IFC Type Recognition**: Automatically maps natural language to IFC types
   - **Real-time Stats**: GPU usage, decode speed, and token metrics display
+
+<p align="center">
+  <img src="assets/screenshots/webgpu-screenshot.png" alt="AI-Powered BIM Assistant" width="800">
+  <br>
+  <em>AI Assistant - Natural language commands for BIM model interaction</em>
+</p>
 
 - 🎮 **Experimental WebGPU Mode**: Next-generation rendering for massive models with:
   - **Instant Highlighting**: Zero-latency selection using GPU-shared buffers
