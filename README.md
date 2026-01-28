@@ -34,7 +34,7 @@
 <p align="center">
   <img src="assets/screenshots/first-person.png" alt="GomeraX Interface" width="800">
   <br>
-  <em>GomeraX IFC Viewer with AI-Powered BIM Assistant</em>
+  <em>First-Person Walk Mode with Gravity</em>
 </p>
 
 - 🚶 **First-Person Walk Mode with Gravity**: FPS-style navigation with collision detection and gravity
