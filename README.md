@@ -1,6 +1,12 @@
 # GomeraX - Experimental IFC Viewer
 
-**GOMERA** is a experimental, modular IFC file viewer built with [Open BIM Components (OBC)](https://docs.thatopen.com/).
+**GOMERA** is an experimental, modular IFC file viewer built with [Open BIM Components (OBC)](https://docs.thatopen.com/).
+
+<p align="center">
+  <img src="assets/screenshots/app-screenshot.png" alt="GomeraX Interface" width="800">
+  <br>
+  <em>GomeraX IFC Viewer with AI-Powered BIM Assistant</em>
+</p>
 
 ## 🎯 Features
 
