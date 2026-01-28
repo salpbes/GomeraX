@@ -35,6 +35,13 @@
 - 🎯 **Model Alignment Tool**: Drag-and-drop panel for precise multi-model positioning with AEC-standard coordinates
 - 🏢 **Floor Plan Views**: Interactive 2D floor plan views with pan/zoom navigation
 - 📊 **Property Table**: Excel-like interactive table for bulk property inspection and filtering
+
+<p align="center">
+  <img src="assets/screenshots/ai-assistant.png" alt="AI-Powered BIM Assistant" width="800">
+  <br>
+  <em>AI Assistant - Natural language commands for BIM model interaction</em>
+</p>
+
 - 🤖 **AI-Powered BIM Assistant**: Natural language interface for model interaction with:
   - **On-Device LLM**: Privacy-first AI running entirely in-browser via WebLLM Qwen3 (no cloud required)
   - **Natural Language Commands**: Select, hide, isolate elements using natural language ("show me all doors")
@@ -44,6 +51,7 @@
   - **Storey Navigation**: Jump to floors by name ("go to Level 2")
   - **IFC Type Recognition**: Automatically maps natural language to IFC types
   - **Real-time Stats**: GPU usage, decode speed, and token metrics display
+
 - 🎮 **Experimental WebGPU Mode**: Next-generation rendering for massive models with:
   - **Instant Highlighting**: Zero-latency selection using GPU-shared buffers
   - **LOD (Level of Detail)**: Automatic geometry simplification for distant objects
