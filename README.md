@@ -70,6 +70,25 @@
   - **Frustum Culling**: Optimized edge rendering for complex geometries
   - **Performance Stats Overlay**: Detailed hardware, memory, and rendering metrics
 
+<p align="center">
+  <img src="assets/screenshots/model-dashboard.png" alt="Model Dashboard and Data Slicer" width="800">
+  <br>
+  <em>Model Dashboard and Data Slicer for BIM analytics and filtering</em>
+</p>  
+
+- 📈 **Model Dashboard**: Power BI-style analytics panel with:
+  - **Element Statistics**: Total counts by IFC category (walls, doors, windows, etc.)
+  - **Interactive Charts**: Pie charts and bar graphs for visual data exploration
+  - **Storey Breakdown**: Element distribution across building levels
+  - **Volume Analytics**: Material quantities and space calculations
+  - **JSON Export**: Download statistics for external reporting
+- 🔪 **Data Slicer**: Interactive filtering tool for model exploration with:
+  - **Multi-Property Filtering**: Filter by storey, category, material, or any IFC property
+  - **Visual Feedback**: Real-time 3D highlighting of filtered elements
+  - **Cross-Filtering**: Multiple slicers work together for complex queries
+  - **Split-Screen Mode**: Side-by-side slicer panel with 3D view
+  - **Export Filtered Data**: Download filtered results as JSON
+
 ## 🚀 Quick Start
 
 ### Prerequisites
