@@ -259,6 +259,12 @@ export class WebGPUStatsOverlay {
   }
 
   private async updateHardwareStats(): Promise<void> {
+    // CPU info (platform/architecture)
+    const cpuInfoEl = this.overlay?.querySelector('#stats-cpu');
+    if (cpuInfoEl) {
+      cpuInfoEl.textContent = this.detectCPUInfo();
+    }
+    
     // CPU cores
     const cpuEl = this.overlay?.querySelector('#stats-cpucores');
     if (cpuEl) {
@@ -302,6 +308,87 @@ export class WebGPUStatsOverlay {
       }
     } catch {
       element.textContent = 'N/A';
+    }
+  }
+
+  /**
+   * Detect CPU info from available browser APIs and user agent
+   */
+  private detectCPUInfo(): string {
+    try {
+      const ua = navigator.userAgent;
+      const platform = navigator.platform || '';
+      
+      // Try to detect Apple Silicon Macs
+      if (platform.includes('Mac') || ua.includes('Mac')) {
+        // Check for Apple Silicon (M1, M2, M3, etc.)
+        // On Safari/Chrome on Apple Silicon, we can detect via the platform
+        if (platform === 'MacIntel' || platform.includes('Mac')) {
+          // Modern Apple Silicon Macs still report MacIntel for compatibility
+          // but we can use other signals
+          const cores = navigator.hardwareConcurrency;
+          
+          // Try to get more info from userAgentData if available
+          const nav = navigator as any;
+          if (nav.userAgentData?.platform === 'macOS') {
+            // M1 has 8 cores, M1 Pro/Max have 10, M2 has 8, M2 Pro has 10-12, M3 has 8, etc.
+            if (cores >= 10) {
+              return 'Apple Silicon Pro/Max';
+            } else if (cores === 8) {
+              return 'Apple Silicon';
+            }
+          }
+          
+          // Fallback: detect based on core count
+          if (cores === 8) {
+            return 'Apple Silicon (M-series)';
+          } else if (cores >= 10) {
+            return 'Apple Silicon Pro/Max';
+          }
+          return 'Apple Mac';
+        }
+      }
+      
+      // Detect Windows CPUs from user agent
+      if (ua.includes('Win64') || ua.includes('Windows')) {
+        if (ua.includes('x64') || ua.includes('Win64') || ua.includes('WOW64')) {
+          return 'x86_64 (Windows)';
+        }
+        if (ua.includes('ARM')) {
+          return 'ARM64 (Windows)';
+        }
+        return 'Windows';
+      }
+      
+      // Detect Linux
+      if (ua.includes('Linux')) {
+        if (ua.includes('x86_64') || ua.includes('x64')) {
+          return 'x86_64 (Linux)';
+        }
+        if (ua.includes('aarch64') || ua.includes('arm')) {
+          return 'ARM64 (Linux)';
+        }
+        return 'Linux';
+      }
+      
+      // Detect Android
+      if (ua.includes('Android')) {
+        return 'ARM (Android)';
+      }
+      
+      // Detect iOS/iPadOS
+      if (ua.includes('iPhone') || ua.includes('iPad')) {
+        return 'Apple A/M-series (iOS)';
+      }
+      
+      // Fallback to platform
+      if (platform) {
+        return platform;
+      }
+      
+      return 'N/A';
+    } catch {
+      return 'N/A';
     }
   }
 
@@ -447,6 +534,10 @@ export class WebGPUStatsOverlay {
       
       <div class="stats-row stats-divider"></div>
       <div class="stats-section-title">🖥️ Hardware</div>
+      <div class="stats-row">
+        <span class="stats-label">CPU:</span>
+        <span class="stats-value stats-small" id="stats-cpu">--</span>
+      </div>
       <div class="stats-row">
         <span class="stats-label">CPU Cores:</span>
         <span class="stats-value" id="stats-cpucores">--</span>
