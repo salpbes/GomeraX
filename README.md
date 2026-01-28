@@ -30,6 +30,13 @@
 - 🔄 **Section Flip**: View both sides of any section plane
 - 🗂️ **Properties Panel**: IFC tree view and element property inspection
 - 👁️ **Space Visibility**: Toggle IfcSpace elements on/off
+
+<p align="center">
+  <img src="assets/screenshots/first-person.png" alt="GomeraX Interface" width="800">
+  <br>
+  <em>GomeraX IFC Viewer with AI-Powered BIM Assistant</em>
+</p>
+
 - 🚶 **First-Person Walk Mode with Gravity**: FPS-style navigation with collision detection and gravity
 - 📏 **Measurement Tools**: Length, Area, and Volume measurements with perpendicular guides
 - 🎯 **Model Alignment Tool**: Drag-and-drop panel for precise multi-model positioning with AEC-standard coordinates
