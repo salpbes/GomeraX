@@ -1,12 +1,12 @@
-# GOMERA - Professional IFC Viewer
+# GomeraX - Experimental IFC Viewer
 
-**GOMERA** is a professional, modular IFC file viewer built with [Open BIM Components (OBC)](https://docs.thatopen.com/).
+**GOMERA** is a experimental, modular IFC file viewer built with [Open BIM Components (OBC)](https://docs.thatopen.com/).
 
 ## 🎯 Features
 
 - 📂 **IFC File Loading**: Load and view Industry Foundation Classes (IFC) files
 - ⚡ **Fragments Support**: Fast loading with pre-converted Fragments format
-- 🎨 **Revit-like Rendering**: Professional cast shadows with ambient occlusion
+- 🎨 **Cast Shadows Rendering**: Professional cast shadows with ambient occlusion
 - 📊 **Performance Monitoring**: Real-time FPS, memory usage, and render time stats
 - 💾 **Export Functionality**: Convert and download IFC files as Fragments
 - 📱 **Responsive Design**: Works on desktop and mobile devices
@@ -24,11 +24,20 @@
 - 🔄 **Section Flip**: View both sides of any section plane
 - 🗂️ **Properties Panel**: IFC tree view and element property inspection
 - 👁️ **Space Visibility**: Toggle IfcSpace elements on/off
-- 🚶 **First-Person Walk Mode**: FPS-style navigation with collision detection
+- 🚶 **First-Person Walk Mode with Gravity**: FPS-style navigation with collision detection and gravity
 - 📏 **Measurement Tools**: Length, Area, and Volume measurements with perpendicular guides
 - 🎯 **Model Alignment Tool**: Drag-and-drop panel for precise multi-model positioning with AEC-standard coordinates
 - 🏢 **Floor Plan Views**: Interactive 2D floor plan views with pan/zoom navigation
 - 📊 **Property Table**: Excel-like interactive table for bulk property inspection and filtering
+- 🤖 **AI-Powered BIM Assistant**: Natural language interface for model interaction with:
+  - **On-Device LLM**: Privacy-first AI running entirely in-browser via WebLLM Qwen3 (no cloud required)
+  - **Natural Language Commands**: Select, hide, isolate elements using natural language ("show me all doors")
+  - **Smart Context**: Understands pronouns and follow-ups ("hide them", "zoom to those")
+  - **Element Queries**: Count and analyze model elements ("how many windows are there?")
+  - **Camera Control**: Navigate via voice ("show front view", "zoom to columns")
+  - **Storey Navigation**: Jump to floors by name ("go to Level 2")
+  - **IFC Type Recognition**: Automatically maps natural language to IFC types
+  - **Real-time Stats**: GPU usage, decode speed, and token metrics display
 - 🎮 **Experimental WebGPU Mode**: Next-generation rendering for massive models with:
   - **Instant Highlighting**: Zero-latency selection using GPU-shared buffers
   - **LOD (Level of Detail)**: Automatic geometry simplification for distant objects
@@ -225,113 +234,113 @@ npm run preview
 
 ```text
 OBC-IFCViewer/
-├── index.html                         # HTML entry point
-├── package.json                       # Dependencies and scripts
-├── tsconfig.json                      # TypeScript configuration
-├── vite.config.ts                     # Vite bundler configuration
+├── index.html                                 # HTML entry point
+├── package.json                               # Dependencies and scripts
+├── tsconfig.json                              # TypeScript configuration
+├── vite.config.ts                             # Vite bundler configuration
 ├── public/
-│   └── worker.mjs                     # Web worker for background tasks
+│   └── worker.mjs                             # Web worker for background tasks
 └── src/
-    ├── main.ts                        # Application entry point
-    ├── IFCViewer.ts                   # Main viewer orchestration class
-    ├── styles.css                     # Global styles
+    ├── main.ts                                # Application entry point
+    ├── IFCViewer.ts                           # Main viewer orchestration class
+    ├── styles.css                             # Global styles
     └── modules/
-        ├── UIManager.ts               # UI Orchestration
+        ├── UIManager.ts                       # UI Orchestration
         │
-        ├── core/                      # 🧠 Core Application Modules
-        │   ├── IFCLoaderModule.ts     # IFC & Fragments loading
-        │   ├── PropertiesPanelModule.ts # IFC tree and properties
-        │   ├── PropertyTableModule.ts # Excel-like property table
-        │   ├── PerformanceMonitor.ts  # FPS & memory tracking
-        │   ├── ViewerInitializer.ts   # Viewer setup & config
-        │   ├── AIAssistantModule.ts   # 🤖 AI Assistant integration
-        │   ├── ai/                    # AI Engine Components
-        │   │   ├── WebLLMEngine.ts    # Local LLM (WebLLM/Qwen)
-        │   │   ├── ConversationalEngine.ts # Chat orchestration
-        │   │   ├── ConversationContext.ts  # Context management
-        │   │   ├── AIIntentEngine.ts  # User intent detection
-        │   │   ├── AIBimActions.ts    # BIM-specific actions
-        │   │   ├── AIRuleEngine.ts    # Rule-based responses
-        │   │   ├── actions/           # Action handlers
-        │   │   ├── agent/             # Agent components
-        │   │   └── webllm/            # WebLLM utilities
-        │   └── properties/            # Property Management
-        │       ├── SelectionManager.ts    # Element selection
-        │       ├── PropertyDisplayManager.ts # Property display
-        │       ├── TreeManager.ts     # IFC tree structure
-        │       ├── StoreyDataManager.ts # Storey/level data
-        │       ├── GhostModeManager.ts # Ghost mode rendering
-        │       └── table/             # Table components
+        ├── core/                              # 🧠 Core Application Modules
+        │   ├── IFCLoaderModule.ts             # IFC & Fragments loading
+        │   ├── PropertiesPanelModule.ts       # IFC tree and properties
+        │   ├── PropertyTableModule.ts         # Excel-like property table
+        │   ├── PerformanceMonitor.ts          # FPS & memory tracking
+        │   ├── ViewerInitializer.ts           # Viewer setup & config
+        │   ├── AIAssistantModule.ts           # 🤖 AI Assistant integration
+        │   ├── ai/                            # AI Engine Components
+        │   │   ├── WebLLMEngine.ts            # Local LLM (WebLLM/Qwen)
+        │   │   ├── ConversationalEngine.ts    # Chat orchestration
+        │   │   ├── ConversationContext.ts     # Context management
+        │   │   ├── AIIntentEngine.ts          # User intent detection
+        │   │   ├── AIBimActions.ts            # BIM-specific actions
+        │   │   ├── AIRuleEngine.ts            # Rule-based responses
+        │   │   ├── actions/                   # Action handlers
+        │   │   ├── agent/                     # Agent components
+        │   │   └── webllm/                    # WebLLM utilities
+        │   └── properties/                    # Property Management
+        │       ├── SelectionManager.ts        # Element selection
+        │       ├── PropertyDisplayManager.ts  # Property display
+        │       ├── TreeManager.ts             # IFC tree structure
+        │       ├── StoreyDataManager.ts       # Storey/level data
+        │       ├── GhostModeManager.ts        # Ghost mode rendering
+        │       └── table/                     # Table components
         │
-        ├── webgl/                     # 🎮 WebGL Feature Modules
-        │   ├── index.ts               # Module exports
-        │   ├── WorldManager.ts        # 3D world (scene, camera, renderer)
-        │   ├── ClipperModule.ts       # Advanced sectioning
-        │   ├── ClipStylerModule.ts    # Section styling
-        │   ├── MeasurementModule.ts   # Length/Area/Volume tools
-        │   ├── FloorPlanModule.ts     # 2D floor plan views
-        │   ├── ViewCubeModule.ts      # 3D navigation cube
-        │   ├── MinimapModule.ts       # Minimap overlay
-        │   ├── FirstPersonControlsModule.ts # FPS-style navigation
-        │   ├── ClusterModule.ts       # Element clustering
-        │   ├── ColorSplashModule.ts   # Color highlighting
-        │   ├── SpaceVisibilityModule.ts # IfcSpace toggle
-        │   ├── ModelTransformModule.ts # Model positioning
-        │   └── AdaptiveQualityController.ts # Quality scaling
+        ├── webgl/                             # 🎮 WebGL Feature Modules
+        │   ├── index.ts                       # Module exports
+        │   ├── WorldManager.ts                # 3D world (scene, camera, renderer)
+        │   ├── ClipperModule.ts               # Advanced sectioning
+        │   ├── ClipStylerModule.ts            # Section styling
+        │   ├── MeasurementModule.ts           # Length/Area/Volume tools
+        │   ├── FloorPlanModule.ts             # 2D floor plan views
+        │   ├── ViewCubeModule.ts              # 3D navigation cube
+        │   ├── MinimapModule.ts               # Minimap overlay
+        │   ├── FirstPersonControlsModule.ts   # FPS-style navigation
+        │   ├── ClusterModule.ts               # Element clustering
+        │   ├── ColorSplashModule.ts           # Color highlighting
+        │   ├── SpaceVisibilityModule.ts       # IfcSpace toggle
+        │   ├── ModelTransformModule.ts        # Model positioning
+        │   └── AdaptiveQualityController.ts   # Quality scaling
         │
-        ├── webgpu/                    # ⚡ WebGPU Feature Modules
-        │   ├── index.ts               # Module exports
-        │   ├── README.md              # WebGPU documentation
-        │   ├── WebGPURendererModule.ts # Main renderer entry
-        │   ├── ViewerWebGPUAPI.ts     # Public WebGPU API
-        │   └── managers/              # WebGPU Sub-managers
-        │       ├── index.ts           # Manager exports
-        │       ├── WebGPULODManager.ts # Level of Detail
-        │       ├── WebGPUFog.ts       # Atmospheric fog
-        │       ├── WebGPUOutlineManager.ts # Selection outlines
-        │       ├── WebGPUElementSelector.ts # GPU picking
-        │       ├── WebGPUColorPicker.ts # Color picking
-        │       ├── WebGPUEdgeManager.ts # Edge rendering
-        │       ├── WebGPUShadowManager.ts # Shadow optimization
-        │       ├── WebGPUAmbientOcclusion.ts # AO effects
-        │       ├── WebGPUMaterialFactory.ts # Material creation
-        │       ├── WebGPUCategoryPalette.ts # Category colors
-        │       ├── WebGPUGeometryUtils.ts # Geometry helpers
-        │       ├── WebGPUOptimizations.ts # Performance utils
+        ├── webgpu/                            # ⚡ WebGPU Feature Modules
+        │   ├── index.ts                       # Module exports
+        │   ├── README.md                      # WebGPU documentation
+        │   ├── WebGPURendererModule.ts        # Main renderer entry
+        │   ├── ViewerWebGPUAPI.ts             # Public WebGPU API
+        │   └── managers/                      # WebGPU Sub-managers
+        │       ├── index.ts                   # Manager exports
+        │       ├── WebGPULODManager.ts        # Level of Detail
+        │       ├── WebGPUFog.ts               # Atmospheric fog
+        │       ├── WebGPUOutlineManager.ts    # Selection outlines
+        │       ├── WebGPUElementSelector.ts   # GPU picking
+        │       ├── WebGPUColorPicker.ts       # Color picking
+        │       ├── WebGPUEdgeManager.ts       # Edge rendering
+        │       ├── WebGPUShadowManager.ts     # Shadow optimization
+        │       ├── WebGPUAmbientOcclusion.ts  # AO effects
+        │       ├── WebGPUMaterialFactory.ts   # Material creation
+        │       ├── WebGPUCategoryPalette.ts   # Category colors
+        │       ├── WebGPUGeometryUtils.ts     # Geometry helpers
+        │       ├── WebGPUOptimizations.ts     # Performance utils
         │       ├── WebGPUProxySceneBuilder.ts # Scene building
-        │       ├── WebGPUStatsManager.ts # Stats tracking
-        │       ├── WebGPUStatsOverlay.ts # Stats UI overlay
-        │       └── WebGPUTypes.ts     # TypeScript types
+        │       ├── WebGPUStatsManager.ts      # Stats tracking
+        │       ├── WebGPUStatsOverlay.ts      # Stats UI overlay
+        │       └── WebGPUTypes.ts             # TypeScript types
         │
-        └── ui/                        # 🎨 UI Components
-            ├── ToolbarBuilder.ts      # Toolbar structure
-            ├── ToolbarHandlers.ts     # Toolbar event handlers
-            ├── UIStyles.ts            # Shared CSS styles
-            ├── LoadingUIManager.ts    # Loading indicators
-            ├── NotificationUIManager.ts # Notifications
-            ├── NotificationHelper.ts  # Notification utils
-            ├── SelectionUIManager.ts  # Selection UI
-            ├── NavigationUIManager.ts # Navigation controls
-            ├── ClipperUIManager.ts    # Clipper controls
-            ├── MeasurementUIManager.ts # Measurement UI
-            ├── FloorPlanUIManager.ts  # Floor plan UI
-            ├── ClusterUIManager.ts    # Cluster visualization
-            ├── WebGPUUIManager.ts     # WebGPU settings UI
-            ├── ModelAlignmentManager.ts # Model alignment panel
-            ├── ModelDashboard.ts      # Model statistics
-            ├── SlicerDashboard.ts     # Data slicer panel
-            ├── AIAssistantUIManager.ts # 🤖 AI chat UI manager
-            ├── ai/                    # AI UI Components
-            │   ├── AIChatManager.ts   # Chat message handling
-            │   ├── AIDomManager.ts    # DOM element creation
-            │   └── AIStyleManager.ts  # AI panel styling
-            └── dashboard/             # Dashboard Components
-                ├── UIManager.ts       # Dashboard UI
-                ├── DataManager.ts     # Data processing
-                ├── ChartManager.ts    # Chart rendering
-                ├── SlicerUIManager.ts # Slicer UI
-                ├── SlicerDataManager.ts # Slicer data
-                └── SlicerChartManager.ts # Slicer charts
+        └── ui/                                # 🎨 UI Components
+            ├── ToolbarBuilder.ts              # Toolbar structure
+            ├── ToolbarHandlers.ts             # Toolbar event handlers
+            ├── UIStyles.ts                    # Shared CSS styles
+            ├── LoadingUIManager.ts            # Loading indicators
+            ├── NotificationUIManager.ts       # Notifications
+            ├── NotificationHelper.ts          # Notification utils
+            ├── SelectionUIManager.ts          # Selection UI
+            ├── NavigationUIManager.ts         # Navigation controls
+            ├── ClipperUIManager.ts            # Clipper controls
+            ├── MeasurementUIManager.ts        # Measurement UI
+            ├── FloorPlanUIManager.ts          # Floor plan UI
+            ├── ClusterUIManager.ts            # Cluster visualization
+            ├── WebGPUUIManager.ts             # WebGPU settings UI
+            ├── ModelAlignmentManager.ts       # Model alignment panel
+            ├── ModelDashboard.ts              # Model statistics
+            ├── SlicerDashboard.ts             # Data slicer panel
+            ├── AIAssistantUIManager.ts        # 🤖 AI chat UI manager
+            ├── ai/                            # AI UI Components
+            │   ├── AIChatManager.ts           # Chat message handling
+            │   ├── AIDomManager.ts            # DOM element creation
+            │   └── AIStyleManager.ts          # AI panel styling
+            └── dashboard/                     # Dashboard Components
+                ├── UIManager.ts               # Dashboard UI
+                ├── DataManager.ts             # Data processing
+                ├── ChartManager.ts            # Chart rendering
+                ├── SlicerUIManager.ts         # Slicer UI
+                ├── SlicerDataManager.ts       # Slicer data
+                └── SlicerChartManager.ts      # Slicer charts
 ```
 
 ## 🧩 Module Overview
@@ -339,76 +348,89 @@ OBC-IFCViewer/
 ### Core Modules (src/modules/core)
 
 #### IFCLoaderModule
-- IFC file conversion to Fragments
-- Direct Fragments loading
-- Model management and export
+
+  - IFC file conversion to Fragments
+  - Direct Fragments loading
+  - Model management and export
 
 #### PropertiesPanelModule
-- IFC hierarchical tree view
-- Element property inspection
-- Collapsible side panel
+
+  - IFC hierarchical tree view
+  - Element property inspection
+  - Collapsible side panel
 
 #### PropertyTableModule
-- Excel-like interactive table
-- Bulk property inspection
-- Advanced filtering and sorting
+
+  - Excel-like interactive table
+  - Bulk property inspection
+  - Advanced filtering and sorting
 
 #### PerformanceMonitor
-- Real-time FPS tracking
-- Frame time and memory usage
+
+  - Real-time FPS tracking
+  - Frame time and memory usage
 
 ### WebGL Feature Modules (src/modules/webgl)
 
 #### WorldManager
-- 3D environment setup (scene, camera, renderer)
-- Grid and visual aids
-- Lighting configuration
+
+  - 3D environment setup (scene, camera, renderer)
+  - Grid and visual aids
+  - Lighting configuration
 
 #### ClipperModule
-- Advanced model sectioning
-- Preset planes (X/Y/Z following AEC conventions)
-- Custom double-click sections
-- Flip and clear functionality
+
+  - Advanced model sectioning
+  - Preset planes (X/Y/Z following AEC conventions)
+  - Custom double-click sections
+  - Flip and clear functionality
 
 #### MeasurementModule
-- Length, Area, and Volume measurements
-- Perpendicular guides and snapping
-- Professional dimensioning
+
+  - Length, Area, and Volume measurements
+  - Perpendicular guides and snapping
+  - Professional dimensioning
 
 #### FloorPlanModule
-- Interactive 2D floor plan views
-- Automatic camera positioning
-- Pan/zoom navigation
+
+  - Interactive 2D floor plan views
+  - Automatic camera positioning
+  - Pan/zoom navigation
 
 ### WebGPU Feature Modules (src/modules/webgpu)
 
 #### WebGPURendererModule
-- Experimental high-performance rendering engine
-- Orchestrates all WebGPU sub-managers
-- Optimized for massive models with millions of triangles
+
+  - Experimental high-performance rendering engine
+  - Orchestrates all WebGPU sub-managers
+  - Optimized for massive models with millions of triangles
 
 #### WebGPULODManager
-- Automatic Level of Detail (LOD) system
-- Distance-based geometry simplification
-- Significant performance gains for large scenes
+
+  - Automatic Level of Detail (LOD) system
+  - Distance-based geometry simplification
+  - Significant performance gains for large scenes
 
 #### WebGPUFog
-- Atmospheric fog effects (Linear/Exponential)
-- Enhanced depth perception
-- Works with MSAA anti-aliasing
+
+  - Atmospheric fog effects (Linear/Exponential)
+  - Enhanced depth perception
+  - Works with MSAA anti-aliasing
 
 #### WebGPUOutlineManager
-- Professional selection highlighting
-- Multi-pass outline rendering
-- Configurable colors and thickness
+
+  - Professional selection highlighting
+  - Multi-pass outline rendering
+  - Configurable colors and thickness
 
 ### UI Modules (src/modules/ui & UIManager)
 
 #### UIManager
-- Modern floating toolbar with glassmorphic styling
-- Expandable submenu system
-- Model count badge with tooltips
-- Event handling and state management
+
+  - Modern floating toolbar with glassmorphic styling
+  - Expandable submenu system
+  - Model count badge with tooltips
+  - Event handling and state management
 
 ## 🎮 Usage
 
