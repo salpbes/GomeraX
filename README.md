@@ -44,6 +44,19 @@
 - 📊 **Property Table**: Excel-like interactive table for bulk property inspection and filtering
 
 <p align="center">
+  <img src="assets/screenshots/cluster-screenshot.png" alt="Element Clustering" width="800">
+  <br>
+  <em>Element Clustering - Spatial organization of building elements</em>
+</p>
+
+- 🧩 **Element Clustering**: Spatial organization tool that groups building elements by IFC category with:
+  - **Automatic Grouping**: Physically separates elements by type (walls, doors, windows, etc.)
+  - **Visual Bounding Boxes**: Each cluster displays with labeled bounds for easy identification
+  - **Color Coding**: Clusters are color-coded for quick visual distinction
+  - **Interactive Selection**: Click clusters to inspect grouped elements
+  - **One-Click Reset**: Return all elements to original positions instantly
+
+<p align="center">
   <img src="assets/screenshots/ai-assistant.png" alt="AI-Powered BIM Assistant" width="800">
   <br>
   <em>AI Assistant - Natural language commands for BIM model interaction</em>
