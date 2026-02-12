@@ -14,7 +14,7 @@
 - ⚡ **Fragments Support**: Fast loading with pre-converted Fragments format
 - 🎨 **Cast Shadows Rendering**: Professional cast shadows with ambient occlusion
 - 📊 **Performance Monitoring**: Real-time FPS, memory usage, and render time stats
-- 💾 **Export Functionality**: Convert and download IFC files as Fragments
+- 💾 **Export Functionality**: Export loaded models and data as Fragments (.frag), glTF (.gltf), GLB (.glb), USDZ (.usdz), Screenshot (PNG), and Properties (JSON)
 - 📱 **Responsive Design**: Works on desktop and mobile devices
 - 🏗️ **Modular Architecture**: Clean, maintainable code structure
 - 🌐 **Modern UI**: Bottom floating toolbar with professional Font Awesome icons
@@ -508,7 +508,13 @@ The application features a modern floating toolbar at the bottom with the follow
 **Main Actions**:
 
 - 📂 **Load**: Upload IFC/Fragments files or load sample models (expandable)
-- 💾 **Export**: Save current model as Fragments format
+- 💾 **Export**: Download model/data in multiple formats (expandable)
+  - Fragments (.frag)
+  - glTF (.gltf)
+  - GLB (.glb)
+  - USDZ (.usdz)
+  - Screenshot (PNG)
+  - Properties (JSON)
 - 👁️ **View**: Camera controls and space visibility (expandable)
 - ✂️ **Clipper**: Sectioning tool with presets (expandable)
   - Section X/Y/Z (AEC convention aligned)
