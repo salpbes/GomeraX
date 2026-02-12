@@ -534,6 +534,390 @@ export class ToolbarHandlers {
   }
 
   /**
+   * Creates an export-safe material while preserving visible IFC colors/opacities
+   */
+  private createExportMaterial(
+    sourceMaterial: THREE.Material | THREE.Material[] | undefined,
+    preferStandardMaterial: boolean = false
+  ): THREE.Material {
+    const baseMaterial = Array.isArray(sourceMaterial) ? sourceMaterial[0] : sourceMaterial;
+
+    if (!baseMaterial) {
+      return new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        roughness: 0.5,
+        metalness: 0,
+        side: THREE.DoubleSide,
+      });
+    }
+
+    const matAny = baseMaterial as any;
+    const color = matAny.color instanceof THREE.Color ? matAny.color.clone() : new THREE.Color(0xcccccc);
+    const opacity = typeof matAny.opacity === 'number' ? matAny.opacity : 1;
+    const transparent = !!matAny.transparent || opacity < 1;
+
+    if (preferStandardMaterial) {
+      return new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.5,
+        metalness: 0,
+        side: THREE.DoubleSide,
+        transparent,
+        opacity,
+      });
+    }
+
+    if (
+      baseMaterial instanceof THREE.MeshStandardMaterial ||
+      baseMaterial instanceof THREE.MeshPhysicalMaterial ||
+      baseMaterial instanceof THREE.MeshPhongMaterial ||
+      baseMaterial instanceof THREE.MeshLambertMaterial ||
+      baseMaterial instanceof THREE.MeshBasicMaterial
+    ) {
+      const cloned = baseMaterial.clone();
+      cloned.side = THREE.DoubleSide;
+      return cloned;
+    }
+
+    return new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.5,
+      metalness: 0,
+      side: THREE.DoubleSide,
+      transparent,
+      opacity,
+    });
+  }
+
+  private async getItemIdsWithGeometry(model: any): Promise<number[]> {
+    if (typeof model?.getItemsIdsWithGeometry === 'function') {
+      return await model.getItemsIdsWithGeometry();
+    }
+    if (typeof model?.getItemsWithGeometry === 'function') {
+      const res = await model.getItemsWithGeometry();
+      return Array.isArray(res)
+        ? res
+            .map((it: any) => (typeof it === 'number' ? it : it?.localId ?? it?.id))
+            .filter((v: any) => typeof v === 'number')
+        : [];
+    }
+    return [];
+  }
+
+  private async loadRealMaterials(model: any): Promise<Map<number, { r: number; g: number; b: number; a?: number }>> {
+    const map = new Map<number, { r: number; g: number; b: number; a?: number }>();
+    try {
+      if (typeof model?.getMaterials === 'function') {
+        const all = await model.getMaterials();
+        if (all instanceof Map) {
+          for (const [id, m] of all) {
+            map.set(id, {
+              r: (m as any).r ?? 200,
+              g: (m as any).g ?? 200,
+              b: (m as any).b ?? 200,
+              a: (m as any).a,
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore, fallback color is used
+    }
+    return map;
+  }
+
+  private async loadSamples(model: any): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    try {
+      if (typeof model?.getSamples === 'function') {
+        const all = await model.getSamples();
+        if (all instanceof Map) {
+          for (const [id, s] of all) {
+            if (typeof (s as any).material === 'number') {
+              map.set(id, (s as any).material);
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore, fallback color is used
+    }
+    return map;
+  }
+
+  private async loadMaterialDefinitions(model: any, itemIds: number[]): Promise<Map<number, any>> {
+    const map = new Map<number, any>();
+    if (typeof model?.getItemsMaterialDefinition !== 'function') return map;
+
+    const chunkSize = 250;
+    for (let i = 0; i < itemIds.length; i += chunkSize) {
+      try {
+        const chunk = itemIds.slice(i, i + chunkSize);
+        const defs = await model.getItemsMaterialDefinition(chunk);
+        if (Array.isArray(defs)) {
+          for (const entry of defs) {
+            const def = entry?.definition;
+            const ids = entry?.localIds;
+            if (!def || !ids) continue;
+
+            if (Array.isArray(ids)) {
+              for (const id of ids) map.set(id, def);
+            } else if (ids instanceof Set) {
+              for (const id of ids) map.set(id, def);
+            }
+          }
+        }
+      } catch {
+        // ignore this chunk
+      }
+    }
+
+    return map;
+  }
+
+  private parseDefinitionColor(rawColor: any): THREE.Color | null {
+    if (!rawColor) return null;
+    if (rawColor instanceof THREE.Color) return rawColor.clone();
+    if (Array.isArray(rawColor) && rawColor.length >= 3) {
+      const [r, g, b] = rawColor;
+      return new THREE.Color(Number(r), Number(g), Number(b));
+    }
+    if (typeof rawColor === 'number') {
+      return new THREE.Color(rawColor);
+    }
+    if (typeof rawColor === 'object' && 'r' in rawColor && 'g' in rawColor && 'b' in rawColor) {
+      return new THREE.Color(Number(rawColor.r), Number(rawColor.g), Number(rawColor.b));
+    }
+    return null;
+  }
+
+  private extractIfcValue(value: any): any {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value !== 'object') return value;
+
+    if ('value' in value) {
+      return (value as any).value;
+    }
+
+    return undefined;
+  }
+
+  private buildMeshMetadata(modelId: string, expressID: number, itemData: any): Record<string, any> {
+    if (!itemData || typeof itemData !== 'object') {
+      return {
+        modelId,
+        expressID,
+      };
+    }
+
+    const metadata: Record<string, any> = {
+      modelId,
+      expressID,
+      type: itemData.type || itemData._category?.value || 'UNKNOWN',
+      globalId: this.extractIfcValue(itemData.GlobalId),
+      name: this.extractIfcValue(itemData.Name),
+      predefinedType: this.extractIfcValue(itemData.PredefinedType),
+      objectType: this.extractIfcValue(itemData.ObjectType),
+      tag: this.extractIfcValue(itemData.Tag),
+      description: this.extractIfcValue(itemData.Description),
+    };
+
+    const basicAttributes: Record<string, any> = {};
+    for (const [key, raw] of Object.entries(itemData)) {
+      if (key.startsWith('_')) continue;
+      if (Array.isArray(raw)) continue;
+      const extracted = this.extractIfcValue(raw);
+      if (extracted !== undefined && extracted !== null) {
+        basicAttributes[key] = extracted;
+      }
+    }
+
+    if (Object.keys(basicAttributes).length > 0) {
+      metadata.attributes = basicAttributes;
+    }
+
+    return metadata;
+  }
+
+  private async loadItemMetadata(
+    model: any,
+    modelId: string,
+    itemIds: number[]
+  ): Promise<Map<number, Record<string, any>>> {
+    const metadataMap = new Map<number, Record<string, any>>();
+
+    if (typeof model?.getItemsData !== 'function') {
+      return metadataMap;
+    }
+
+    const chunkSize = 100;
+    for (let i = 0; i < itemIds.length; i += chunkSize) {
+      const chunk = itemIds.slice(i, i + chunkSize);
+      try {
+        const itemDataArray = await model.getItemsData(chunk, {
+          attributesDefault: true,
+          attributes: ['Name', 'GlobalId', 'PredefinedType', 'ObjectType', 'Tag', 'Description'],
+          relations: false,
+        });
+
+        for (let j = 0; j < chunk.length; j++) {
+          const expressID = chunk[j];
+          const itemData = itemDataArray?.[j];
+          metadataMap.set(expressID, this.buildMeshMetadata(modelId, expressID, itemData));
+        }
+      } catch {
+        for (const expressID of chunk) {
+          if (!metadataMap.has(expressID)) {
+            metadataMap.set(expressID, { modelId, expressID });
+          }
+        }
+      }
+    }
+
+    return metadataMap;
+  }
+
+  private buildMaterialFromIfcData(
+    meshData: any,
+    itemId: number,
+    sampleToMaterialId: Map<number, number>,
+    realMaterialsMap: Map<number, { r: number; g: number; b: number; a?: number }>,
+    localIdToMaterialDef: Map<number, any>,
+    preferStandardMaterial: boolean = false
+  ): THREE.Material {
+    const localIdForMesh = typeof meshData?.localId === 'number' ? meshData.localId : itemId;
+
+    let color = new THREE.Color(0xcccccc);
+    let opacity = 1;
+    let transparent = false;
+
+    const sampleId = (meshData as any)?.sampleId;
+    const matId = sampleToMaterialId.get(sampleId);
+    const rawMat = typeof matId === 'number' ? realMaterialsMap.get(matId) : undefined;
+
+    if (rawMat) {
+      color = new THREE.Color(rawMat.r / 255, rawMat.g / 255, rawMat.b / 255);
+      opacity = typeof rawMat.a === 'number' ? rawMat.a / 255 : 1;
+      transparent = opacity < 1;
+    } else {
+      const def = localIdToMaterialDef.get(localIdForMesh);
+      if (def) {
+        const parsedColor = this.parseDefinitionColor(def.color);
+        if (parsedColor) color = parsedColor;
+        if (typeof def.opacity === 'number') opacity = def.opacity;
+        transparent = !!def.transparent || opacity < 1;
+      }
+    }
+
+    return this.createExportMaterial(
+      new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.5,
+        metalness: 0,
+        side: THREE.DoubleSide,
+        opacity,
+        transparent,
+      }),
+      preferStandardMaterial
+    );
+  }
+
+  private async buildExportGroupFromItemsGeometry(
+    models: Map<string, any>,
+    preferStandardMaterial: boolean,
+    bakeTransformIntoGeometry: boolean
+  ): Promise<{ exportGroup: THREE.Group; meshCount: number }> {
+    const exportGroup = new THREE.Group();
+    let meshCount = 0;
+
+    for (const [modelId, model] of models) {
+      console.log(`📦 Processing model for export: ${modelId}`);
+
+      try {
+        const itemIds = await this.getItemIdsWithGeometry(model);
+        console.log(`  📊 Found ${itemIds.length} items with geometry`);
+        if (itemIds.length === 0) continue;
+
+        const [realMaterialsMap, sampleToMaterialId, localIdToMaterialDef] = await Promise.all([
+          this.loadRealMaterials(model),
+          this.loadSamples(model),
+          this.loadMaterialDefinitions(model, itemIds),
+        ]);
+
+        const itemMetadataMap = await this.loadItemMetadata(model, modelId, itemIds);
+
+        const batchSize = 100;
+        for (let i = 0; i < itemIds.length; i += batchSize) {
+          const batch = itemIds.slice(i, i + batchSize);
+          const geometriesArray = await model.getItemsGeometry(batch);
+
+          for (let j = 0; j < batch.length; j++) {
+            const itemId = batch[j];
+            const itemGeometries = geometriesArray[j];
+            if (!itemGeometries) continue;
+
+            for (const meshData of itemGeometries) {
+              if (!meshData || !meshData.positions || !meshData.indices) continue;
+
+              const geometry = new THREE.BufferGeometry();
+              geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
+
+              if (meshData.normals) {
+                const normalArray = new Float32Array(meshData.normals.length);
+                for (let k = 0; k < meshData.normals.length; k++) {
+                  normalArray[k] = meshData.normals[k] / 32767;
+                }
+                geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
+              } else {
+                geometry.computeVertexNormals();
+              }
+
+              geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
+
+              const material = this.buildMaterialFromIfcData(
+                meshData,
+                itemId,
+                sampleToMaterialId,
+                realMaterialsMap,
+                localIdToMaterialDef,
+                preferStandardMaterial
+              );
+
+              const mesh = new THREE.Mesh(geometry, material);
+              mesh.name = `mesh_${meshCount}`;
+
+              const localIdForMesh = typeof meshData?.localId === 'number' ? meshData.localId : itemId;
+              mesh.userData = {
+                ...(mesh.userData || {}),
+                ifcMetadata: itemMetadataMap.get(localIdForMesh) || {
+                  modelId,
+                  expressID: localIdForMesh,
+                },
+              };
+
+              if (meshData.transform) {
+                if (bakeTransformIntoGeometry) {
+                  geometry.applyMatrix4(meshData.transform);
+                  geometry.computeBoundingBox();
+                } else {
+                  mesh.applyMatrix4(meshData.transform);
+                }
+              }
+
+              exportGroup.add(mesh);
+              meshCount++;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
+      }
+    }
+
+    return { exportGroup, meshCount };
+  }
+
+  /**
    * Export as glTF (.gltf) - 3D interchange format
    */
   async handleExportGLTF(): Promise<void> {
@@ -551,7 +935,7 @@ export class ToolbarHandlers {
 
       NotificationHelper.show({
         title: '⏳ Exporting GLTF',
-        message: 'Preparing geometry data...',
+        message: 'Preparing geometry and IFC colors...',
         type: 'info',
         duration: 3000
       });
@@ -559,72 +943,11 @@ export class ToolbarHandlers {
       const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
       const exporter = new GLTFExporter();
 
-      // Create a group with exportable meshes using Fragment's getItemsGeometry API
-      const exportGroup = new THREE.Group();
-      let meshCount = 0;
-      
-      for (const [modelId, model] of models) {
-        console.log(`📦 Processing model for GLTF export: ${modelId}`);
-        
-        try {
-          // Get all item IDs that have geometry
-          const itemIds = await model.getItemsIdsWithGeometry();
-          console.log(`  📊 Found ${itemIds.length} items with geometry`);
-          
-          if (itemIds.length === 0) continue;
-          
-          // Get geometry data for all items (in batches to avoid memory issues)
-          const batchSize = 100;
-          for (let i = 0; i < itemIds.length; i += batchSize) {
-            const batch = itemIds.slice(i, i + batchSize);
-            const geometriesArray = await model.getItemsGeometry(batch);
-            
-            // geometriesArray is array of arrays (one array of MeshData per item)
-            for (const itemGeometries of geometriesArray) {
-              if (!itemGeometries) continue;
-              
-              for (const meshData of itemGeometries) {
-                if (!meshData || !meshData.positions || !meshData.indices) continue;
-                
-                // Create BufferGeometry from MeshData
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
-                
-                if (meshData.normals) {
-                  // Normals are Int16Array, need to convert to Float32Array and normalize
-                  const normalArray = new Float32Array(meshData.normals.length);
-                  for (let j = 0; j < meshData.normals.length; j++) {
-                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
-                  }
-                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
-                } else {
-                  geometry.computeVertexNormals();
-                }
-                
-                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-                
-                // Create mesh with standard material
-                const material = new THREE.MeshStandardMaterial({
-                  color: 0xcccccc,
-                  side: THREE.DoubleSide
-                });
-                
-                const mesh = new THREE.Mesh(geometry, material);
-                
-                // Apply transform from IFC
-                if (meshData.transform) {
-                  mesh.applyMatrix4(meshData.transform);
-                }
-                
-                exportGroup.add(mesh);
-                meshCount++;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
-        }
-      }
+      const { exportGroup, meshCount } = await this.buildExportGroupFromItemsGeometry(
+        models,
+        false,
+        false
+      );
       
       console.log(`📊 Export stats: ${meshCount} meshes prepared`);
 
@@ -710,7 +1033,7 @@ export class ToolbarHandlers {
 
       NotificationHelper.show({
         title: '⏳ Exporting GLB',
-        message: 'Preparing geometry data...',
+        message: 'Preparing geometry and IFC colors...',
         type: 'info',
         duration: 3000
       });
@@ -718,73 +1041,11 @@ export class ToolbarHandlers {
       const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
       const exporter = new GLTFExporter();
 
-      // Create a group with exportable meshes only
-      // Create a group with exportable meshes using Fragment's getItemsGeometry API
-      const exportGroup = new THREE.Group();
-      let meshCount = 0;
-      
-      for (const [modelId, model] of models) {
-        console.log(`📦 Processing model for GLB export: ${modelId}`);
-        
-        try {
-          // Get all item IDs that have geometry
-          const itemIds = await model.getItemsIdsWithGeometry();
-          console.log(`  📊 Found ${itemIds.length} items with geometry`);
-          
-          if (itemIds.length === 0) continue;
-          
-          // Get geometry data for all items (in batches to avoid memory issues)
-          const batchSize = 100;
-          for (let i = 0; i < itemIds.length; i += batchSize) {
-            const batch = itemIds.slice(i, i + batchSize);
-            const geometriesArray = await model.getItemsGeometry(batch);
-            
-            // geometriesArray is array of arrays (one array of MeshData per item)
-            for (const itemGeometries of geometriesArray) {
-              if (!itemGeometries) continue;
-              
-              for (const meshData of itemGeometries) {
-                if (!meshData || !meshData.positions || !meshData.indices) continue;
-                
-                // Create BufferGeometry from MeshData
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
-                
-                if (meshData.normals) {
-                  // Normals are Int16Array, need to convert to Float32Array and normalize
-                  const normalArray = new Float32Array(meshData.normals.length);
-                  for (let j = 0; j < meshData.normals.length; j++) {
-                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
-                  }
-                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
-                } else {
-                  geometry.computeVertexNormals();
-                }
-                
-                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-                
-                // Create mesh with standard material
-                const material = new THREE.MeshStandardMaterial({
-                  color: 0xcccccc,
-                  side: THREE.DoubleSide
-                });
-                
-                const mesh = new THREE.Mesh(geometry, material);
-                
-                // Apply transform from IFC
-                if (meshData.transform) {
-                  mesh.applyMatrix4(meshData.transform);
-                }
-                
-                exportGroup.add(mesh);
-                meshCount++;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
-        }
-      }
+      const { exportGroup, meshCount } = await this.buildExportGroupFromItemsGeometry(
+        models,
+        false,
+        false
+      );
       
       console.log(`📊 Export stats: ${meshCount} meshes prepared`);
 
@@ -869,7 +1130,7 @@ export class ToolbarHandlers {
 
       NotificationHelper.show({
         title: '⏳ Exporting USDZ',
-        message: 'Preparing geometry data...',
+        message: 'Preparing geometry and IFC colors...',
         type: 'info',
         duration: 3000
       });
@@ -877,79 +1138,11 @@ export class ToolbarHandlers {
       const { USDZExporter } = await import('three/examples/jsm/exporters/USDZExporter.js');
       const exporter = new USDZExporter();
 
-      // Create a group with exportable meshes using Fragment's getItemsGeometry API
-      const exportGroup = new THREE.Group();
-      let meshCount = 0;
-      
-      for (const [modelId, model] of models) {
-        console.log(`📦 Processing model for USDZ export: ${modelId}`);
-        
-        try {
-          // Get all item IDs that have geometry
-          const itemIds = await model.getItemsIdsWithGeometry();
-          console.log(`  📊 Found ${itemIds.length} items with geometry`);
-          
-          if (itemIds.length === 0) continue;
-          
-          // Get geometry data for all items (in batches to avoid memory issues)
-          const batchSize = 100;
-          for (let i = 0; i < itemIds.length; i += batchSize) {
-            const batch = itemIds.slice(i, i + batchSize);
-            const geometriesArray = await model.getItemsGeometry(batch);
-            
-            // geometriesArray is array of arrays (one array of MeshData per item)
-            for (const itemGeometries of geometriesArray) {
-              if (!itemGeometries) continue;
-              
-              for (const meshData of itemGeometries) {
-                if (!meshData || !meshData.positions || !meshData.indices) continue;
-                
-                // Create BufferGeometry from MeshData
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.Float32BufferAttribute(meshData.positions, 3));
-                
-                if (meshData.normals) {
-                  // Normals are Int16Array, need to convert to Float32Array and normalize
-                  const normalArray = new Float32Array(meshData.normals.length);
-                  for (let j = 0; j < meshData.normals.length; j++) {
-                    normalArray[j] = meshData.normals[j] / 32767; // Int16 to float
-                  }
-                  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normalArray, 3));
-                } else {
-                  geometry.computeVertexNormals();
-                }
-                
-                geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-                
-                // Create mesh with standard material (USDZ requires PBR materials)
-                const material = new THREE.MeshStandardMaterial({
-                  color: 0xcccccc,
-                  roughness: 0.5,
-                  metalness: 0.0,
-                  side: THREE.DoubleSide
-                });
-                
-                const mesh = new THREE.Mesh(geometry, material);
-                mesh.name = `mesh_${meshCount}`;
-                
-                // Apply transform from IFC - bake into geometry for USDZ
-                if (meshData.transform) {
-                  // Apply the transform to the geometry vertices directly
-                  geometry.applyMatrix4(meshData.transform);
-                }
-                
-                // Update bounding box after transform
-                geometry.computeBoundingBox();
-                
-                exportGroup.add(mesh);
-                meshCount++;
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`  ⚠️ Error processing model ${modelId}:`, e);
-        }
-      }
+      const { exportGroup, meshCount } = await this.buildExportGroupFromItemsGeometry(
+        models,
+        true,
+        true
+      );
 
       console.log(`📊 Export stats: ${meshCount} meshes prepared`);
 
