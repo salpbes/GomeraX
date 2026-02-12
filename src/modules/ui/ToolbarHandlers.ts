@@ -746,35 +746,63 @@ export class ToolbarHandlers {
   ): Promise<Map<number, Record<string, any>>> {
     const metadataMap = new Map<number, Record<string, any>>();
 
-    if (typeof model?.getItemsData !== 'function') {
-      return metadataMap;
-    }
-
-    const chunkSize = 100;
-    for (let i = 0; i < itemIds.length; i += chunkSize) {
-      const chunk = itemIds.slice(i, i + chunkSize);
-      try {
-        const itemDataArray = await model.getItemsData(chunk, {
-          attributesDefault: true,
-          attributes: ['Name', 'GlobalId', 'PredefinedType', 'ObjectType', 'Tag', 'Description'],
-          relations: false,
-        });
-
-        for (let j = 0; j < chunk.length; j++) {
-          const expressID = chunk[j];
-          const itemData = itemDataArray?.[j];
-          metadataMap.set(expressID, this.buildMeshMetadata(modelId, expressID, itemData));
-        }
-      } catch {
-        for (const expressID of chunk) {
-          if (!metadataMap.has(expressID)) {
-            metadataMap.set(expressID, { modelId, expressID });
-          }
-        }
-      }
+    // IMPORTANT:
+    // For some IFC files, worker-side getItemsData can throw repeatedly
+    // (e.g. "Cannot use 'in' operator ... in false"). To keep export stable,
+    // we avoid metadata API calls here and build robust identity metadata only.
+    for (const expressID of itemIds) {
+      metadataMap.set(expressID, { modelId, expressID });
     }
 
     return metadataMap;
+  }
+
+  private async loadGeometryCategories(
+    model: any,
+    itemIds: number[]
+  ): Promise<Map<number, string>> {
+    const map = new Map<number, string>();
+
+    try {
+      if (typeof model?.getItemsWithGeometryCategories === 'function') {
+        const categories = await model.getItemsWithGeometryCategories();
+        if (Array.isArray(categories)) {
+          for (let i = 0; i < Math.min(itemIds.length, categories.length); i++) {
+            const id = itemIds[i];
+            const cat = categories[i];
+            if (typeof id === 'number' && typeof cat === 'string' && cat.length > 0) {
+              map.set(id, cat.toUpperCase());
+            }
+          }
+          if (map.size > 0) return map;
+        }
+      }
+
+      if (typeof model?.getCategories === 'function' && typeof model?.getItemsOfCategories === 'function') {
+        const categories = await model.getCategories();
+        if (Array.isArray(categories)) {
+          for (const category of categories) {
+            const categoryRegex = new RegExp(`^${category}$`);
+            const items = await model.getItemsOfCategories([categoryRegex]);
+            if (!items || typeof items !== 'object') continue;
+
+            for (const key in items) {
+              const ids = (items as any)[key];
+              if (!Array.isArray(ids)) continue;
+              for (const id of ids) {
+                if (typeof id === 'number') {
+                  map.set(id, String(category).toUpperCase());
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore and use IFCITEM fallback
+    }
+
+    return map;
   }
 
   private buildMaterialFromIfcData(
@@ -826,9 +854,10 @@ export class ToolbarHandlers {
     models: Map<string, any>,
     preferStandardMaterial: boolean,
     bakeTransformIntoGeometry: boolean
-  ): Promise<{ exportGroup: THREE.Group; meshCount: number }> {
+  ): Promise<{ exportGroup: THREE.Group; meshCount: number; metadataByMeshName: Map<string, Record<string, any>> }> {
     const exportGroup = new THREE.Group();
     let meshCount = 0;
+    const metadataByMeshName = new Map<string, Record<string, any>>();
 
     for (const [modelId, model] of models) {
       console.log(`📦 Processing model for export: ${modelId}`);
@@ -838,10 +867,11 @@ export class ToolbarHandlers {
         console.log(`  📊 Found ${itemIds.length} items with geometry`);
         if (itemIds.length === 0) continue;
 
-        const [realMaterialsMap, sampleToMaterialId, localIdToMaterialDef] = await Promise.all([
+        const [realMaterialsMap, sampleToMaterialId, localIdToMaterialDef, localIdToCategory] = await Promise.all([
           this.loadRealMaterials(model),
           this.loadSamples(model),
           this.loadMaterialDefinitions(model, itemIds),
+          this.loadGeometryCategories(model, itemIds),
         ]);
 
         const itemMetadataMap = await this.loadItemMetadata(model, modelId, itemIds);
@@ -884,15 +914,40 @@ export class ToolbarHandlers {
               );
 
               const mesh = new THREE.Mesh(geometry, material);
-              mesh.name = `mesh_${meshCount}`;
 
+              const metadataId = itemId;
               const localIdForMesh = typeof meshData?.localId === 'number' ? meshData.localId : itemId;
+              const resolvedType =
+                localIdToCategory.get(localIdForMesh) ||
+                localIdToCategory.get(itemId) ||
+                (typeof meshData?.category === 'string' ? meshData.category.toUpperCase() : 'IFCITEM');
+
+              const meshMetadata = itemMetadataMap.get(metadataId) || {
+                modelId,
+                expressID: metadataId,
+                type: resolvedType,
+              };
+
+              if (!meshMetadata.type || meshMetadata.type === 'IFCITEM') {
+                meshMetadata.type = resolvedType;
+              }
+
+              const safeModelId = String(modelId).replace(/\s+/g, '_');
+              const typeLabel = typeof meshMetadata.type === 'string' ? meshMetadata.type : 'IFCITEM';
+              const expressLabel = typeof meshMetadata.expressID === 'number' ? meshMetadata.expressID : metadataId;
+              mesh.name = `${safeModelId}_${typeLabel}_${expressLabel}_${meshCount}`;
+              metadataByMeshName.set(mesh.name, meshMetadata);
+
+              // Flat metadata at mesh level (exports to glTF node extras in most viewers)
               mesh.userData = {
                 ...(mesh.userData || {}),
-                ifcMetadata: itemMetadataMap.get(localIdForMesh) || {
-                  modelId,
-                  expressID: localIdForMesh,
-                },
+                ...meshMetadata,
+              };
+
+              // Mirror metadata on geometry level for viewers reading primitive extras
+              geometry.userData = {
+                ...(geometry.userData || {}),
+                ...meshMetadata,
               };
 
               if (meshData.transform) {
@@ -914,7 +969,7 @@ export class ToolbarHandlers {
       }
     }
 
-    return { exportGroup, meshCount };
+    return { exportGroup, meshCount, metadataByMeshName };
   }
 
   /**
@@ -943,7 +998,7 @@ export class ToolbarHandlers {
       const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
       const exporter = new GLTFExporter();
 
-      const { exportGroup, meshCount } = await this.buildExportGroupFromItemsGeometry(
+      const { exportGroup, meshCount, metadataByMeshName } = await this.buildExportGroupFromItemsGeometry(
         models,
         false,
         false
@@ -966,6 +1021,26 @@ export class ToolbarHandlers {
       exporter.parse(
         exportGroup,
         async (gltf) => {
+          const gltfJson = gltf as any;
+          if (gltfJson && Array.isArray(gltfJson.nodes)) {
+            for (const node of gltfJson.nodes) {
+              if (!node || typeof node.name !== 'string') continue;
+              const metadata = metadataByMeshName.get(node.name);
+              if (!metadata) continue;
+              node.extras = {
+                ...(node.extras || {}),
+                ...metadata,
+              };
+
+              if (typeof node.mesh === 'number' && Array.isArray(gltfJson.meshes) && gltfJson.meshes[node.mesh]) {
+                gltfJson.meshes[node.mesh].extras = {
+                  ...(gltfJson.meshes[node.mesh].extras || {}),
+                  ...metadata,
+                };
+              }
+            }
+          }
+
           const output = JSON.stringify(gltf, null, 2);
           const blob = new Blob([output], { type: 'application/json' });
           
