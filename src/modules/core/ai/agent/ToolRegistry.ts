@@ -188,6 +188,32 @@ export const BIM_TOOLS: ToolDefinition[] = [
       required: ["direction"],
     },
   },
+
+  // Clash detection tools
+  {
+    name: "runClashDetection",
+    description: "Run clash detection to find spatial intersections between building elements",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "clearClashDetection",
+    description: "Clear clash detection results and markers",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "getClashSummary",
+    description: "Get a summary of the current clash detection results",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
 ];
 
 /**

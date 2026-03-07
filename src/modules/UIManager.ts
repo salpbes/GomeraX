@@ -24,7 +24,8 @@ import {
   MinimapModule, 
   ModelTransformModule, 
   ClusterModule, 
-  ColorSplashModule 
+  ColorSplashModule,
+  ClashDetectionModule
 } from "./webgl";
 import { IFCLoaderModule } from "./core/IFCLoaderModule";
 import { getToolbarStyles, getLoadingIndicatorStyles, getLoadingScreenStyles, getPropertiesPanelStyles } from "./ui/UIStyles";
@@ -38,6 +39,7 @@ import { MeasurementUIManager } from './ui/MeasurementUIManager';
 import { FloorPlanUIManager } from './ui/FloorPlanUIManager';
 import { SelectionUIManager } from './ui/SelectionUIManager';
 import { ClusterUIManager } from './ui/ClusterUIManager';
+import { ClashUIManager } from './ui/ClashUIManager';
 import { NotificationUIManager } from './ui/NotificationUIManager';
 import { LoadingUIManager } from './ui/LoadingUIManager';
 import { ModelAlignmentManager } from './ui/ModelAlignmentManager';
@@ -56,6 +58,7 @@ export class UIManager {
   private minimapModule: MinimapModule | null = null;
   private clusterModule: ClusterModule | null = null;
   private colorSplashModule: ColorSplashModule | null = null;
+  private clashDetectionModule: ClashDetectionModule | null = null;
   
   // Modular UI Managers
   private webgpuUI: WebGPUUIManager;
@@ -65,6 +68,7 @@ export class UIManager {
   private floorPlanUI: FloorPlanUIManager;
   private selectionUI: SelectionUIManager;
   private clusterUI: ClusterUIManager;
+  private clashUI: ClashUIManager;
   private notificationUI: NotificationUIManager;
   private loadingUI: LoadingUIManager;
   private alignmentManager: ModelAlignmentManager;
@@ -91,6 +95,7 @@ export class UIManager {
     this.floorPlanUI = new FloorPlanUIManager(this.viewer, this.worldManager, () => this.clusterModule);
     this.selectionUI = new SelectionUIManager(this.viewer, this.worldManager);
     this.clusterUI = new ClusterUIManager(this.viewer, () => this.clusterModule);
+    this.clashUI = new ClashUIManager(this.viewer, () => this.clashDetectionModule);
     this.notificationUI = new NotificationUIManager(this);
     this.loadingUI = new LoadingUIManager(this.ifcLoader);
     this.alignmentManager = new ModelAlignmentManager(this.worldManager.getComponents(), this.ifcLoader);
@@ -244,6 +249,37 @@ export class UIManager {
     };
     
     console.log('✅ Color splash module set in UI');
+  }
+
+  /**
+   * Sets the clash detection module for toolbar handlers
+   */
+  public setClashDetectionModule(clashDetection: ClashDetectionModule): void {
+    this.clashDetectionModule = clashDetection;
+    this.toolbarHandlers.setClashDetectionModule(clashDetection);
+    
+    // Set up loading callbacks
+    clashDetection.onLoadingStart = () => {
+      this.showLoading('Running clash detection...', 50);
+    };
+    
+    clashDetection.onLoadingEnd = () => {
+      this.hideLoading();
+    };
+    
+    // Set up callback when clash mode is exited
+    clashDetection.onClashModeExited = () => {
+      this.toolbarHandlers.handleClashModeExited();
+    };
+    
+    // Set up callback when clashes are detected — show results panel
+    clashDetection.onClashesDetected = (clashes) => {
+      if (clashes.length > 0) {
+        this.clashUI.showClashResults(clashes);
+      }
+    };
+    
+    console.log('✅ Clash detection module set in UI');
   }
 
   /**
@@ -458,7 +494,7 @@ export class UIManager {
         const action = (e.currentTarget as HTMLElement).dataset.action;
         
         // Handle expandable groups (show submenu without triggering action)
-        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleExport' || action === 'toggleWebGPUPanel') {
+        if (action === 'upload' || action === 'toggleView' || action === 'toggleInfo' || action === 'toggleWalkMode' || action === 'toggleMeasure' || action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleClashDetection' || action === 'toggleExport' || action === 'toggleWebGPUPanel') {
           const group = (e.currentTarget as HTMLElement).closest('.toolbar-group');
           if (group) {
             this.toggleSubmenu(group);
@@ -472,7 +508,7 @@ export class UIManager {
             this.handleToggleMeasure();
           }
           // For cluster and color splash, also toggle their state
-          if (action === 'toggleCluster' || action === 'toggleColorSplash') {
+          if (action === 'toggleCluster' || action === 'toggleColorSplash' || action === 'toggleClashDetection') {
             this.handleToolbarAction(action);
           }
           return;
@@ -793,6 +829,12 @@ export class UIManager {
         break;
       case 'cancelColorSplashMode':
         this.toolbarHandlers.handleCancelColorSplashMode();
+        break;
+      case 'toggleClashDetection':
+        this.clashUI.handleToggleClashDetection();
+        break;
+      case 'cancelClashMode':
+        this.clashUI.handleCancelClashMode();
         break;
       case 'modelinfo':
         this.toolbarHandlers.handleShowModelInfo();

@@ -20,7 +20,8 @@ import {
   MinimapModule, 
   ModelTransformModule, 
   ClusterModule, 
-  ColorSplashModule 
+  ColorSplashModule,
+  ClashDetectionModule
 } from '../webgl';
 import { IFCLoaderModule } from '../core/IFCLoaderModule';
 import { PropertiesPanelModule } from '../core/PropertiesPanelModule';
@@ -40,6 +41,7 @@ export class ToolbarHandlers {
   private minimap: MinimapModule | null = null;
   private cluster: ClusterModule | null = null;
   private colorSplash: ColorSplashModule | null = null;
+  private clashDetection: ClashDetectionModule | null = null;
   private propertiesPanel: PropertiesPanelModule | null = null;
   private showLoadingCallback: () => Promise<void>;
   private hideLoadingCallback: () => void;
@@ -110,6 +112,13 @@ export class ToolbarHandlers {
    */
   setColorSplashModule(colorSplash: ColorSplashModule): void {
     this.colorSplash = colorSplash;
+  }
+
+  /**
+   * Sets the clash detection module (can be set after construction)
+   */
+  setClashDetectionModule(clashDetection: ClashDetectionModule): void {
+    this.clashDetection = clashDetection;
   }
 
   /**
@@ -2551,6 +2560,72 @@ export class ToolbarHandlers {
       console.log('✅ Exited color splash mode and fit view');
     } catch (error) {
       console.error('❌ Error canceling color splash mode:', error);
+    }
+  }
+
+  // =========================================================================
+  // CLASH DETECTION HANDLERS
+  // =========================================================================
+
+  /**
+   * Handles clash detection toggle
+   */
+  async handleToggleClashDetection(): Promise<void> {
+    if (!this.clashDetection) {
+      console.warn('⚠️ Clash detection module not initialized');
+      return;
+    }
+
+    try {
+      this.showLoadingCallback();
+
+      if (this.clashDetection.isActive()) {
+        this.clashDetection.clearClashes();
+        this.updateClashButtonState(false);
+        console.log('✅ Clash detection cleared');
+      } else {
+        const clashes = await this.clashDetection.runDetection();
+        this.updateClashButtonState(clashes.length > 0);
+        console.log(`✅ Clash detection complete: ${clashes.length} clashes found`);
+      }
+    } catch (error) {
+      console.error('❌ Error toggling clash detection:', error);
+      alert(`Error during clash detection: ${error}`);
+    } finally {
+      this.hideLoadingCallback();
+    }
+  }
+
+  /**
+   * Cancel clash detection mode
+   */
+  async handleCancelClashMode(): Promise<void> {
+    if (!this.clashDetection) return;
+
+    try {
+      this.clashDetection.clearClashes();
+      this.updateClashButtonState(false);
+      await this.modelTransform.fitCameraToModels();
+      console.log('✅ Exited clash detection mode');
+    } catch (error) {
+      console.error('❌ Error canceling clash detection:', error);
+    }
+  }
+
+  /**
+   * Called externally when clash mode is exited
+   */
+  handleClashModeExited(): void {
+    this.updateClashButtonState(false);
+  }
+
+  private updateClashButtonState(isActive: boolean): void {
+    const btn = document.getElementById('clashDetectionMainBtn');
+    if (!btn) return;
+    if (isActive) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
     }
   }
 

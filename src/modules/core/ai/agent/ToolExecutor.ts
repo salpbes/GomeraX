@@ -93,6 +93,12 @@ export class ToolExecutor implements IToolExecutor {
           return await this.executeSetView(args);
         case "zoom":
           return await this.executeZoom(args);
+        case "runClashDetection":
+          return await this.executeRunClashDetection();
+        case "clearClashDetection":
+          return await this.executeClearClashDetection();
+        case "getClashSummary":
+          return await this.executeGetClashSummary();
         default:
           return {
             success: false,
@@ -129,6 +135,9 @@ export class ToolExecutor implements IToolExecutor {
       "fitView",
       "setView",
       "zoom",
+      "runClashDetection",
+      "clearClashDetection",
+      "getClashSummary",
     ];
     return validTools.includes(name);
   }
@@ -152,6 +161,9 @@ export class ToolExecutor implements IToolExecutor {
       "fitView",
       "setView",
       "zoom",
+      "runClashDetection",
+      "clearClashDetection",
+      "getClashSummary",
     ];
   }
 
@@ -414,6 +426,34 @@ export class ToolExecutor implements IToolExecutor {
     return {
       success: true,
       message: `Zoomed ${direction}.`,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Clash Detection tool implementations
+  // ─────────────────────────────────────────────────────────────
+
+  private async executeRunClashDetection(): Promise<ToolResult> {
+    const result = await this.actions.runClashDetection();
+    return {
+      success: true,
+      message: result,
+    };
+  }
+
+  private async executeClearClashDetection(): Promise<ToolResult> {
+    this.actions.clearClashDetection();
+    return {
+      success: true,
+      message: "Clash detection results cleared.",
+    };
+  }
+
+  private async executeGetClashSummary(): Promise<ToolResult> {
+    const summary = this.actions.getClashSummary();
+    return {
+      success: true,
+      message: summary,
     };
   }
 }

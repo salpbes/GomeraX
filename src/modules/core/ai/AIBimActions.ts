@@ -883,6 +883,44 @@ export class AIBimActions {
     }
   }
 
+  // ============================================================================
+  // CLASH DETECTION
+  // ============================================================================
+
+  /**
+   * Run clash detection on loaded models
+   */
+  public async runClashDetection(): Promise<string> {
+    if (!this.viewer.clashDetection) {
+      return 'Clash detection module is not available.';
+    }
+
+    const clashes = await this.viewer.clashDetection.runDetection();
+    if (clashes.length === 0) {
+      return 'No spatial clashes detected between elements. The model looks clean!';
+    }
+
+    return this.viewer.clashDetection.getSummary();
+  }
+
+  /**
+   * Clear clash detection results
+   */
+  public clearClashDetection(): void {
+    if (!this.viewer.clashDetection) return;
+    this.viewer.clashDetection.clearClashes();
+  }
+
+  /**
+   * Get clash detection summary
+   */
+  public getClashSummary(): string {
+    if (!this.viewer.clashDetection) {
+      return 'Clash detection module is not available.';
+    }
+    return this.viewer.clashDetection.getSummary();
+  }
+
   /**
    * Toggle space visibility
    */

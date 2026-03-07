@@ -57,6 +57,10 @@ export class IFCLoaderModule {
   // Store coordination matrix from first model
   private coordinationMatrix: THREE.Matrix4 | null = null;
 
+  // Pending filenames queue: loadIFC stores the filename before async load,
+  // onItemSet picks it up when the model appears in fragments.list
+  private pendingFilenames: string[] = [];
+
   // Double-sided rendering toggle (enabled by default)
   private doubleSidedRenderingEnabled: boolean = true;
 
@@ -221,12 +225,14 @@ export class IFCLoaderModule {
         console.log(`Attempt ${attempt}: ${uuid} has ${meshCount} meshes`);
         
         if (meshCount > 0 || attempt >= 5) {
+          // Use pending filename if available, otherwise fall back to uuid
+          const pendingName = this.pendingFilenames.shift();
           this.modelMetadata.set(uuid, {
-            name: uuid,
+            name: pendingName || uuid,
             meshCount: meshCount,
             vertexCount: vertexCount
           });
-          console.log(`✅ Stored metadata: ${uuid} (${meshCount} meshes, ${vertexCount} vertices)`);
+          console.log(`✅ Stored metadata: ${pendingName || uuid} (${meshCount} meshes, ${vertexCount} vertices)`);
           
           // Update collision meshes AFTER meshes are loaded
           if (meshCount > 0 && this.onModelLoaded) {
@@ -290,6 +296,9 @@ export class IFCLoaderModule {
       }
 
       // Smart coordinate mode handling
+      // Queue the filename so onItemSet can pick it up
+      this.pendingFilenames.push(filename);
+
       if (this.loadedModelsCount === 0) {
         // First model - try PRESERVE_COORDS mode first
         await this.loadWithSmartCoordinateDetection(buffer, filename, progressCallback);

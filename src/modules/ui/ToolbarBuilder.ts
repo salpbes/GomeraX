@@ -141,6 +141,19 @@ export function createToolbarHTML(): string {
         </div>
       </div>
       
+      <!-- Clash Detection Button (main toolbar button) -->
+      <div class="toolbar-group">
+        <button class="toolbar-btn" data-action="toggleClashDetection" title="Clash Detection" id="clashDetectionMainBtn">
+          <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+        </button>
+        <div class="toolbar-submenu" id="clashDetectionSubmenu">
+          <button class="submenu-btn" data-action="cancelClashMode" title="Clear Clashes & Exit">
+            <span class="icon"><i class="fas fa-times-circle"></i></span>
+            <span class="label">Cancel Mode</span>
+          </button>
+        </div>
+      </div>
+      
       <!-- Walk Mode Group (first person + WASD controls) -->
       <div class="toolbar-group">
         <button class="toolbar-btn" data-action="toggleWalkMode" title="Walking Mode (WASD)" id="walkModeBtn">

@@ -86,6 +86,18 @@ export class IntentDetector {
       return this.createResult("colorByType", {});
     }
 
+    if (this.matchesAction(lowerInput, ["clash detection", "detect clashes", "find clashes", "run clash", "check clashes", "collision detection"])) {
+      return this.createResult("runClashDetection", {});
+    }
+
+    if (this.matchesAction(lowerInput, ["clear clashes", "remove clashes", "hide clashes", "stop clash"])) {
+      return this.createResult("clearClashDetection", {});
+    }
+
+    if (this.matchesAction(lowerInput, ["clash summary", "clash report", "how many clashes", "clash results"])) {
+      return this.createResult("getClashSummary", {});
+    }
+
     if (this.matchesAction(lowerInput, ["clip", "section", "cut"])) {
       return this.createResult("addClippingPlane", {});
     }

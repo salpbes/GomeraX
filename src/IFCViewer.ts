@@ -26,7 +26,8 @@ import {
   SpaceVisibilityModule,
   FirstPersonControlsModule,
   ClusterModule,
-  ColorSplashModule
+  ColorSplashModule,
+  ClashDetectionModule
 } from './modules/webgl';
 import { IFCLoaderModule } from './modules/core/IFCLoaderModule';
 import { UIManager } from './modules/UIManager';
@@ -55,6 +56,7 @@ export class IFCViewer {
   public minimap: MinimapModule | null = null;
   public cluster: ClusterModule | null = null;
   public colorSplash: ColorSplashModule | null = null;
+  public clashDetection: ClashDetectionModule | null = null;
   public adaptiveQuality: AdaptiveQualityController | null = null;
   public webgpuRenderer: WebGPURendererModule | null = null;
   public container: HTMLElement | null = null;
@@ -192,6 +194,13 @@ export class IFCViewer {
    */
   public getColorSplash(): ColorSplashModule | null {
     return this.colorSplash;
+  }
+
+  /**
+   * Gets the clash detection module instance
+   */
+  public getClashDetection(): ClashDetectionModule | null {
+    return this.clashDetection;
   }
 
   /**

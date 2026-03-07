@@ -13,6 +13,7 @@ export { MinimapModule, type MinimapConfig } from './MinimapModule';
 export { ViewCubeModule } from './ViewCubeModule';
 export { ClusterModule } from './ClusterModule';
 export { ColorSplashModule } from './ColorSplashModule';
+export { ClashDetectionModule, type ClashResult, type ClashElement, type ClashDetectionOptions, type DetectionScope } from './ClashDetectionModule';
 export { FirstPersonControlsModule } from './FirstPersonControlsModule';
 export { ModelTransformModule } from './ModelTransformModule';
 export { SpaceVisibilityModule } from './SpaceVisibilityModule';

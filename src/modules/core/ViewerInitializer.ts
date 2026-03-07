@@ -29,7 +29,8 @@ import {
   SpaceVisibilityModule,
   FirstPersonControlsModule,
   ClusterModule,
-  ColorSplashModule
+  ColorSplashModule,
+  ClashDetectionModule
 } from '../webgl';
 import { IFCLoaderModule } from './IFCLoaderModule';
 import { UIManager } from '../UIManager';
@@ -175,6 +176,13 @@ export class ViewerInitializer {
     if (this.viewer.uiManager) {
       this.viewer.uiManager.setColorSplashModule(this.viewer.colorSplash);
     }
+
+    // Clash Detection
+    this.viewer.clashDetection = new ClashDetectionModule(this.viewer.worldManager);
+    await this.viewer.clashDetection.initialize();
+    if (this.viewer.uiManager) {
+      this.viewer.uiManager.setClashDetectionModule(this.viewer.clashDetection);
+    }
   }
 
   private setupCallbacks(): void {
@@ -222,6 +230,7 @@ export class ViewerInitializer {
     this.viewer.minimap?.dispose();
     this.viewer.cluster?.dispose();
     this.viewer.colorSplash?.dispose();
+    this.viewer.clashDetection?.dispose();
     this.viewer.ifcLoader.clearModels();
     this.viewer.worldManager.dispose();
     
